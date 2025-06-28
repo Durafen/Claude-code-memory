@@ -259,8 +259,8 @@ def mock_openai_embedder(monkeypatch) -> DummyEmbedder:
     dummy = DummyEmbedder()
     
     if OpenAIEmbedder is not None:
-        monkeypatch.setattr(OpenAIEmbedder, "embed", dummy.embed)
-        monkeypatch.setattr(OpenAIEmbedder, "embed_single", dummy.embed_single)
+        monkeypatch.setattr(OpenAIEmbedder, "embed_text", dummy.embed_text)
+        monkeypatch.setattr(OpenAIEmbedder, "embed_batch", dummy.embed_batch)
     
     return dummy
 

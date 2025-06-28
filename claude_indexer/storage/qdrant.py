@@ -55,7 +55,7 @@ class QdrantStore(ManagedVectorStore):
     }
     
     def __init__(self, url: str = "http://localhost:6333", api_key: str = None,
-                 timeout: float = 60.0, auto_create_collections: bool = True):
+                 timeout: float = 60.0, auto_create_collections: bool = True, **kwargs):
         
         if not QDRANT_AVAILABLE:
             raise ImportError("Qdrant client not available. Install with: pip install qdrant-client")
@@ -671,7 +671,8 @@ class QdrantStore(ManagedVectorStore):
             "relationType": relation.relation_type.value,
             "collection": collection_name,
             "type": "chunk",
-            "chunk_type": "relation"
+            "chunk_type": "relation",
+            "entity_type": "relation"
         }
         
         # Add optional metadata

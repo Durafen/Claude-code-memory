@@ -17,7 +17,7 @@ except ImportError:
 
 # Import entities at module level to avoid scope issues
 try:
-    from .entities import Entity, Relation, EntityFactory, RelationFactory, EntityType, RelationType
+    from .entities import Entity, Relation, EntityFactory, RelationFactory, EntityType, RelationType, EntityChunk
     ENTITIES_AVAILABLE = True
 except ImportError:
     ENTITIES_AVAILABLE = False
@@ -31,6 +31,9 @@ class ParserResult:
     entities: List['Entity']
     relations: List['Relation']
     
+    # Progressive disclosure: implementation chunks for dual storage
+    implementation_chunks: List['EntityChunk'] = None
+    
     # Metadata
     parsing_time: float = 0.0
     file_hash: str = ""
@@ -42,6 +45,8 @@ class ParserResult:
             self.errors = []
         if self.warnings is None:
             self.warnings = []
+        if self.implementation_chunks is None:
+            self.implementation_chunks = []
     
     @property
     def success(self) -> bool:
@@ -137,6 +142,10 @@ class PythonParser(CodeParser):
             
             result.entities.extend(jedi_entities)
             result.relations.extend(jedi_relations)
+            
+            # Progressive disclosure: Extract implementation chunks for v2.4
+            implementation_chunks = self._extract_implementation_chunks(file_path, tree)
+            result.implementation_chunks.extend(implementation_chunks)
             
             # Create file entity
             file_entity = EntityFactory.create_file_entity(file_path, 
@@ -325,6 +334,147 @@ class PythonParser(CodeParser):
             relations.append(relation)
         
         return entities, relations
+    
+    def _extract_implementation_chunks(self, file_path: Path, tree: 'tree_sitter.Tree') -> List['EntityChunk']:
+        """Extract full implementation chunks using AST + Jedi for progressive disclosure."""
+        if not tree:
+            return []
+        
+        chunks = []
+        
+        try:
+            # Read source code
+            with open(file_path, 'r', encoding='utf-8') as f:
+                source_code = f.read()
+            
+            # Create Jedi script for semantic analysis
+            script = jedi.Script(source_code, path=str(file_path), project=self._project)
+            source_lines = source_code.split('\n')
+            
+            # Extract function and class implementations
+            def traverse_for_implementations(node):
+                if node.type in ['function_definition', 'class_definition']:
+                    chunk = self._extract_implementation_chunk(node, source_lines, script, file_path)
+                    if chunk:
+                        chunks.append(chunk)
+                
+                # Recursively traverse children
+                for child in node.children:
+                    traverse_for_implementations(child)
+            
+            traverse_for_implementations(tree.root_node)
+            
+        except Exception as e:
+            # Graceful fallback - implementation chunks are optional
+            pass
+        
+        return chunks
+    
+    def _extract_implementation_chunk(self, node: 'tree_sitter.Node', source_lines: List[str], 
+                                    script: 'jedi.Script', file_path: Path) -> Optional['EntityChunk']:
+        """Extract implementation chunk for function or class with semantic metadata."""
+        try:
+            # Get entity name
+            entity_name = None
+            for child in node.children:
+                if child.type == 'identifier':
+                    entity_name = child.text.decode('utf-8')
+                    break
+            
+            if not entity_name:
+                return None
+            
+            # Extract source code lines
+            start_line = node.start_point[0]
+            end_line = node.end_point[0]
+            implementation_lines = source_lines[start_line:end_line + 1]
+            implementation = '\n'.join(implementation_lines)
+            
+            # Extract semantic metadata using Jedi
+            semantic_metadata = {}
+            try:
+                # Get Jedi definition at the entity location
+                definitions = script.goto(start_line + 1, node.start_point[1])
+                if definitions:
+                    definition = definitions[0]
+                    semantic_metadata = {
+                        "inferred_types": self._get_type_hints(definition),
+                        "calls": self._extract_function_calls_from_source(implementation),
+                        "imports_used": self._extract_imports_used_in_source(implementation),
+                        "exceptions_handled": self._extract_exceptions_from_source(implementation),
+                        "complexity": self._calculate_complexity_from_source(implementation)
+                    }
+            except:
+                # Fallback to basic analysis
+                semantic_metadata = {
+                    "calls": self._extract_function_calls_from_source(implementation),
+                    "imports_used": [],
+                    "exceptions_handled": [],
+                    "complexity": implementation.count('\n') + 1  # Simple line count
+                }
+            
+            return EntityChunk(
+                id=f"{hash(str(file_path))}::{entity_name}::implementation",
+                entity_name=entity_name,
+                chunk_type="implementation",
+                content=implementation,
+                metadata={
+                    "entity_type": "function" if node.type == 'function_definition' else "class",
+                    "file_path": str(file_path),
+                    "start_line": start_line + 1,
+                    "end_line": end_line + 1,
+                    "semantic_metadata": semantic_metadata
+                }
+            )
+            
+        except Exception as e:
+            return None
+    
+    def _get_type_hints(self, definition) -> Dict[str, str]:
+        """Extract type hints from Jedi definition."""
+        try:
+            type_hints = {}
+            if hasattr(definition, 'signature'):
+                sig = definition.signature
+                if sig:
+                    type_hints["signature"] = str(sig)
+            return type_hints
+        except:
+            return {}
+    
+    def _extract_function_calls_from_source(self, source: str) -> List[str]:
+        """Extract function calls from source code using regex."""
+        import re
+        # Simple regex to find function calls (name followed by parentheses)
+        call_pattern = r'(\w+)\s*\('
+        calls = re.findall(call_pattern, source)
+        # Filter out common keywords and duplicates
+        keywords = {'if', 'for', 'while', 'try', 'except', 'with', 'def', 'class', 'return', 'print'}
+        return list(set([call for call in calls if call not in keywords]))
+    
+    def _extract_imports_used_in_source(self, source: str) -> List[str]:
+        """Extract imports referenced in the source code."""
+        import re
+        # Find module.function or module.class patterns
+        module_pattern = r'(\w+)\.(\w+)'
+        matches = re.findall(module_pattern, source)
+        return list(set([f"{module}.{attr}" for module, attr in matches]))
+    
+    def _extract_exceptions_from_source(self, source: str) -> List[str]:
+        """Extract exception types from source code."""
+        import re
+        # Find except SomeException patterns
+        except_pattern = r'except\s+(\w+)'
+        exceptions = re.findall(except_pattern, source)
+        return list(set(exceptions))
+    
+    def _calculate_complexity_from_source(self, source: str) -> int:
+        """Calculate complexity based on control flow statements."""
+        complexity_keywords = ['if', 'elif', 'for', 'while', 'try', 'except', 'with']
+        complexity = 1  # Base complexity
+        for keyword in complexity_keywords:
+            complexity += source.count(f' {keyword} ') + source.count(f'\n{keyword} ')
+        return complexity
 
 
 class MarkdownParser(CodeParser):

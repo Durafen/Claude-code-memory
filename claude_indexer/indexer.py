@@ -9,10 +9,10 @@ from dataclasses import dataclass
 
 from .config import IndexerConfig
 from .analysis.parser import ParserRegistry, ParserResult
-from .analysis.entities import Entity, Relation
+from .analysis.entities import Entity, Relation, EntityChunk, RelationChunk
 from .embeddings.base import Embedder
 from .storage.base import VectorStore
-from .logging import get_logger
+from .indexer_logging import get_logger
 
 logger = get_logger()
 
@@ -29,6 +29,7 @@ class IndexingResult:
     files_failed: int = 0
     entities_created: int = 0
     relations_created: int = 0
+    implementation_chunks_created: int = 0  # Progressive disclosure metric
     processing_time: float = 0.0
     
     # Cost tracking
@@ -170,10 +171,11 @@ class CoreIndexer:
             
             self.logger.info(f"Found {len(files_to_process)} files to process")
             
-            # Process files in batches
+            # Process files in batches with progressive disclosure support
             batch_size = self.config.batch_size
             all_entities = []
             all_relations = []
+            all_implementation_chunks = []
             
             for i in range(0, len(files_to_process), batch_size):
                 batch = files_to_process[i:i + batch_size]
@@ -181,10 +183,11 @@ class CoreIndexer:
                 total_batches = (len(files_to_process) + batch_size - 1) // batch_size
                 self.logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch)} files)")
                 
-                batch_entities, batch_relations, batch_errors = self._process_file_batch(batch, verbose)
+                batch_entities, batch_relations, batch_implementation_chunks, batch_errors = self._process_file_batch(batch, verbose)
                 
                 all_entities.extend(batch_entities)
                 all_relations.extend(batch_relations)
+                all_implementation_chunks.extend(batch_implementation_chunks)
                 result.errors.extend(batch_errors)
                 
                 # Track failed files properly
@@ -202,16 +205,17 @@ class CoreIndexer:
                 result.files_processed += len([f for f in batch if str(f) not in batch_errors])
                 result.files_failed += len(batch_errors)
             
-            # Store vectors using direct Qdrant automation
-            if all_entities or all_relations:
+            # Store vectors using direct Qdrant automation with progressive disclosure
+            if all_entities or all_relations or all_implementation_chunks:
                 # Use direct Qdrant automation via existing _store_vectors method
-                storage_success = self._store_vectors(collection_name, all_entities, all_relations)
+                storage_success = self._store_vectors(collection_name, all_entities, all_relations, all_implementation_chunks)
                 if not storage_success:
                     result.success = False
                     result.errors.append("Failed to store vectors in Qdrant")
                 else:
                     result.entities_created = len(all_entities)
                     result.relations_created = len(all_relations)
+                    result.implementation_chunks_created = len(all_implementation_chunks)
             
             # Update state file - merge successfully processed files with existing state
             successfully_processed = [f for f in files_to_process if str(f) not in result.failed_files]
@@ -262,13 +266,14 @@ class CoreIndexer:
                 result.errors.extend(parse_result.errors)
                 return result
             
-            # Use batch processing like the project indexer
-            storage_success = self._store_vectors(collection_name, parse_result.entities, parse_result.relations)
+            # Use batch processing like the project indexer with progressive disclosure
+            storage_success = self._store_vectors(collection_name, parse_result.entities, parse_result.relations, parse_result.implementation_chunks)
             
             if storage_success:
                 result.files_processed = 1
                 result.entities_created = len(parse_result.entities)
                 result.relations_created = len(parse_result.relations)
+                result.implementation_chunks_created = len(parse_result.implementation_chunks)
                 result.processed_files = [str(file_path)]
             else:
                 result.success = False
@@ -403,10 +408,11 @@ class CoreIndexer:
         
         return changed_files, deleted_files
     
-    def _process_file_batch(self, files: List[Path], verbose: bool = False) -> Tuple[List[Entity], List[Relation], List[str]]:
-        """Process a batch of files."""
+    def _process_file_batch(self, files: List[Path], verbose: bool = False) -> Tuple[List[Entity], List[Relation], List[EntityChunk], List[str]]:
+        """Process a batch of files with progressive disclosure support."""
         all_entities = []
         all_relations = []
+        all_implementation_chunks = []
         errors = []
         
         for file_path in files:
@@ -432,7 +438,8 @@ class CoreIndexer:
                 if result.success:
                     all_entities.extend(result.entities)
                     all_relations.extend(result.relations)
-                    self.logger.debug(f"  Found {len(result.entities)} entities, {len(result.relations)} relations")
+                    all_implementation_chunks.extend(result.implementation_chunks)
+                    self.logger.debug(f"  Found {len(result.entities)} entities, {len(result.relations)} relations, {len(result.implementation_chunks)} implementation chunks")
                 else:
                     error_msg = f"Failed to parse {relative_path}"
                     errors.append(error_msg)
@@ -445,39 +452,74 @@ class CoreIndexer:
                 self.logger.error(f"  {error_msg}")
                 logger.error(f"❌ Processing error in {file_path}: {e}")
         
-        return all_entities, all_relations, errors
+        return all_entities, all_relations, all_implementation_chunks, errors
     
     def _store_vectors(self, collection_name: str, entities: List[Entity], 
-                      relations: List[Relation]) -> bool:
-        """Store entities and relations in vector database using batch processing."""
+                      relations: List[Relation], implementation_chunks: List[EntityChunk] = None) -> bool:
+        """Store entities, relations, and implementation chunks in vector database using batch processing."""
+        if implementation_chunks is None:
+            implementation_chunks = []
+        
+        logger = self.logger if hasattr(self, 'logger') else None
+        if logger:
+            logger.debug(f"🔄 Starting storage: {len(entities)} entities, {len(relations)} relations, {len(implementation_chunks)} chunks")
+        
         try:
             all_points = []
             total_tokens = 0
             total_cost = 0.0
             total_requests = 0
             
-            # Batch process entities
+            # Create implementation chunk lookup for has_implementation flags
+            implementation_entity_names = set()
+            if implementation_chunks:
+                implementation_entity_names = {chunk.entity_name for chunk in implementation_chunks}
+            
+            # Batch process entities with progressive disclosure
             if entities:
-                entity_texts = [self._entity_to_text(entity) for entity in entities]
-                embedding_results = self.embedder.embed_batch(entity_texts)
+                if logger:
+                    logger.debug(f"🧠 Processing entities: {len(entities)} items")
                 
-                # Process embedding results for entities
+                # Convert entities to metadata chunks for dual storage
+                metadata_chunks = []
+                for entity in entities:
+                    has_implementation = entity.name in implementation_entity_names
+                    metadata_chunk = EntityChunk.create_metadata_chunk(entity, has_implementation)
+                    metadata_chunks.append(metadata_chunk)
+                
+                metadata_texts = [chunk.content for chunk in metadata_chunks]
+                if logger:
+                    logger.debug(f"🔤 Generating embeddings for {len(metadata_texts)} entity texts")
+                
+                embedding_results = self.embedder.embed_batch(metadata_texts)
+                if logger:
+                    logger.debug(f"✅ Entity embeddings completed: {sum(1 for r in embedding_results if r.success)}/{len(embedding_results)} successful")
+                
+                # Process embedding results for metadata chunks
                 cost_data = self._collect_embedding_cost_data(embedding_results)
                 total_tokens += cost_data['tokens']
                 total_cost += cost_data['cost']
                 total_requests += cost_data['requests']
                 
-                for entity, embedding_result in zip(entities, embedding_results):
+                for chunk, embedding_result in zip(metadata_chunks, embedding_results):
                     if embedding_result.success:
-                        point = self.vector_store.create_entity_point(
-                            entity, embedding_result.embedding, collection_name
+                        point = self.vector_store.create_chunk_point(
+                            chunk, embedding_result.embedding, collection_name
                         )
                         all_points.append(point)
             
             # Batch process relations
             if relations:
+                if logger:
+                    logger.debug(f"🔗 Processing relations: {len(relations)} items")
+                    
                 relation_texts = [self._relation_to_text(relation) for relation in relations]
+                if logger:
+                    logger.debug(f"🔤 Generating embeddings for {len(relation_texts)} relation texts")
+                    
                 embedding_results = self.embedder.embed_batch(relation_texts)
+                if logger:
+                    logger.debug(f"✅ Relation embeddings completed: {sum(1 for r in embedding_results if r.success)}/{len(embedding_results)} successful")
                 
                 # Process embedding results for relations
                 cost_data = self._collect_embedding_cost_data(embedding_results)
@@ -487,8 +529,36 @@ class CoreIndexer:
                 
                 for relation, embedding_result in zip(relations, embedding_results):
                     if embedding_result.success:
-                        point = self.vector_store.create_relation_point(
-                            relation, embedding_result.embedding, collection_name
+                        # Convert relation to chunk for v2.4 pure architecture
+                        relation_chunk = RelationChunk.from_relation(relation)
+                        point = self.vector_store.create_relation_chunk_point(
+                            relation_chunk, embedding_result.embedding, collection_name
+                        )
+                        all_points.append(point)
+            
+            # Batch process implementation chunks for progressive disclosure
+            if implementation_chunks:
+                if logger:
+                    logger.debug(f"💻 Processing implementation chunks: {len(implementation_chunks)} items")
+                    
+                implementation_texts = [chunk.content for chunk in implementation_chunks]
+                if logger:
+                    logger.debug(f"🔤 Generating embeddings for {len(implementation_texts)} implementation texts")
+                    
+                embedding_results = self.embedder.embed_batch(implementation_texts)
+                if logger:
+                    logger.debug(f"✅ Implementation embeddings completed: {sum(1 for r in embedding_results if r.success)}/{len(embedding_results)} successful")
+                
+                # Process embedding results for implementation chunks
+                cost_data = self._collect_embedding_cost_data(embedding_results)
+                total_tokens += cost_data['tokens']
+                total_cost += cost_data['cost']
+                total_requests += cost_data['requests']
+                
+                for chunk, embedding_result in zip(implementation_chunks, embedding_results):
+                    if embedding_result.success:
+                        point = self.vector_store.create_chunk_point(
+                            chunk, embedding_result.embedding, collection_name
                         )
                         all_points.append(point)
             
@@ -502,10 +572,22 @@ class CoreIndexer:
             
             # Batch store all points
             if all_points:
+                if logger:
+                    logger.debug(f"💾 Storing {len(all_points)} points to Qdrant collection '{collection_name}'")
+                
                 result = self.vector_store.batch_upsert(collection_name, all_points)
+                
+                if logger:
+                    if result.success:
+                        logger.debug(f"✅ Successfully stored all {len(all_points)} points")
+                    else:
+                        logger.error(f"❌ Failed to store points: {getattr(result, 'errors', 'Unknown error')}")
+                
                 return result.success
-            
-            return True
+            else:
+                if logger:
+                    logger.debug("ℹ️ No points to store")
+                return True
             
         except Exception as e:
             logger.error(f"Error in _store_vectors: {e}")

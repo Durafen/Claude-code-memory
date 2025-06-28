@@ -268,6 +268,27 @@ class CachingVectorStore(VectorStore):
         else:
             raise AttributeError(f"Backend {type(self.backend)} does not support create_relation_point")
     
+    def create_chunk_point(self, chunk, embedding: List[float], collection_name: str):
+        """Delegate chunk point creation to backend for progressive disclosure."""
+        if hasattr(self.backend, 'create_chunk_point'):
+            return self.backend.create_chunk_point(chunk, embedding, collection_name)
+        else:
+            raise AttributeError(f"Backend {type(self.backend)} does not support create_chunk_point")
+    
+    def create_relation_chunk_point(self, chunk, embedding: List[float], collection_name: str):
+        """Delegate relation chunk point creation to backend for v2.4 pure architecture."""
+        if hasattr(self.backend, 'create_relation_chunk_point'):
+            return self.backend.create_relation_chunk_point(chunk, embedding, collection_name)
+        else:
+            raise AttributeError(f"Backend {type(self.backend)} does not support create_relation_chunk_point")
+    
+    def create_chat_chunk_point(self, chunk, embedding: List[float], collection_name: str):
+        """Delegate chat chunk point creation to backend for v2.4 pure architecture."""
+        if hasattr(self.backend, 'create_chat_chunk_point'):
+            return self.backend.create_chat_chunk_point(chunk, embedding, collection_name)
+        else:
+            raise AttributeError(f"Backend {type(self.backend)} does not support create_chat_chunk_point")
+    
     def generate_deterministic_id(self, content: str) -> str:
         """Delegate deterministic ID generation to backend."""
         if hasattr(self.backend, 'generate_deterministic_id'):

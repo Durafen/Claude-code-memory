@@ -4,7 +4,7 @@ import time
 import warnings
 from typing import List, Dict, Any, Optional, Union
 from .base import VectorStore, StorageResult, VectorPoint, ManagedVectorStore
-from ..logging import get_logger
+from ..indexer_logging import get_logger
 
 logger = get_logger()
 
@@ -507,6 +507,11 @@ class QdrantStore(ManagedVectorStore):
                         wait=True
                     )
                 
+                    # Clean up orphaned relations after deletion
+                    orphaned_deleted = self._cleanup_orphaned_relations(collection_name, verbose=False)
+                    if orphaned_deleted > 0:
+                        logger.debug(f"🗑️ Cleaned up {orphaned_deleted} orphaned relations after --clear")
+                
                 # Count points after deletion
                 count_after = self.client.count(collection_name=collection_name).count
                 deleted_count = count_before - count_after
@@ -519,7 +524,8 @@ class QdrantStore(ManagedVectorStore):
                     warnings=[f"Preserved {count_after} manual memories"]
                 )
             else:
-                # Delete the entire collection (old behavior)
+                # Delete the entire collection (--clear-all behavior)
+                # No orphan cleanup needed since entire collection is deleted
                 self.client.delete_collection(collection_name=collection_name)
                 
                 return StorageResult(
@@ -566,13 +572,14 @@ class QdrantStore(ManagedVectorStore):
         entity_key = f"{entity.file_path}::{entity.name}" if entity.file_path else entity.name
         point_id = self.generate_deterministic_id(entity_key)
         
-        # Create payload
+        # Create payload - v2.4 format
         payload = {
-            "name": entity.name,
-            "entityType": entity.entity_type.value,
+            "entity_name": entity.name,
+            "entity_type": entity.entity_type.value,
             "observations": entity.observations,
             "collection": collection_name,
-            "type": "entity"
+            "type": "chunk",
+            "chunk_type": "metadata"
         }
         
         # Add optional metadata
@@ -591,6 +598,63 @@ class QdrantStore(ManagedVectorStore):
             payload=payload
         )
     
+    def create_chunk_point(self, chunk: 'EntityChunk', embedding: List[float], 
+                          collection_name: str) -> VectorPoint:
+        """Create a vector point from an EntityChunk for progressive disclosure."""
+        from ..analysis.entities import EntityChunk
+        
+        # Use the chunk's pre-defined ID format: "{file_id}::{entity_name}::{chunk_type}"
+        point_id = self.generate_deterministic_id(chunk.id)
+        
+        # Create payload using the chunk's to_vector_payload method
+        payload = chunk.to_vector_payload()
+        payload["collection"] = collection_name
+        payload["type"] = "chunk"  # Pure v2.4 format
+        
+        return VectorPoint(
+            id=point_id,
+            vector=embedding,
+            payload=payload
+        )
+    
+    def create_relation_chunk_point(self, chunk: 'RelationChunk', embedding: List[float], 
+                                   collection_name: str) -> VectorPoint:
+        """Create a vector point from a RelationChunk for v2.4 pure architecture."""
+        from ..analysis.entities import RelationChunk
+        
+        # Use the chunk's pre-defined ID format: "{from_entity}::{relation_type}::{to_entity}"
+        point_id = self.generate_deterministic_id(chunk.id)
+        
+        # Create payload using the chunk's to_vector_payload method
+        payload = chunk.to_vector_payload()
+        payload["collection"] = collection_name
+        payload["type"] = "chunk"  # Pure v2.4 format
+        
+        return VectorPoint(
+            id=point_id,
+            vector=embedding,
+            payload=payload
+        )
+    
+    def create_chat_chunk_point(self, chunk: 'ChatChunk', embedding: List[float], 
+                               collection_name: str) -> VectorPoint:
+        """Create a vector point from a ChatChunk for v2.4 pure architecture."""
+        from ..analysis.entities import ChatChunk
+        
+        # Use the chunk's pre-defined ID format: "chat::{chat_id}::{chunk_type}"
+        point_id = self.generate_deterministic_id(chunk.id)
+        
+        # Create payload using the chunk's to_vector_payload method
+        payload = chunk.to_vector_payload()
+        payload["collection"] = collection_name
+        payload["type"] = "chunk"  # Pure v2.4 format
+        
+        return VectorPoint(
+            id=point_id,
+            vector=embedding,
+            payload=payload
+        )
+    
     def create_relation_point(self, relation: 'Relation', embedding: List[float],
                             collection_name: str) -> VectorPoint:
         """Create a vector point from a relation."""
@@ -600,13 +664,14 @@ class QdrantStore(ManagedVectorStore):
         relation_key = f"{relation.from_entity}-{relation.relation_type.value}-{relation.to_entity}"
         point_id = self.generate_deterministic_id(relation_key)
         
-        # Create payload
+        # Create payload - v2.4 format
         payload = {
             "from": relation.from_entity,
             "to": relation.to_entity,
             "relationType": relation.relation_type.value,
             "collection": collection_name,
-            "type": "relation"
+            "type": "chunk",
+            "chunk_type": "relation"
         }
         
         # Add optional metadata
@@ -654,7 +719,7 @@ class QdrantStore(ManagedVectorStore):
             )
             
             for point in points:
-                name = point.payload.get('name', '')
+                name = point.payload.get('entity_name', point.payload.get('name', ''))
                 if name:
                     entity_names.add(name)
                     
@@ -725,9 +790,9 @@ class QdrantStore(ManagedVectorStore):
                             key="file_path",
                             match=models.MatchValue(value=file_path)
                         ),
-                        # Find File entities where name = file_path
+                        # Find File entities where entity_name = file_path (with fallback to name)
                         models.FieldCondition(
-                            key="name", 
+                            key="entity_name", 
                             match=models.MatchValue(value=file_path)
                         ),
                     ]
@@ -741,8 +806,8 @@ class QdrantStore(ManagedVectorStore):
             for point in points:
                 results.append({
                     "id": point.id,
-                    "name": point.payload.get('name', 'Unknown'),
-                    "type": point.payload.get('entityType', point.payload.get('type', 'unknown')),
+                    "name": point.payload.get('entity_name', point.payload.get('name', 'Unknown')),
+                    "type": point.payload.get('entity_type', point.payload.get('entityType', point.payload.get('type', 'unknown'))),
                     "payload": point.payload
                 })
             
@@ -769,8 +834,8 @@ class QdrantStore(ManagedVectorStore):
         if search_result.success:
             results.extend(search_result.results)
         
-        # Search for File entities where name = file_path
-        filter_name = {"name": file_path}
+        # Search for File entities where entity_name = file_path
+        filter_name = {"entity_name": file_path}
         search_result = self.search_similar(
             collection_name=collection_name,
             query_vector=dummy_vector,
@@ -823,10 +888,12 @@ class QdrantStore(ManagedVectorStore):
             relations = []
             
             for point in all_points:
-                if point.payload.get('type') == 'relation':
+                # Handle both legacy v2.3 ("type": "relation") and v2.4 ("type": "chunk", "chunk_type": "relation")
+                if (point.payload.get('type') == 'relation' or 
+                    (point.payload.get('type') == 'chunk' and point.payload.get('chunk_type') == 'relation')):
                     relations.append(point)
                 else:
-                    name = point.payload.get('name', '')
+                    name = point.payload.get('entity_name', point.payload.get('name', ''))
                     if name:
                         entity_names.add(name)
             

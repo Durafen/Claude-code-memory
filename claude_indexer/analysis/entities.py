@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from pathlib import Path
 
 
@@ -35,6 +35,156 @@ class RelationType(Enum):
     DOCUMENTS = "documents"
     TESTS = "tests"
     REFERENCES = "references"
+
+
+# Type alias for chunk types in dual storage
+ChunkType = Literal["metadata", "implementation"]
+
+
+@dataclass(frozen=True)
+class EntityChunk:
+    """Represents a chunk of entity content for vector storage in progressive disclosure architecture."""
+    
+    id: str  # Format: "{file_id}::{entity_name}::{chunk_type}"
+    entity_name: str
+    chunk_type: ChunkType
+    content: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        """Validate chunk after creation."""
+        if not self.id or not self.entity_name or not self.content:
+            raise ValueError("id, entity_name, and content cannot be empty")
+        if self.chunk_type not in ["metadata", "implementation"]:
+            raise ValueError(f"chunk_type must be 'metadata' or 'implementation', got: {self.chunk_type}")
+    
+    def to_vector_payload(self) -> Dict[str, Any]:
+        """Convert to Qdrant payload format with progressive disclosure support."""
+        return {
+            "entity_name": self.entity_name,
+            "chunk_type": self.chunk_type,
+            "content": self.content,
+            **self.metadata
+        }
+    
+    @classmethod
+    def create_metadata_chunk(cls, entity: 'Entity', has_implementation: bool = False) -> 'EntityChunk':
+        """Create metadata chunk from existing Entity for progressive disclosure."""
+        # Build content from entity observations and signature
+        content_parts = []
+        if entity.signature:
+            content_parts.append(f"Signature: {entity.signature}")
+        if entity.docstring:
+            content_parts.append(f"Description: {entity.docstring}")
+        
+        # Add key observations
+        content_parts.extend(entity.observations)
+        content = " | ".join(content_parts)
+        
+        return cls(
+            id=f"{hash(str(entity.file_path))}::{entity.name}::metadata",
+            entity_name=entity.name,
+            chunk_type="metadata",
+            content=content,
+            metadata={
+                "entity_type": entity.entity_type.value,
+                "file_path": str(entity.file_path) if entity.file_path else None,
+                "line_number": entity.line_number,
+                "end_line_number": entity.end_line_number,
+                "has_implementation": has_implementation
+            }
+        )
+
+
+@dataclass(frozen=True)
+class RelationChunk:
+    """Represents a relation as a chunk for v2.4 pure architecture."""
+    
+    id: str  # Format: "{from_entity}::{relation_type}::{to_entity}"
+    from_entity: str
+    to_entity: str
+    relation_type: RelationType
+    content: str  # Human-readable description
+    context: Optional[str] = None
+    confidence: float = 1.0
+    
+    def __post_init__(self):
+        """Validate relation chunk after creation."""
+        if not self.id or not self.from_entity or not self.to_entity:
+            raise ValueError("id, from_entity, and to_entity cannot be empty")
+        if not (0.0 <= self.confidence <= 1.0):
+            raise ValueError("Confidence must be between 0.0 and 1.0")
+    
+    @classmethod
+    def from_relation(cls, relation: 'Relation') -> 'RelationChunk':
+        """Create a RelationChunk from a Relation."""
+        chunk_id = f"{relation.from_entity}::{relation.relation_type.value}::{relation.to_entity}"
+        
+        # Build human-readable content
+        content = f"{relation.from_entity} {relation.relation_type.value} {relation.to_entity}"
+        if relation.context:
+            content += f" ({relation.context})"
+            
+        return cls(
+            id=chunk_id,
+            from_entity=relation.from_entity,
+            to_entity=relation.to_entity,
+            relation_type=relation.relation_type,
+            content=content,
+            context=relation.context,
+            confidence=relation.confidence
+        )
+    
+    def to_vector_payload(self) -> Dict[str, Any]:
+        """Convert relation chunk to vector storage payload."""
+        payload = {
+            "chunk_type": "relation",
+            "entity_name": self.from_entity,  # Primary entity for search
+            "relation_target": self.to_entity,
+            "relation_type": self.relation_type.value,
+            "content": self.content,
+            "type": "chunk"
+        }
+        
+        if self.context:
+            payload["context"] = self.context
+        if self.confidence != 1.0:
+            payload["confidence"] = self.confidence
+            
+        return payload
+
+
+@dataclass(frozen=True)
+class ChatChunk:
+    """Represents chat data as a chunk for v2.4 pure architecture."""
+    
+    id: str  # Format: "chat::{chat_id}::{chunk_type}"
+    chat_id: str
+    chunk_type: str  # "chat_summary" or "chat_detail"
+    content: str
+    timestamp: Optional[str] = None
+    
+    def __post_init__(self):
+        """Validate chat chunk after creation."""
+        if not self.id or not self.chat_id or not self.content:
+            raise ValueError("id, chat_id, and content cannot be empty")
+        if self.chunk_type not in ["chat_summary", "chat_detail"]:
+            raise ValueError(f"chunk_type must be 'chat_summary' or 'chat_detail', got: {self.chunk_type}")
+    
+    def to_vector_payload(self) -> Dict[str, Any]:
+        """Convert chat chunk to vector storage payload."""
+        payload = {
+            "chunk_type": self.chunk_type,
+            "entity_name": f"chat_{self.chat_id}",
+            "entity_type": "chat",
+            "content": self.content,
+            "type": "chunk"
+        }
+        
+        if self.timestamp:
+            payload["timestamp"] = self.timestamp
+            
+        return payload
 
 
 @dataclass(frozen=True)

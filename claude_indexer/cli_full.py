@@ -10,7 +10,7 @@ from .config import load_config, IndexerConfig
 from .indexer import CoreIndexer
 from .embeddings.registry import create_embedder_from_config
 from .storage.registry import create_store_from_config
-from .logging import setup_logging, clear_log_file, get_logger
+from .indexer_logging import setup_logging, clear_log_file, get_logger
 
 # Only import these if they're available
 try:
@@ -30,7 +30,7 @@ except ImportError:
 def cli():
     """Claude Code Memory Indexer - Universal semantic indexing for codebases."""
     if not CLICK_AVAILABLE:
-        from .logging import get_logger
+        from .indexer_logging import get_logger
         logger = get_logger()
         logger.error("Click not available. Install with: pip install click")
         sys.exit(1)
@@ -683,6 +683,19 @@ else:
                 "node", str(mcp_server_path)
             ]
             
+            # Add Voyage AI settings if configured
+            if hasattr(config_obj, 'voyage_api_key') and config_obj.voyage_api_key:
+                cmd.insert(-3, "-e")
+                cmd.insert(-3, f"VOYAGE_API_KEY={config_obj.voyage_api_key}")
+            
+            if hasattr(config_obj, 'embedding_provider') and config_obj.embedding_provider:
+                cmd.insert(-3, "-e")
+                cmd.insert(-3, f"EMBEDDING_PROVIDER={config_obj.embedding_provider}")
+                
+            if hasattr(config_obj, 'voyage_model') and config_obj.voyage_model:
+                cmd.insert(-3, "-e")
+                cmd.insert(-3, f"EMBEDDING_MODEL={config_obj.voyage_model}")
+            
             if verbose:
                 click.echo(f"🚀 Adding MCP server: {server_name}")
                 click.echo(f"📊 Collection name: {collection}")
@@ -788,24 +801,25 @@ else:
             
             for conversation, summary in zip(conversations, summaries):
                 try:
-                    # Create entity from summary
-                    from .analysis.entities import Entity, EntityType
-                    
-                    entity = Entity(
-                        name=conversation.summary_key,
-                        entity_type=EntityType.CHAT_HISTORY,
-                        observations=summary.to_observations(),
-                        file_path=str(conversation.file_path),
-                        line_number=1
-                    )
+                    # Create chat chunk from summary for v2.4 pure architecture
+                    from .analysis.entities import Entity, EntityType, ChatChunk
                     
                     # Generate embedding
-                    entity_text = " | ".join(summary.to_observations())
-                    embedding_result = embedder.embed_text(entity_text)
+                    chat_content = " | ".join(summary.to_observations())
+                    embedding_result = embedder.embed_text(chat_content)
                     
                     if embedding_result.success:
+                        # Create chat chunk
+                        chat_chunk = ChatChunk(
+                            id=f"chat::{conversation.summary_key}::summary",
+                            chat_id=conversation.summary_key,
+                            chunk_type="chat_summary",
+                            content=chat_content,
+                            timestamp=str(conversation.metadata.start_time) if hasattr(conversation.metadata, 'start_time') else None
+                        )
+                        
                         # Create vector point
-                        point = store.create_entity_point(entity, embedding_result.embedding, collection)
+                        point = store.create_chat_chunk_point(chat_chunk, embedding_result.embedding, collection)
                         
                         # Store in vector database
                         result = store.batch_upsert(collection, [point])

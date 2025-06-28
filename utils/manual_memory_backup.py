@@ -89,8 +89,8 @@ def is_truly_manual_entry(payload: Dict[str, Any]) -> bool:
     # Pattern 3: Auto entities have extended metadata fields
     automation_fields = {
         'line_number', 'ast_data', 'signature', 'docstring', 'full_name', 
-        'ast_type', 'start_line', 'end_line', 'source_hash', 'parsed_at',
-        'has_implementation'  # v2.4 progressive disclosure field
+        'ast_type', 'start_line', 'end_line', 'source_hash', 'parsed_at'
+        # Removed 'has_implementation' - manual entries can have this in v2.4 format
         # Removed 'collection' - manual docs can have collection field
     }
     if any(field in payload for field in automation_fields):

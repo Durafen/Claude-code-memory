@@ -85,20 +85,28 @@ class QdrantStatsCollector:
             
             for point in all_points:
                 if hasattr(point, 'payload') and point.payload:
-                    # Handle both v2.3 (entityType) and v2.4 (entity_type) formats
-                    entity_type = point.payload.get('entity_type') or point.payload.get('entityType', 'unknown')
-                    entity_types[entity_type] += 1
-                    
-                    # Track v2.4 chunk types
-                    chunk_type = point.payload.get('chunk_type', 'unknown')
-                    if chunk_type != 'unknown':
-                        chunk_types[chunk_type] += 1
-                    
-                    # Detect if auto-generated vs manual using exact clear_collection logic
-                    has_file_path = 'file_path' in point.payload and point.payload['file_path']
+                    # Detect relations first - skip entity_type counting for relations
                     has_relation_structure = ('from' in point.payload and 
                                             'to' in point.payload and 
                                             'relationType' in point.payload)
+                    
+                    # Handle both v2.3 (entityType) and v2.4 (entity_type) formats
+                    entity_type = point.payload.get('entity_type') or point.payload.get('entityType', 'unknown')
+                    
+                    # Only count entity_type for non-relation entries
+                    if not has_relation_structure:
+                        entity_types[entity_type] += 1
+                    
+                    # Track v2.4 chunk types + ensure relations are counted
+                    chunk_type = point.payload.get('chunk_type', 'unknown')
+                    if chunk_type != 'unknown':
+                        chunk_types[chunk_type] += 1
+                    elif has_relation_structure:
+                        # Count relations that don't have explicit chunk_type='relation'
+                        chunk_types['relation'] += 1
+                    
+                    # Detect if auto-generated vs manual using exact clear_collection logic
+                    has_file_path = 'file_path' in point.payload and point.payload['file_path']
                     
                     if has_file_path or has_relation_structure:
                         auto_vs_manual['auto_generated'] += 1
@@ -189,7 +197,7 @@ class QdrantStatsCollector:
         automation_fields = {
             'line_number', 'ast_data', 'signature', 'docstring', 'full_name', 
             'ast_type', 'start_line', 'end_line', 'source_hash', 'parsed_at',
-            'has_implementation'  # v2.4 progressive disclosure field
+            # Removed 'has_implementation' - manual entries can have this field in v2.4 format
             # Removed 'collection' - manual docs can have collection field
         }
         if any(field in payload for field in automation_fields):

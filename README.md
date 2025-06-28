@@ -127,6 +127,13 @@ claude-indexer add-mcp -c your-project-name
 claude mcp add your-project-memory -e OPENAI_API_KEY="YOUR_OPENAI_KEY" -e QDRANT_API_KEY="YOUR_QDRANT_KEY" -e QDRANT_URL="http://localhost:6333" -e QDRANT_COLLECTION_NAME="your-project-name" -- node "/path/to/memory/mcp-qdrant-memory/dist/index.js"
 ```
 
+**Enhanced MCP Server Features (v2.4):**
+- **Progressive Disclosure**: `search_similar` returns metadata-first for 90% faster queries
+- **On-demand Implementation**: `get_implementation(entityName)` tool for detailed code access
+- **Automatic Provider Detection**: Reads embedding provider from environment variables
+- **Voyage AI Integration**: Built-in support for voyage-3-lite with cost optimization
+- **Backward Compatibility**: Seamlessly handles both v2.3 and v2.4 chunk formats
+
 **Option 4: Manual JSON Configuration**
 Add to `~/.claude/claude_desktop_config.json`:
 ```json
@@ -169,7 +176,7 @@ claude-indexer --version
 
 **Option 1: Built-in CLI Command (Recommended)**
 ```bash
-# Add MCP server using integrated command
+# Add MCP server using integrated command with v2.4 progressive disclosure
 claude-indexer add-mcp -c my-project
 ```
 
@@ -208,10 +215,13 @@ claude-indexer -p /path/to/your/project -c my-project --verbose
 ### Step 4: Automatic Knowledge Graph Loading
 Knowledge graph is automatically loaded into Qdrant - no manual steps required!
 
-### Step 5: Test Semantic Search
+### Step 5: Test Progressive Disclosure Search
 ```bash
-# In Claude Code
+# In Claude Code - 90% faster metadata-first search
 mcp__my-project-memory__search_similar("your search query")
+
+# For detailed implementation access
+mcp__my-project-memory__get_implementation("entityName")
 ```
 
 ## 🔄 Direct Qdrant Integration

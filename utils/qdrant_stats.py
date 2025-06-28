@@ -195,12 +195,9 @@ class QdrantStatsCollector:
         if any(field in payload for field in automation_fields):
             return False
         
-        # v2.4 specific: Auto-generated chunks have type='chunk' with chunk_type
-        if payload.get('type') == 'chunk' and 'chunk_type' in payload:
-            chunk_type = payload.get('chunk_type')
-            # Auto-generated chunks typically have metadata/implementation/relation chunk_types
-            if chunk_type in ['metadata', 'implementation', 'relation']:
-                return False
+        # v2.4 specific: Don't reject based on chunk_type alone
+        # Both manual and auto entries can have chunk_type in v2.4
+        # Manual entries from MCP also get type='chunk' + chunk_type='metadata'
         
         # True manual entries have minimal fields: entity_name/name, entity_type/entityType, observations
         # Handle both v2.3 (name, entityType) and v2.4 (entity_name, entity_type) formats
@@ -210,9 +207,17 @@ class QdrantStatsCollector:
         if not (has_name and has_type):
             return False
         
-        # Additional check: Manual entries typically have meaningful observations
+        # Additional check: Manual entries typically have meaningful content
+        # Check for either observations (v2.3 legacy) or content (v2.4 MCP format)
         observations = payload.get('observations', [])
-        if not observations or not isinstance(observations, list) or len(observations) == 0:
+        content = payload.get('content', '')
+        
+        has_meaningful_content = (
+            (observations and isinstance(observations, list) and len(observations) > 0) or
+            (content and isinstance(content, str) and len(content.strip()) > 0)
+        )
+        
+        if not has_meaningful_content:
             return False
         
         return True

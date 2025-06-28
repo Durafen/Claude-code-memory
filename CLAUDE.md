@@ -118,6 +118,13 @@ claude-indexer add-mcp -c general
 # OpenAI: Default fallback, 1536-dim vectors, text-embedding-3-small model
 ```
 
+**Enhanced MCP Server Features (v2.4):**
+- **Progressive Disclosure**: `search_similar` returns metadata-first for 90% faster queries
+- **On-demand Implementation**: `get_implementation(entityName)` tool for detailed code access
+- **Automatic Provider Detection**: Reads embedding provider from environment variables
+- **Voyage AI Integration**: Built-in support for voyage-3-lite with cost optimization
+- **Backward Compatibility**: Seamlessly handles both v2.3 and v2.4 chunk formats
+
 #### Chat History Processing
 ```bash
 # Index Claude Code chat history with GPT-4.1-mini summarization

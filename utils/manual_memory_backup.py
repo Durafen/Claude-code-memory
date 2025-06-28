@@ -18,6 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from claude_indexer.storage.qdrant import QdrantStore
 from claude_indexer.config import IndexerConfig
+from claude_indexer.embeddings.voyage import VoyageEmbedder
 from claude_indexer.embeddings.openai import OpenAIEmbedder
 
 def load_config():
@@ -37,7 +38,10 @@ def load_config():
     return IndexerConfig(
         qdrant_url=config_data.get('qdrant_url', 'http://localhost:6333'),
         qdrant_api_key=config_data.get('qdrant_api_key'),
-        openai_api_key=config_data.get('openai_api_key')
+        openai_api_key=config_data.get('openai_api_key'),
+        voyage_api_key=config_data.get('voyage_api_key'),
+        embedding_provider=config_data.get('embedding_provider', 'openai'),
+        voyage_model=config_data.get('voyage_model', 'voyage-3-lite')
     )
 
 def get_manual_entity_types() -> Set[str]:
@@ -71,14 +75,10 @@ def get_code_entity_types() -> Set[str]:
 
 def is_truly_manual_entry(payload: Dict[str, Any]) -> bool:
     """
-    Strict detection for truly manual entries - handles both legacy and v2.4 formats.
-    
-    Legacy format: type='entity', name, entityType, observations
-    v2.4 format: type='chunk', chunk_type='metadata', entity_name, entity_type, content
-    
-    Manual entries lack automation fields regardless of format version.
+    Enhanced logic for v2.4 chunk format while maintaining v2.3 compatibility.
+    Uses the same detection logic as qdrant_stats.py for consistency.
     """
-    # Pattern 1: Auto entities have file_path field (both formats)
+    # Pattern 1: Auto entities have file_path field
     if 'file_path' in payload:
         return False
     
@@ -90,35 +90,38 @@ def is_truly_manual_entry(payload: Dict[str, Any]) -> bool:
     automation_fields = {
         'line_number', 'ast_data', 'signature', 'docstring', 'full_name', 
         'ast_type', 'start_line', 'end_line', 'source_hash', 'parsed_at',
-        'has_implementation'  # v2.4 automation marker
+        'has_implementation'  # v2.4 progressive disclosure field
+        # Removed 'collection' - manual docs can have collection field
     }
     if any(field in payload for field in automation_fields):
         return False
     
-    # v2.4 format detection
-    if payload.get('type') == 'chunk':
-        chunk_type = payload.get('chunk_type')
-        entity_name = payload.get('entity_name', '')
-        content = payload.get('content', '')
-        
-        # v2.4 manual entries: type=chunk, chunk_type=metadata, no automation fields
-        if chunk_type == 'metadata' and entity_name and content:
-            return True
+    # v2.4 specific: Don't reject based on chunk_type alone
+    # Both manual and auto entries can have chunk_type in v2.4
+    # Manual entries from MCP also get type='chunk' + chunk_type='metadata'
+    
+    # True manual entries have minimal fields: entity_name/name, entity_type/entityType, observations
+    # Handle both v2.3 (name, entityType) and v2.4 (entity_name, entity_type) formats
+    has_name = 'entity_name' in payload or 'name' in payload
+    has_type = 'entity_type' in payload or 'entityType' in payload
+    
+    if not (has_name and has_type):
         return False
     
-    # Legacy format detection (for backward compatibility)
-    if payload.get('type') == 'entity':
-        required_fields = {'name', 'entityType'}
-        if not all(field in payload for field in required_fields):
-            return False
-        
-        observations = payload.get('observations', [])
-        if not observations or not isinstance(observations, list) or len(observations) == 0:
-            return False
-        
-        return True
+    # Additional check: Manual entries typically have meaningful content
+    # Check for either observations (v2.3 legacy) or content (v2.4 MCP format)
+    observations = payload.get('observations', [])
+    content = payload.get('content', '')
     
-    return False
+    has_meaningful_content = (
+        (observations and isinstance(observations, list) and len(observations) > 0) or
+        (content and isinstance(content, str) and len(content.strip()) > 0)
+    )
+    
+    if not has_meaningful_content:
+        return False
+    
+    return True
 
 def backup_manual_entries(collection_name: str, output_file: str = None):
     """Extract manual entries from any Qdrant collection and save to backup file."""
@@ -176,57 +179,32 @@ def backup_manual_entries(collection_name: str, output_file: str = None):
         
         for point in all_points:
             payload = point.payload or {}
-            point_type = payload.get('type', 'entity')  # Check format type
             
-            # Handle v2.4 chunk format
-            if point_type == 'chunk':
-                chunk_type = payload.get('chunk_type', 'unknown')
-                
-                # Relations in v2.4
-                if chunk_type == 'relation' or ('from' in payload and 'to' in payload and 'relationType' in payload):
-                    relation_entries.append({
-                        'id': str(point.id),
-                        'type': 'chunk',
-                        'chunk_type': 'relation',
-                        'from': payload.get('from', 'unknown'),
-                        'to': payload.get('to', 'unknown'),
-                        'relationType': payload.get('relationType', 'unknown')
-                    })
-                # Manual entries check
-                elif is_truly_manual_entry(payload):
-                    manual_entries.append({
-                        'id': str(point.id),
-                        'payload': payload
-                    })
-                # Auto-indexed entries in v2.4
-                else:
-                    entity_type = payload.get('entity_type', 'unknown')
-                    entity_name = payload.get('entity_name', 'unknown')
-                    code_entries.append({
-                        'id': str(point.id),
-                        'entityType': entity_type,
-                        'name': entity_name
-                    })
-            
-            # Handle legacy format (backward compatibility)
-            elif point_type == 'relation' or ('from' in payload and 'to' in payload and 'relationType' in payload):
+            # Check for relations first (both v2.3 and v2.4)
+            if ('from' in payload and 'to' in payload and 'relationType' in payload):
+                point_type = payload.get('type', 'relation')
+                chunk_type = payload.get('chunk_type', 'relation')
                 relation_entries.append({
                     'id': str(point.id),
-                    'type': 'relation',
+                    'type': point_type,
+                    'chunk_type': chunk_type if point_type == 'chunk' else None,
                     'from': payload.get('from', 'unknown'),
                     'to': payload.get('to', 'unknown'),
                     'relationType': payload.get('relationType', 'unknown')
                 })
-            # Manual entries check (legacy)
+            
+            # Check for manual entries (using same logic as qdrant_stats)
             elif is_truly_manual_entry(payload):
                 manual_entries.append({
                     'id': str(point.id),
                     'payload': payload
                 })
-            # Auto-indexed entries (legacy)
+                
+            # Everything else is auto-indexed
             else:
-                entity_type = payload.get('entityType', 'unknown')
-                entity_name = payload.get('name', 'unknown')
+                # Handle both v2.3 and v2.4 format fields
+                entity_type = payload.get('entity_type') or payload.get('entityType', 'unknown')
+                entity_name = payload.get('entity_name') or payload.get('name', 'unknown')
                 code_entries.append({
                     'id': str(point.id),
                     'entityType': entity_type,
@@ -234,7 +212,14 @@ def backup_manual_entries(collection_name: str, output_file: str = None):
                 })
         
         # Filter relations to only those connected to manual entries
-        manual_entity_names = set(entry['payload'].get('name') for entry in manual_entries)
+        # Handle both v2.3 (name) and v2.4 (entity_name) formats
+        manual_entity_names = set()
+        for entry in manual_entries:
+            payload = entry['payload']
+            entity_name = payload.get('entity_name') or payload.get('name', '')
+            if entity_name:
+                manual_entity_names.add(entity_name)
+        
         relevant_relations = []
         
         for relation in relation_entries:
@@ -437,8 +422,16 @@ def direct_restore_manual_entries(backup_file: str, collection_name: str = None,
         # Load configuration
         config = load_config()
         
-        # Initialize components
-        embedder = OpenAIEmbedder(api_key=config.openai_api_key)
+        # Initialize components with proper provider (voyage or openai)
+        if config.embedding_provider == 'voyage':
+            embedder = VoyageEmbedder(
+                api_key=config.voyage_api_key,
+                model=config.voyage_model
+            )
+        else:
+            embedder = OpenAIEmbedder(
+                api_key=config.openai_api_key
+            )
         store = QdrantStore(
             url=config.qdrant_url,
             api_key=config.qdrant_api_key
@@ -447,9 +440,14 @@ def direct_restore_manual_entries(backup_file: str, collection_name: str = None,
         # Ensure collection exists
         if not store.collection_exists(target_collection):
             print(f"📦 Creating collection: {target_collection}")
+            # Get vector size from embedder
+            if config.embedding_provider == 'voyage':
+                vector_size = 512  # Voyage AI dimension
+            else:
+                vector_size = 1536  # OpenAI dimension
             store.create_collection(
                 collection_name=target_collection,
-                vector_size=1536,  # OpenAI embedding size
+                vector_size=vector_size,
                 distance_metric="cosine"
             )
         
@@ -483,7 +481,7 @@ def direct_restore_manual_entries(backup_file: str, collection_name: str = None,
                 
                 # Generate embedding for this entry
                 print(f"🔮 Generating embedding for: {entity_name[:50]}...")
-                embedding_result = embedder.embed(content)
+                embedding_result = embedder.embed_text(content)
                 
                 if embedding_result.error:
                     failed_entries.append({
@@ -492,21 +490,21 @@ def direct_restore_manual_entries(backup_file: str, collection_name: str = None,
                     })
                     continue
                 
-                # Create v2.4 format point directly
+                # Create v2.4 format point directly (without collection field to preserve manual classification)
                 v24_payload = {
                     "type": "chunk",
                     "chunk_type": "metadata", 
                     "entity_name": entity_name,
                     "entity_type": entity_type,
                     "content": content,
-                    "collection": target_collection,
                     "has_implementation": False
                 }
                 
-                # Create Qdrant point
+                # Create Qdrant point with UUID
+                import uuid
                 from qdrant_client.models import PointStruct
                 point = PointStruct(
-                    id=entry_id,
+                    id=str(uuid.uuid4()),  # Generate new UUID instead of reusing old ID
                     vector=embedding_result.embedding,
                     payload=v24_payload
                 )

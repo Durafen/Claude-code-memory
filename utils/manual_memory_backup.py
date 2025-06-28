@@ -71,13 +71,14 @@ def get_code_entity_types() -> Set[str]:
 
 def is_truly_manual_entry(payload: Dict[str, Any]) -> bool:
     """
-    Strict detection for truly manual entries based on memory patterns.
-    Manual entries have ONLY basic fields: name, entityType, observations.
-    Auto entries have file_path field OR relation structure (from/to/relationType).
-    """
-    # PRIMARY PATTERN FROM MEMORY: Manual entries lack both automation patterns
+    Strict detection for truly manual entries - handles both legacy and v2.4 formats.
     
-    # Pattern 1: Auto entities have file_path field
+    Legacy format: type='entity', name, entityType, observations
+    v2.4 format: type='chunk', chunk_type='metadata', entity_name, entity_type, content
+    
+    Manual entries lack automation fields regardless of format version.
+    """
+    # Pattern 1: Auto entities have file_path field (both formats)
     if 'file_path' in payload:
         return False
     
@@ -88,24 +89,36 @@ def is_truly_manual_entry(payload: Dict[str, Any]) -> bool:
     # Pattern 3: Auto entities have extended metadata fields
     automation_fields = {
         'line_number', 'ast_data', 'signature', 'docstring', 'full_name', 
-        'ast_type', 'start_line', 'end_line', 'source_hash', 'parsed_at'
-        # Note: 'collection' and 'type' are MCP metadata, NOT automation markers
+        'ast_type', 'start_line', 'end_line', 'source_hash', 'parsed_at',
+        'has_implementation'  # v2.4 automation marker
     }
     if any(field in payload for field in automation_fields):
         return False
     
-    # True manual entries have minimal fields: name, entityType, observations
-    # And were created through MCP tools, not automated indexing
-    required_manual_fields = {'name', 'entityType'}
-    if not all(field in payload for field in required_manual_fields):
+    # v2.4 format detection
+    if payload.get('type') == 'chunk':
+        chunk_type = payload.get('chunk_type')
+        entity_name = payload.get('entity_name', '')
+        content = payload.get('content', '')
+        
+        # v2.4 manual entries: type=chunk, chunk_type=metadata, no automation fields
+        if chunk_type == 'metadata' and entity_name and content:
+            return True
         return False
     
-    # Additional check: Manual entries typically have meaningful observations
-    observations = payload.get('observations', [])
-    if not observations or not isinstance(observations, list) or len(observations) == 0:
-        return False
+    # Legacy format detection (for backward compatibility)
+    if payload.get('type') == 'entity':
+        required_fields = {'name', 'entityType'}
+        if not all(field in payload for field in required_fields):
+            return False
+        
+        observations = payload.get('observations', [])
+        if not observations or not isinstance(observations, list) or len(observations) == 0:
+            return False
+        
+        return True
     
-    return True
+    return False
 
 def backup_manual_entries(collection_name: str, output_file: str = None):
     """Extract manual entries from any Qdrant collection and save to backup file."""
@@ -163,11 +176,40 @@ def backup_manual_entries(collection_name: str, output_file: str = None):
         
         for point in all_points:
             payload = point.payload or {}
-            entity_type = payload.get('entityType', 'unknown')
-            point_type = payload.get('type', 'entity')  # Check if it's entity or relation
+            point_type = payload.get('type', 'entity')  # Check format type
             
-            # Check if this is a relation (not an entity)
-            if point_type == 'relation' or ('from' in payload and 'to' in payload and 'relationType' in payload):
+            # Handle v2.4 chunk format
+            if point_type == 'chunk':
+                chunk_type = payload.get('chunk_type', 'unknown')
+                
+                # Relations in v2.4
+                if chunk_type == 'relation' or ('from' in payload and 'to' in payload and 'relationType' in payload):
+                    relation_entries.append({
+                        'id': str(point.id),
+                        'type': 'chunk',
+                        'chunk_type': 'relation',
+                        'from': payload.get('from', 'unknown'),
+                        'to': payload.get('to', 'unknown'),
+                        'relationType': payload.get('relationType', 'unknown')
+                    })
+                # Manual entries check
+                elif is_truly_manual_entry(payload):
+                    manual_entries.append({
+                        'id': str(point.id),
+                        'payload': payload
+                    })
+                # Auto-indexed entries in v2.4
+                else:
+                    entity_type = payload.get('entity_type', 'unknown')
+                    entity_name = payload.get('entity_name', 'unknown')
+                    code_entries.append({
+                        'id': str(point.id),
+                        'entityType': entity_type,
+                        'name': entity_name
+                    })
+            
+            # Handle legacy format (backward compatibility)
+            elif point_type == 'relation' or ('from' in payload and 'to' in payload and 'relationType' in payload):
                 relation_entries.append({
                     'id': str(point.id),
                     'type': 'relation',
@@ -175,25 +217,20 @@ def backup_manual_entries(collection_name: str, output_file: str = None):
                     'to': payload.get('to', 'unknown'),
                     'relationType': payload.get('relationType', 'unknown')
                 })
-            # PRIORITY: Check automation fields FIRST (most reliable)
+            # Manual entries check (legacy)
             elif is_truly_manual_entry(payload):
                 manual_entries.append({
                     'id': str(point.id),
                     'payload': payload
                 })
-            # Check if it's an automated code entity type  
-            elif entity_type in code_types:
-                code_entries.append({
-                    'id': str(point.id),
-                    'entityType': entity_type,
-                    'name': payload.get('name', 'unknown')
-                })
-            # All other entries are auto-indexed (have automation fields or unknown structure)
+            # Auto-indexed entries (legacy)
             else:
+                entity_type = payload.get('entityType', 'unknown')
+                entity_name = payload.get('name', 'unknown')
                 code_entries.append({
                     'id': str(point.id),
                     'entityType': entity_type,
-                    'name': payload.get('name', 'unknown')
+                    'name': entity_name
                 })
         
         # Filter relations to only those connected to manual entries
@@ -314,14 +351,26 @@ def restore_manual_entries(backup_file: str, collection_name: str = None, batch_
     print(f"🎯 Target collection: {target_collection}")
     print(f"📋 Found {len(manual_entries)} manual entries to restore")
     
-    # Format entities for MCP restoration
+    # Convert legacy entries to v2.4 format for MCP restoration
     entities_for_mcp = []
     for entry in manual_entries:
         payload = entry.get("payload", {})
+        
+        # Convert legacy format to v2.4 
+        entity_name = payload.get("name", f"restored_entry_{entry.get('id', 'unknown')}")
+        entity_type = payload.get("entityType", "documentation")
+        observations = payload.get("observations", [])
+        
+        # Create v2.4 content format
+        content_parts = [f"{entity_type}: {entity_name}"]
+        content_parts.extend(observations)
+        content = " | ".join(content_parts)
+        
+        # MCP v2.4 entity format
         mcp_entity = {
-            "name": payload.get("name", f"restored_entry_{entry.get('id', 'unknown')}"),
-            "entityType": payload.get("entityType", "unknown"),
-            "observations": payload.get("observations", [])
+            "name": entity_name,
+            "entityType": entity_type,
+            "observations": [content]  # Single observation with combined content for v2.4
         }
         entities_for_mcp.append(mcp_entity)
     
@@ -416,65 +465,52 @@ def direct_restore_manual_entries(backup_file: str, collection_name: str = None,
             
             print(f"\n📦 Processing batch {batch_num}/{total_batches} ({len(batch)} entries)...")
             
-            # Create Entity objects from manual entries
-            entities = []
+            # Create v2.4 format points directly (bypassing Entity objects)
+            vector_points = []
             for entry in batch:
                 payload = entry.get("payload", {})
+                entry_id = entry.get('id', 'unknown')
                 
-                # Create Entity object
-                from claude_indexer.analysis.entities import Entity, EntityType
+                # Convert legacy format to v2.4 format
+                entity_name = payload.get("name", f"restored_entry_{entry_id}")
+                entity_type = payload.get("entityType", "documentation")
+                observations = payload.get("observations", [])
                 
-                # Map string entity type to enum
-                entity_type_str = payload.get("entityType", "unknown").upper()
-                try:
-                    # Try to find matching EntityType enum
-                    entity_type = EntityType.DOCUMENTATION  # Default for manual entries
-                    for et in EntityType:
-                        if et.value == payload.get("entityType", ""):
-                            entity_type = et
-                            break
-                except:
-                    entity_type = EntityType.DOCUMENTATION
+                # Create content for v2.4 format
+                content_parts = [f"{entity_type}: {entity_name}"]
+                content_parts.extend(observations)
+                content = " | ".join(content_parts)
                 
-                entity = Entity(
-                    name=payload.get("name", f"restored_entry_{entry.get('id', 'unknown')}"),
-                    entity_type=entity_type,
-                    observations=payload.get("observations", [])
-                )
-                entities.append(entity)
-            
-            # Generate embeddings for entities
-            entity_texts = []
-            for entity in entities:
-                # Combine name and observations for embedding
-                text_parts = [f"{entity.entity_type.value}: {entity.name}"]
-                text_parts.extend(entity.observations)
-                entity_text = " | ".join(text_parts)
-                entity_texts.append(entity_text)
-            
-            print(f"🔮 Generating embeddings...")
-            embedding_results = embedder.embed_batch(entity_texts)
-            
-            # Check if any embeddings failed
-            failed_count = sum(1 for result in embedding_results if result.error)
-            if failed_count > 0:
-                print(f"⚠️ {failed_count} embeddings failed")
-            
-            # Create vector points for successful embeddings
-            vector_points = []
-            for entity, embedding_result in zip(entities, embedding_results):
+                # Generate embedding for this entry
+                print(f"🔮 Generating embedding for: {entity_name[:50]}...")
+                embedding_result = embedder.embed(content)
+                
                 if embedding_result.error:
                     failed_entries.append({
-                        "name": entity.name,
+                        "name": entity_name,
                         "error": f"Embedding failed: {embedding_result.error}"
                     })
-                else:
-                    point = store.create_entity_point(
-                        entity=entity,
-                        embedding=embedding_result.embedding,
-                        collection_name=target_collection
-                    )
-                    vector_points.append(point)
+                    continue
+                
+                # Create v2.4 format point directly
+                v24_payload = {
+                    "type": "chunk",
+                    "chunk_type": "metadata", 
+                    "entity_name": entity_name,
+                    "entity_type": entity_type,
+                    "content": content,
+                    "collection": target_collection,
+                    "has_implementation": False
+                }
+                
+                # Create Qdrant point
+                from qdrant_client.models import PointStruct
+                point = PointStruct(
+                    id=entry_id,
+                    vector=embedding_result.embedding,
+                    payload=v24_payload
+                )
+                vector_points.append(point)
             
             # Store in Qdrant
             if vector_points:
@@ -486,9 +522,9 @@ def direct_restore_manual_entries(backup_file: str, collection_name: str = None,
                     print(f"✅ Batch {batch_num} restored: {len(vector_points)} entities")
                 else:
                     print(f"❌ Batch {batch_num} failed: {result.errors}")
-                    for entity in entities:
+                    for point in vector_points:
                         failed_entries.append({
-                            "name": entity.name,
+                            "name": point.payload.get("entity_name", "unknown"),
                             "error": "Qdrant upsert failed"
                         })
             

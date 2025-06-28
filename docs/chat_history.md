@@ -1397,7 +1397,7 @@ class StateManager:
   "timestamp": "..."
 }
 ```
-i
+
 ### Summarization Prompt Template
 
 ```

@@ -68,7 +68,7 @@ class QdrantStatsCollector:
         return stats
     
     def _analyze_file_types(self, collection_name: str) -> Dict[str, int]:
-        """Analyze file types in collection based on entity data."""
+        """Analyze file types in collection based on v2.4 chunk data."""
         try:
             # Use scroll to get ALL points with payloads
             all_points = self.storage.client.scroll(
@@ -78,15 +78,21 @@ class QdrantStatsCollector:
             )[0]
             
             entity_types = Counter()
+            chunk_types = Counter()
             file_extensions = Counter()
             auto_vs_manual = Counter()
             manual_entity_types = Counter()
             
             for point in all_points:
                 if hasattr(point, 'payload') and point.payload:
-                    # Check entityType field (correct field name)
-                    entity_type = point.payload.get('entityType', 'unknown')
+                    # Handle both v2.3 (entityType) and v2.4 (entity_type) formats
+                    entity_type = point.payload.get('entity_type') or point.payload.get('entityType', 'unknown')
                     entity_types[entity_type] += 1
+                    
+                    # Track v2.4 chunk types
+                    chunk_type = point.payload.get('chunk_type', 'unknown')
+                    if chunk_type != 'unknown':
+                        chunk_types[chunk_type] += 1
                     
                     # Detect if auto-generated vs manual using exact clear_collection logic
                     has_file_path = 'file_path' in point.payload and point.payload['file_path']
@@ -103,7 +109,10 @@ class QdrantStatsCollector:
                     
                     # Count file extensions for file entities
                     if entity_type == 'file':
-                        file_path = point.payload.get('name', '') or point.payload.get('file_path', '')
+                        # Check multiple possible file path fields
+                        file_path = (point.payload.get('entity_name', '') or 
+                                   point.payload.get('name', '') or 
+                                   point.payload.get('file_path', ''))
                         if file_path:
                             ext = Path(file_path).suffix.lower()
                             if ext:
@@ -114,6 +123,7 @@ class QdrantStatsCollector:
             return {
                 "total_files": entity_types.get('file', 0),
                 "entity_breakdown": dict(entity_types),
+                "chunk_type_breakdown": dict(chunk_types),
                 "manual_entity_breakdown": dict(manual_entity_types),
                 "file_extensions": dict(file_extensions),
                 "auto_vs_manual": dict(auto_vs_manual),
@@ -122,7 +132,7 @@ class QdrantStatsCollector:
             
         except Exception as e:
             print(f"Error analyzing entity types for {collection_name}: {e}")
-            return {"total_files": 0, "entity_breakdown": {}, "manual_entity_breakdown": {}, "file_extensions": {}, "auto_vs_manual": {}, "total_analyzed": 0}
+            return {"total_files": 0, "entity_breakdown": {}, "chunk_type_breakdown": {}, "manual_entity_breakdown": {}, "file_extensions": {}, "auto_vs_manual": {}, "total_analyzed": 0}
     
     def _count_manual_entries(self, collection_name: str) -> int:
         """Count manually added entries using comprehensive detection logic."""
@@ -166,7 +176,7 @@ class QdrantStatsCollector:
             return 0
     
     def _is_truly_manual_entry(self, payload: Dict[str, Any]) -> bool:
-        """Same logic as backup script for consistent results."""
+        """Enhanced logic for v2.4 chunk format while maintaining v2.3 compatibility."""
         # Pattern 1: Auto entities have file_path field
         if 'file_path' in payload:
             return False
@@ -178,15 +188,26 @@ class QdrantStatsCollector:
         # Pattern 3: Auto entities have extended metadata fields
         automation_fields = {
             'line_number', 'ast_data', 'signature', 'docstring', 'full_name', 
-            'ast_type', 'start_line', 'end_line', 'source_hash', 'parsed_at'
+            'ast_type', 'start_line', 'end_line', 'source_hash', 'parsed_at',
+            'has_implementation'  # v2.4 progressive disclosure field
             # Removed 'collection' - manual docs can have collection field
         }
         if any(field in payload for field in automation_fields):
             return False
         
-        # True manual entries have minimal fields: name, entityType, observations
-        required_manual_fields = {'name', 'entityType'}
-        if not all(field in payload for field in required_manual_fields):
+        # v2.4 specific: Auto-generated chunks have type='chunk' with chunk_type
+        if payload.get('type') == 'chunk' and 'chunk_type' in payload:
+            chunk_type = payload.get('chunk_type')
+            # Auto-generated chunks typically have metadata/implementation/relation chunk_types
+            if chunk_type in ['metadata', 'implementation', 'relation']:
+                return False
+        
+        # True manual entries have minimal fields: entity_name/name, entity_type/entityType, observations
+        # Handle both v2.3 (name, entityType) and v2.4 (entity_name, entity_type) formats
+        has_name = 'entity_name' in payload or 'name' in payload
+        has_type = 'entity_type' in payload or 'entityType' in payload
+        
+        if not (has_name and has_type):
             return False
         
         # Additional check: Manual entries typically have meaningful observations
@@ -736,6 +757,30 @@ class QdrantStatsCollector:
                             print(f"    Markdown (.md):  {md_count:>6}")
                     print()
                 
+                # v2.4 Chunk Types section
+                chunk_type_breakdown = file_analysis.get('chunk_type_breakdown', {})
+                manual_count = stats.get('manual_entries_count', 0)
+                
+                if chunk_type_breakdown or manual_count > 0:
+                    print("  🧩 CHUNK TYPES (v2.4)")
+                    print("  " + "-" * 25)
+                    
+                    # Show manual entries first
+                    if manual_count > 0:
+                        print(f"    ✍️  Manual:           {manual_count:>6,}")
+                    
+                    # Show auto-generated chunk types
+                    for chunk_type, count in sorted(chunk_type_breakdown.items(), key=lambda x: x[1], reverse=True):
+                        if chunk_type == 'metadata':
+                            print(f"    📋 Metadata:         {count:>6,}")
+                        elif chunk_type == 'implementation':
+                            print(f"    💻 Implementation:   {count:>6,}")
+                        elif chunk_type == 'relation':
+                            print(f"    🔗 Relation:         {count:>6,}")
+                        else:
+                            print(f"    📄 {chunk_type:<15} {count:>6,}")
+                    print()
+
                 # Manual entity types section (top 10 manual entries only)
                 manual_entity_breakdown = file_analysis.get('manual_entity_breakdown', {})
                 

@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional, Set
 from .debounce import FileChangeCoalescer
-from ..logging import get_logger
+from ..indexer_logging import get_logger
 
 try:
     from watchdog.events import FileSystemEventHandler

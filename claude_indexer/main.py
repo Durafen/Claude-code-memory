@@ -8,7 +8,7 @@ from .config import load_config
 from .indexer import CoreIndexer
 from .embeddings.registry import create_embedder_from_config
 from .storage.registry import create_store_from_config
-from .logging import setup_logging
+from .indexer_logging import setup_logging
 
 
 def run_indexing_with_shared_deletion(project_path: str, collection_name: str,
@@ -110,6 +110,11 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
         api_key = getattr(config, f'{provider}_api_key', None)
         model = config.voyage_model if provider == "voyage" else "text-embedding-3-small"
         
+        if verbose:
+            logger.debug(f"🔧 Config debug: provider='{provider}', model='{model}'")
+            logger.debug(f"🔑 API key present: {api_key is not None}")
+            logger.debug(f"⚙️  Voyage model: {getattr(config, 'voyage_model', 'NOT_SET')}")
+        
         embedder = create_embedder_from_config({
             "provider": provider,
             "api_key": api_key,
@@ -125,7 +130,8 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
         })
         
         if not quiet and verbose:
-            logger.debug("⚡ Using Qdrant + OpenAI (direct mode)")
+            provider_name = provider.title() if provider else "OpenAI"
+            logger.debug(f"⚡ Using Qdrant + {provider_name} (direct mode)")
         
         # Create indexer
         indexer = CoreIndexer(config, embedder, vector_store, project)
@@ -148,7 +154,7 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
             logger.info(f"📦 Collection: {collection_name}")
         
         # Process files directly using batch processing
-        entities, relations, errors = indexer._process_file_batch(paths_to_process, verbose)
+        entities, relations, implementation_chunks, errors = indexer._process_file_batch(paths_to_process, verbose)
         
         # Handle any processing errors
         if errors:
@@ -159,8 +165,8 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
         
         # Store vectors if we have entities or relations
         storage_success = True
-        if entities or relations:
-            storage_success = indexer._store_vectors(collection_name, entities, relations)
+        if entities or relations or implementation_chunks:
+            storage_success = indexer._store_vectors(collection_name, entities, relations, implementation_chunks)
             if not storage_success:
                 if not quiet:
                     logger.error("❌ Failed to store vectors in Qdrant")
@@ -198,6 +204,14 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
                 logger.info(f"   Files failed: {files_failed}")
                 logger.info(f"   Entities created: {len(entities)}")
                 logger.info(f"   Relations created: {len(relations)}")
+                
+                # Show cost information if available
+                if hasattr(indexer, '_session_cost_data'):
+                    cost_data = indexer._session_cost_data
+                    if cost_data.get('tokens', 0) > 0:
+                        logger.info(f"   Tokens used: {cost_data['tokens']:,}")
+                        logger.info(f"   Estimated cost: ${cost_data['cost']:.4f}")
+                        logger.info(f"   API requests: {cost_data['requests']}")
             else:
                 logger.info(f"✅ Processed {files_processed} files")
                 if files_failed > 0:

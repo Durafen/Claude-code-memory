@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from .watcher.handler import IndexingEventHandler
-from .logging import get_logger
+from .indexer_logging import get_logger
 
 logger = get_logger()
 

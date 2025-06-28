@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
-from .logging import get_logger
+from .indexer_logging import get_logger
 
 logger = get_logger()
 

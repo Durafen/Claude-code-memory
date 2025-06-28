@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from .logging import get_logger
+from .indexer_logging import get_logger
 
 logger = get_logger()
 

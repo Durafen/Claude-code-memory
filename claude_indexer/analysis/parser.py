@@ -147,6 +147,10 @@ class PythonParser(CodeParser):
             implementation_chunks = self._extract_implementation_chunks(file_path, tree)
             result.implementation_chunks.extend(implementation_chunks)
             
+            # Create CALLS relations from extracted function calls
+            calls_relations = self._create_calls_relations_from_chunks(implementation_chunks, file_path)
+            result.relations.extend(calls_relations)
+            
             # Create file entity
             file_entity = EntityFactory.create_file_entity(file_path, 
                                                          entity_count=len(result.entities),
@@ -475,6 +479,25 @@ class PythonParser(CodeParser):
         for keyword in complexity_keywords:
             complexity += source.count(f' {keyword} ') + source.count(f'\n{keyword} ')
         return complexity
+    
+    def _create_calls_relations_from_chunks(self, chunks: List['EntityChunk'], file_path: Path) -> List['Relation']:
+        """Create CALLS relations from extracted function calls in implementation chunks."""
+        relations = []
+        
+        for chunk in chunks:
+            if chunk.chunk_type == "implementation":
+                semantic_metadata = chunk.metadata.get("semantic_metadata", {})
+                calls = semantic_metadata.get("calls", [])
+                
+                for called_function in calls:
+                    relation = RelationFactory.create_calls_relation(
+                        caller=chunk.entity_name,
+                        callee=called_function,
+                        context=f"Function call in {file_path.name}"
+                    )
+                    relations.append(relation)
+        
+        return relations
 
 
 class MarkdownParser(CodeParser):

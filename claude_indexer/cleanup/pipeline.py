@@ -213,7 +213,7 @@ class MemoryCleanupPipeline:
             all_entries = []
             
             # Use scroll to get all entries efficiently
-            scroll_result = self.store.scroll_collection(collection_name)
+            scroll_result = self.store._scroll_collection(collection_name)
             if scroll_result:
                 all_entries.extend(scroll_result)
             
@@ -230,9 +230,9 @@ class MemoryCleanupPipeline:
                 
                 entry_type = classify_entry_type(payload)
                 
-                if entry_type == 'manual':
+                if entry_type == 'clean':
                     manual_entries.append(entry)
-                elif entry_type == 'auto-indexed':
+                elif entry_type == 'preserve':
                     auto_indexed_count += 1
                 else:
                     # Invalid entries - log but don't process

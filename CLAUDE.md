@@ -77,6 +77,8 @@ claude-indexer add-mcp -c collection-name
 
 **🧪 Testing:** Use `parser-test-memory` MCP for isolated testing without contaminating production collections.
 
+**🔑 API Configuration:** OpenAI and Voyage AI keys configured in `settings.txt` for cleanup scoring and embeddings. Contains active API keys for GPT-4.1-mini scoring and Voyage AI embedding generation.
+
 ## Key Architecture Components
 
 ### Core Indexing Engine
@@ -158,6 +160,29 @@ search_similar("pattern")  # Returns all entity and chunk types
 - **Backward Compatible**: Existing calls work unchanged
 - **Performance**: Filter at database level for optimal speed
 
+
+## Virtual Environment Usage
+
+**Always activate venv before testing:**
+```bash
+source .venv/bin/activate  # Required before pytest
+pytest                     # Now runs with correct dependencies
+```
+
+## Direct Qdrant Access
+
+**Bypass MCP for database operations:**
+```bash
+python utils/qdrant_stats.py              # Collection health
+python utils/find_missing_files.py        # File sync debug
+python utils/manual_memory_backup.py      # Backup/restore
+```
+
+**Test Qdrant connection:**
+```bash
+# Test using config loader (loads settings.txt properly)
+python3 -c "from claude_indexer.config.config_loader import ConfigLoader; from qdrant_client import QdrantClient; config=ConfigLoader().load(); client=QdrantClient(url=config.qdrant_url, api_key=config.qdrant_api_key); print('Collections:', [c.name for c in client.get_collections().collections])"
+```
 
 ## Debug Testing Protocol
 
@@ -310,6 +335,27 @@ get_implementation("similar_function", scope="logical")  # Understand code style
 2. **Follow patterns**: Maintain consistency with existing architecture
 3. **Progressive disclosure**: Start with metadata, dive deeper as needed
 4. **Document patterns**: Store successful implementations for future use
+
+## Debug Commands
+
+**CLI Debugging:**
+```bash
+claude-indexer -p /path -c collection --verbose    # Detailed error messages
+claude-indexer service status --verbose            # Service debugging  
+claude-indexer search "query" -p /path -c test     # Test search functionality
+```
+
+**Log Analysis:**
+```bash
+tail -f logs/collection-name.log                   # Real-time monitoring
+tail -f ~/.claude-indexer/logs/service.log        # Service logs
+```
+
+**Collection Health:**
+```bash
+python utils/qdrant_stats.py                      # Collection statistics
+python utils/find_missing_files.py                # File sync debugging
+```
 
 ## Basic Troubleshooting
 

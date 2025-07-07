@@ -42,13 +42,13 @@ class QualityScorer:
     Works with dynamic field-based detection for any entity type.
     """
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4.1-mini"):
         """
         Initialize the quality scorer.
         
         Args:
             api_key: OpenAI API key (if None, uses environment)
-            model: Model to use for scoring (default: gpt-4o-mini for cost efficiency)
+            model: Model to use for scoring (default: gpt-4.1-mini, 83% cheaper than GPT-4o)
         """
         self.model = model
         self.client = AsyncOpenAI(api_key=api_key)

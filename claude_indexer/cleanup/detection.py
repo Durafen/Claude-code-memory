@@ -65,9 +65,9 @@ def is_manual_entry(payload: Dict[str, Any]) -> bool:
     if any(field in payload for field in automation_fields):
         return False
     
-    # True manual entries have minimal fields: entity_name, entity_type, observations
-    has_name = 'entity_name' in payload
-    has_type = 'entity_type' in payload
+    # True manual entries have minimal fields: entity_name/name, entity_type/entityType, observations
+    has_name = 'entity_name' in payload or 'name' in payload
+    has_type = 'entity_type' in payload or 'entityType' in payload
     
     if not (has_name and has_type):
         return False
@@ -80,12 +80,6 @@ def is_manual_entry(payload: Dict[str, Any]) -> bool:
                   (isinstance(content, str) and len(content.strip()) > 0)
     
     if not has_content:
-        return False
-    
-    # Special case: Exclude documentation entities from cleanup  
-    # Documentation is typically auto-indexed content from files
-    entity_type = payload.get('entity_type') or payload.get('entityType')
-    if entity_type == 'documentation':
         return False
     
     return True
@@ -133,14 +127,15 @@ def validate_manual_entry_structure(payload: Dict[str, Any]) -> bool:
     Returns:
         True if the entry has valid manual structure, False otherwise
     """
-    required_fields = {'entityType', 'name'}
-    content_fields = {'content', 'observations'}
+    # Check for required fields (handle both naming conventions)
+    has_entity_type = 'entityType' in payload or 'entity_type' in payload
+    has_name = 'name' in payload or 'entity_name' in payload
     
-    # Must have required fields
-    if not required_fields.issubset(payload.keys()):
+    if not (has_entity_type and has_name):
         return False
         
     # Must have at least one content field
+    content_fields = {'content', 'observations'}
     if not any(field in payload for field in content_fields):
         return False
         
@@ -149,21 +144,31 @@ def validate_manual_entry_structure(payload: Dict[str, Any]) -> bool:
 
 def classify_entry_type(payload: Dict[str, Any]) -> str:
     """
-    Classify an entry as 'manual', 'auto-indexed', or 'invalid'.
+    Classify an entry for cleanup action.
+    
+    IMPORTANT: The return values indicate CLEANUP ACTIONS, not content type:
+    - 'preserve' = Keep this entry (documentation, auto-indexed code)
+    - 'clean' = Remove this entry (manual patterns, insights)
+    - 'invalid' = Malformed entry
     
     Args:
         payload: The entry payload to classify
         
     Returns:
-        String classification: 'manual', 'auto-indexed', or 'invalid'
+        String classification: 'preserve', 'clean', or 'invalid'
     """
     if not isinstance(payload, dict):
         return 'invalid'
+    
+    # Preserve documentation entities (don't clean them)
+    entity_type = payload.get('entityType') or payload.get('entity_type', '')
+    if entity_type == 'documentation':
+        return 'preserve'
         
     if is_manual_entry(payload):
         if validate_manual_entry_structure(payload):
-            return 'manual'
+            return 'clean'  # Clean manual entries (except documentation)
         else:
             return 'invalid'
     else:
-        return 'auto-indexed'
+        return 'preserve'  # Preserve auto-indexed code

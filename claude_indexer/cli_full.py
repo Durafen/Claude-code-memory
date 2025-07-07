@@ -1289,6 +1289,294 @@ Code Patterns: {', '.join(summary.code_patterns)}
                 traceback.print_exc()
             sys.exit(1)
 
+    @cli.group()
+    def cleanup():
+        """Memory cleanup commands for manual entries."""
+        pass
+
+
+    @cleanup.command()
+    @project_options
+    @common_options
+    @click.option('--dry-run/--execute', default=True, 
+                  help='Dry run mode (default) vs actual execution')
+    @click.option('--mode', type=click.Choice(['analysis', 'full']), default='analysis',
+                  help='Analysis only or full cleanup')
+    @click.option('--similarity-threshold', type=float, default=0.85,
+                  help='Similarity threshold for clustering (0.0-1.0)')
+    @click.option('--quality-threshold', type=float, default=0.3,
+                  help='Quality threshold for deletion (0.0-1.0)')
+    @click.option('--max-deletion-percentage', type=float, default=15.0,
+                  help='Maximum percentage of entries to delete')
+    def run(project, collection, verbose, quiet, config, dry_run, mode, 
+            similarity_threshold, quality_threshold, max_deletion_percentage):
+        """Run memory cleanup pipeline."""
+        
+        try:
+            from .cleanup import MemoryCleanupPipeline, CleanupConfig
+            import asyncio
+            
+            # Setup logging
+            project_path = Path(project).resolve()
+            logger = setup_logging(verbose, quiet, project_path, collection)
+            
+            # Load configuration
+            indexer_config = load_config(config, project_path)
+            
+            # Create store
+            store = create_store_from_config(indexer_config)
+            
+            # Create cleanup configuration
+            cleanup_config = CleanupConfig(
+                similarity_threshold=similarity_threshold,
+                quality_thresholds={'delete': quality_threshold},
+                safety_limits={'max_deletion_percentage': max_deletion_percentage},
+                openai_api_key=indexer_config.openai_api_key
+            )
+            
+            # Create and run pipeline
+            pipeline = MemoryCleanupPipeline(store, cleanup_config)
+            
+            if not quiet:
+                click.echo(f"🧹 Running cleanup for collection: {collection}")
+                click.echo(f"Mode: {mode}, Dry run: {dry_run}")
+            
+            # Run cleanup
+            async def run_cleanup():
+                return await pipeline.run_cleanup(collection, dry_run, mode)
+            
+            report = asyncio.run(run_cleanup())
+            
+            # Display results
+            if not quiet:
+                click.echo(f"\n📊 Cleanup Report:")
+                click.echo(f"Duration: {report.duration_seconds:.1f}s")
+                click.echo(f"Total entries analyzed: {report.total_entries_analyzed}")
+                click.echo(f"Manual entries found: {report.manual_entries_found}")
+                click.echo(f"Auto-indexed entries skipped: {report.auto_indexed_entries_skipped}")
+                click.echo(f"Clusters created: {report.clusters_created}")
+                click.echo(f"Conflicts detected: {report.conflicts_detected}")
+                
+                if report.execution_result:
+                    click.echo(f"Actions executed: {report.execution_result.actions_executed}")
+                    click.echo(f"Entries deleted: {report.execution_result.entries_deleted}")
+                    click.echo(f"Entries merged: {report.execution_result.entries_merged}")
+                    click.echo(f"Entries archived: {report.execution_result.entries_archived}")
+                
+                if report.backup_id:
+                    click.echo(f"Backup created: {report.backup_id}")
+                
+                if report.errors:
+                    click.echo(f"\n❌ Errors:")
+                    for error in report.errors:
+                        click.echo(f"  {error}")
+                
+                if report.warnings:
+                    click.echo(f"\n⚠️ Warnings:")
+                    for warning in report.warnings:
+                        click.echo(f"  {warning}")
+        
+        except Exception as e:
+            click.echo(f"❌ Cleanup failed: {e}", err=True)
+            if verbose:
+                import traceback
+                traceback.print_exc()
+            sys.exit(1)
+
+
+    @cleanup.command()
+    @project_options
+    @common_options
+    def stats(project, collection, verbose, quiet, config):
+        """Show cleanup statistics for a collection."""
+        
+        try:
+            from .cleanup import MemoryCleanupPipeline
+            
+            # Setup logging
+            project_path = Path(project).resolve()
+            logger = setup_logging(verbose, quiet, project_path, collection)
+            
+            # Load configuration
+            indexer_config = load_config(config, project_path)
+            
+            # Create store
+            store = create_store_from_config(indexer_config)
+            
+            # Create pipeline
+            pipeline = MemoryCleanupPipeline(store)
+            
+            # Get statistics
+            stats = pipeline.get_cleanup_statistics(collection)
+            
+            if not quiet:
+                click.echo(f"📊 Cleanup Statistics for: {collection}")
+                click.echo(f"Total entries: {stats.get('total_entries', 0)}")
+                click.echo(f"Manual entries: {stats.get('manual_entries', 0)}")
+                click.echo(f"Auto-indexed entries: {stats.get('auto_indexed_entries', 0)}")
+                click.echo(f"Potential duplicates: {stats.get('potential_duplicates', 0)}")
+                click.echo(f"Cleanup candidates: {stats.get('cleanup_candidates', 0)}")
+                click.echo(f"Estimated savings: {stats.get('estimated_savings_percentage', 0):.1f}%")
+        
+        except Exception as e:
+            click.echo(f"❌ Stats failed: {e}", err=True)
+            if verbose:
+                import traceback
+                traceback.print_exc()
+            sys.exit(1)
+
+
+    @cleanup.command()
+    @project_options
+    @common_options
+    def analyze(project, collection, verbose, quiet, config):
+        """Quick analysis of cleanup potential."""
+        
+        try:
+            from .cleanup import MemoryCleanupPipeline
+            import asyncio
+            
+            # Setup logging
+            project_path = Path(project).resolve()
+            logger = setup_logging(verbose, quiet, project_path, collection)
+            
+            # Load configuration
+            indexer_config = load_config(config, project_path)
+            
+            # Create store
+            store = create_store_from_config(indexer_config)
+            
+            # Create pipeline
+            pipeline = MemoryCleanupPipeline(store)
+            
+            if not quiet:
+                click.echo(f"🔍 Analyzing collection: {collection}")
+            
+            # Run quick analysis
+            async def quick_analysis():
+                return await pipeline.quick_analysis(collection)
+            
+            analysis = asyncio.run(quick_analysis())
+            
+            if 'error' in analysis:
+                click.echo(f"❌ Analysis failed: {analysis['error']}", err=True)
+                sys.exit(1)
+            
+            if not quiet:
+                click.echo(f"\n📋 Analysis Results:")
+                click.echo(f"Duration: {analysis.get('analysis_duration', 0):.1f}s")
+                click.echo(f"Total entries: {analysis.get('total_entries', 0)}")
+                click.echo(f"Manual entries: {analysis.get('manual_entries', 0)}")
+                click.echo(f"Auto-indexed entries: {analysis.get('auto_indexed_entries', 0)}")
+                click.echo(f"Clusters found: {analysis.get('clusters_found', 0)}")
+                click.echo(f"Conflicts detected: {analysis.get('conflicts_detected', 0)}")
+                click.echo(f"Cleanup potential: {analysis.get('cleanup_potential', 'unknown')}")
+                
+                if analysis.get('errors'):
+                    click.echo(f"\n❌ Errors:")
+                    for error in analysis['errors']:
+                        click.echo(f"  {error}")
+        
+        except Exception as e:
+            click.echo(f"❌ Analysis failed: {e}", err=True)
+            if verbose:
+                import traceback
+                traceback.print_exc()
+            sys.exit(1)
+
+
+    @cleanup.command()
+    @project_options
+    @common_options
+    @click.option('--backup-id', required=True, help='Backup ID to restore')
+    def restore(project, collection, verbose, quiet, config, backup_id):
+        """Restore from backup."""
+        
+        try:
+            from .cleanup import SafetyManager
+            
+            # Setup logging
+            project_path = Path(project).resolve()
+            logger = setup_logging(verbose, quiet, project_path, collection)
+            
+            # Load configuration
+            indexer_config = load_config(config, project_path)
+            
+            # Create store
+            store = create_store_from_config(indexer_config)
+            
+            # Create safety manager
+            safety_manager = SafetyManager(store)
+            
+            if not quiet:
+                click.echo(f"🔄 Restoring backup: {backup_id}")
+            
+            # Restore backup
+            success = safety_manager.restore_backup(backup_id, collection)
+            
+            if success:
+                if not quiet:
+                    click.echo(f"✅ Successfully restored backup to collection: {collection}")
+            else:
+                click.echo(f"❌ Failed to restore backup: {backup_id}", err=True)
+                sys.exit(1)
+        
+        except Exception as e:
+            click.echo(f"❌ Restore failed: {e}", err=True)
+            if verbose:
+                import traceback
+                traceback.print_exc()
+            sys.exit(1)
+
+
+    @cleanup.command()
+    @project_options  
+    @common_options
+    def backups(project, collection, verbose, quiet, config):
+        """List available backups."""
+        
+        try:
+            from .cleanup import SafetyManager
+            
+            # Setup logging
+            project_path = Path(project).resolve()
+            logger = setup_logging(verbose, quiet, project_path, collection)
+            
+            # Load configuration
+            indexer_config = load_config(config, project_path)
+            
+            # Create store
+            store = create_store_from_config(indexer_config)
+            
+            # Create safety manager
+            safety_manager = SafetyManager(store)
+            
+            # List backups
+            backups = safety_manager.list_backups(collection)
+            
+            if not backups:
+                if not quiet:
+                    click.echo(f"📦 No backups found for collection: {collection}")
+                return
+            
+            if not quiet:
+                click.echo(f"📦 Backups for collection: {collection}")
+                click.echo()
+                
+                for backup in backups:
+                    click.echo(f"ID: {backup.backup_id}")
+                    click.echo(f"  Timestamp: {backup.timestamp}")
+                    click.echo(f"  Entries: {backup.entry_count}")
+                    click.echo(f"  File: {backup.file_path}")
+                    click.echo()
+        
+        except Exception as e:
+            click.echo(f"❌ Backup listing failed: {e}", err=True)
+            if verbose:
+                import traceback
+                traceback.print_exc()
+            sys.exit(1)
+
     # End of Click-available conditional block
 
 if __name__ == '__main__':

@@ -1,17 +1,17 @@
 # Claude Sonnet Memory Cleanup Prompt
 
-## INTELLIGENT_SYNTHESIS Memory Processing
+## Memory Maintenance and Validation System
 
-You are a knowledge architect specializing in INTELLIGENT_SYNTHESIS - combining complementary partial solutions into comprehensive guides while eliminating redundancy.
+You are a memory database curator specializing in validation, cleanup, and consolidation of manual knowledge entries.
 
-Task: Process MANUAL memory entries only (not auto-indexed code) from memories.md using systematic workflow with semantic content analysis.
+Task: Maintain MANUAL memory entries only (not auto-indexed code) from memories.md - validate accuracy, merge duplicates, remove outdated information, and resolve conflicts.
 
 ## Success Metrics:
 - 15-25% storage reduction through intelligent consolidation
 - 80% conflict reduction via duplicate elimination
 - 15% search improvement through better organization
 - 90% manual review time reduction via automation
-- Creation of authoritative guides that eliminate need for multiple searches
+- Creation of comprehensive manual entries that eliminate need for multiple searches
 
 ## Workflow:
 1. Read memories.md file which contains all manual entries grouped by category
@@ -21,13 +21,22 @@ Task: Process MANUAL memory entries only (not auto-indexed code) from memories.m
 5. Process each entry one by one, marking as in_progress when starting
 6. **For each entry, search memory for similar/duplicate/complementary entries using MCP search_similar**
 7. **Validate against current codebase: use search_similar with entityTypes=["function", "class", "metadata"] to verify information is still accurate and relevant**
-8. Apply INTELLIGENT_SYNTHESIS to create comprehensive guides from partial solutions
+8. Apply memory consolidation: merge duplicates, update outdated info, resolve conflicts, and create comprehensive manual entries from partial memories
 9. Mark todo as completed and update memories.md:
    - [X] for processed entries
    - [D] for deleted entries 
    - Add new comprehensive memories with [N] at the end of the file
 
 **Important**: Use memories.md only for task tracking and progress. All entry processing (finding related entries, synthesis, deletion) uses MCP memory search tools, not file content.
+
+## Outdated Information Cleanup:
+- Delete resolved bugs and fixed issues
+- Remove deprecated API references  
+- Update version-specific information
+- Eliminate obsolete configurations
+- **Verify current accuracy against latest codebase using MCP memory tools**
+- **Use read_graph and get_implementation to cross-check with current code state**
+- **Search entityTypes=["function", "class", "metadata"] to validate technical details**
 
 ## MCP Memory Tools Required:
 - **Use mcp__claude-memory-memory__ prefix** for all memory operations on this project
@@ -41,7 +50,7 @@ Task: Process MANUAL memory entries only (not auto-indexed code) from memories.m
 - **SEARCH STRATEGY**: Use entityTypes=["debugging_pattern", "implementation_pattern", "knowledge_insight"] for manual entries
 - **EXCLUSIONS**: Skip processing entries categorized as "active_issue" or "ideas" - these are meant to remain as individual items
 - **DUPLICATE DETECTION**: Same topic, different wording (e.g., "auth debugging", "authentication errors") → keep highest quality, delete rest
-- **COMPLEMENTARY SYNTHESIS**: Different aspects, same domain → create authoritative guide
+- **MEMORY CONSOLIDATION**: Different aspects, same domain → create comprehensive manual entry
   * Example 1: "JWT validation errors" + "OAuth flow issues" + "Session timeout problems" → "Complete Authentication Troubleshooting Guide"
   * Example 2: "Index optimization tips" + "Query profiling steps" + "Connection pool tuning" → "Database Performance Optimization Guide"
   * Example 3: "GitHub Actions setup" + "Docker optimization" + "Deployment strategies" → "Complete CI/CD Implementation Guide"

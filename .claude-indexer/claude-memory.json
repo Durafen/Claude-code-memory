@@ -1,0 +1,826 @@
+{
+  "mcp-qdrant-memory/test-no-json-final.js": {
+    "hash": "d3129c3dcb8454a862eca8090045622c3a1db30d8d4c8c1a9a1e97d665163eaa",
+    "size": 2710,
+    "mtime": 1750915747.4790318
+  },
+  "tests/unit/test_scroll_pagination.py": {
+    "hash": "45e74a7e1255ac06299d21dcdee1e98a99375e96fa4f14520cce06f52f361f78",
+    "size": 14349,
+    "mtime": 1751930311.8596108
+  },
+  "tests/__init__.py": {
+    "hash": "08218f638b02e636e5c32112a68ca95cd0e9e50f6a0e89c0bd1d8c1903c46ff9",
+    "size": 34,
+    "mtime": 1750870065.0672479
+  },
+  "claude_indexer/chat/parser.py": {
+    "hash": "6f9a7bd597d3d1984b143aad33daf304bccb6afeccc30506e25369daec646651",
+    "size": 11079,
+    "mtime": 1750994371.4249752
+  },
+  "claude_indexer/analysis/entities.py": {
+    "hash": "8ee93af1ceb42937b380e25d0b4341ad817df5d80c1698be4a1f8448c058da8e",
+    "size": 14821,
+    "mtime": 1751571548.946739
+  },
+  "claude_indexer/analysis/text_parser.py": {
+    "hash": "b710c79bcc5b060c7005b79ba871c6027fb5ad92a18ab0615db0a32a9fda94d9",
+    "size": 14147,
+    "mtime": 1751577033.8534114
+  },
+  "tests/e2e/test_end_to_end.py": {
+    "hash": "a7b8cbcc6495f3d658e87f2f3c03787f11dde7dca6c99921ba9f9996c1b6cacd",
+    "size": 30845,
+    "mtime": 1751913594.2307215
+  },
+  "claude_indexer/storage/registry.py": {
+    "hash": "d3d433064a254b126770b4856ea5a29564377449d67765729f9153513796a491",
+    "size": 2758,
+    "mtime": 1751571548.9600813
+  },
+  "claude_indexer/git_hooks.py": {
+    "hash": "9bba2c1ed3ab9c29da9f58e616156dca5743a6bdaeb7ae00573cb96ecd1b2097",
+    "size": 10946,
+    "mtime": 1751067020.2194917
+  },
+  "claude_indexer/embeddings/openai.py": {
+    "hash": "e6b657c12334e20f85046ac6e728ca616bc7a11f80067bec8e42aaf01d462fdf",
+    "size": 10178,
+    "mtime": 1751081177.931597
+  },
+  "claude_indexer/analysis/parser.py": {
+    "hash": "18667957049d900069f76fdc831bd9fd9d4bfd74dfeae7eff80bac0faef198b5",
+    "size": 55986,
+    "mtime": 1751577577.4036891
+  },
+  "claude_indexer/cli.py": {
+    "hash": "0c06f88791df8900fd515ec0ea614089348bc4f18ac47c1a88c8f1118d3ebce9",
+    "size": 1131,
+    "mtime": 1751571548.9518876
+  },
+  "docs/more_files2.md": {
+    "hash": "7ede435d38dce233d9c490349985ebe859a4f2bed647a246d88c9b7ef2f43c84",
+    "size": 38042,
+    "mtime": 1751571548.965416
+  },
+  "claude_indexer/watcher/__init__.py": {
+    "hash": "14e13a5da44e86e591ed3d07b78b27779c8be360fc97a57da3820643ef26604a",
+    "size": 196,
+    "mtime": 1750870065.0626302
+  },
+  "test_parser_fix/comprehensive/test.css": {
+    "hash": "1f904a85db25a7d59f7c44e78a2a1492bff104edc5c973037c2c15fffa2abf17",
+    "size": 5504,
+    "mtime": 1751577974.299976
+  },
+  "test_comprehensive_parsers/test_document.html": {
+    "hash": "bd5deb6c1b24d7eaebda360f85ee2141d0eda052a18fd4c8d20bbedff9e8e8ac",
+    "size": 3675,
+    "mtime": 1751588756.7516778
+  },
+  "docs/archive/o3.md": {
+    "hash": "fa74121b9da99a2122e247263a262aa0e3674b1008b2e3a394a24d65ee88ebdb",
+    "size": 6758,
+    "mtime": 1750870064.7976797
+  },
+  "tests/unit/test_atomic_migration.py": {
+    "hash": "82a8767a3d9c3477d8285c8984f729910038d7b6f409b97fd5e443e8b9608106",
+    "size": 12713,
+    "mtime": 1750887408.703591
+  },
+  "claude_indexer/analysis/javascript_parser.py": {
+    "hash": "9a218b3563ae208bad7b37ecebb3f10f641d6507811dee0a15ada53410805364",
+    "size": 31786,
+    "mtime": 1751576756.5232286
+  },
+  "claude_indexer/watcher/debounce.py": {
+    "hash": "50d6ef7da2195c77e9acec5fb068a89b456cb3cf0ec4ebf89905916d70af11fe",
+    "size": 6574,
+    "mtime": 1750870065.0633423
+  },
+  "claude_indexer/embeddings/registry.py": {
+    "hash": "9eff4c17124c775b61b8b7dfa193b65f9038f5329c0c4475da2a12dbb90e145a",
+    "size": 5040,
+    "mtime": 1751571548.9553375
+  },
+  "test_comprehensive_parsers/test_javascript.js": {
+    "hash": "e082d2fc61b412e72c61fd785b2f7ed7c3bb8218b2c2a3099be88324f7d76ea1",
+    "size": 1981,
+    "mtime": 1751588749.114021
+  },
+  "tests/unit/test_vector_store.py": {
+    "hash": "40d94740b7ab93af3b1a8311106cca4dae7132cefebddcd714b4ba8a7ab42516",
+    "size": 37854,
+    "mtime": 1751930606.8589933
+  },
+  "test_parser_fix/test.css": {
+    "hash": "9767e91e9d4b0334e59a1d389e9801bc6a2c5c4a5500a3c2c7915687965b2c16",
+    "size": 21,
+    "mtime": 1751577072.40286
+  },
+  "claude_indexer/config/project_config.py": {
+    "hash": "47903a5fa601c4f484e4d6543d794f65bc1b2b70d4d7225b86cda8a4654c1250",
+    "size": 5378,
+    "mtime": 1751592068.086268
+  },
+  "tests/integration/test_watcher_flow.py": {
+    "hash": "4367c67d2270a8703a6ee3e0552f16f6671a96a284825ac8ebcf6484c6d171e1",
+    "size": 16873,
+    "mtime": 1751571548.9727185
+  },
+  "test_parser_fix/test.txt": {
+    "hash": "e121ff2fef43a48cfe0dc6b6173785ef33e8fcdbe31e2ff538dc0b36f0812e39",
+    "size": 44,
+    "mtime": 1751577076.2554522
+  },
+  "mcp-qdrant-memory/CLAUDE.md": {
+    "hash": "bf638b7f45d43e802a789765ea8a5adb0fb9be3a5a9740cbb1ec057a2080649d",
+    "size": 15698,
+    "mtime": 1751921402.8253832
+  },
+  "docs/chat_history.md": {
+    "hash": "f9df1748ee635572fe2c7541f457c30fd8198cc4bc4574744592e1ece2a999ae",
+    "size": 120780,
+    "mtime": 1751081177.9404051
+  },
+  "test_comprehensive_parsers/test_readme.md": {
+    "hash": "da7c1b53907dea84599ef795e62add4cc9693ef247a117007f396fc6a7848ffc",
+    "size": 5019,
+    "mtime": 1751588975.7620072
+  },
+  "tests/unit/test_hashing.py": {
+    "hash": "72d21056822af723c5e2a02e975b1d10246559d6fa1a4a5bebde0bc329807ddf",
+    "size": 13737,
+    "mtime": 1750967075.0117457
+  },
+  "docs/archive/ant-plan.md": {
+    "hash": "8eaa62dc1de782a635c0ce53d0082dfe66444aa72bb933d1139b89540ee6ba0f",
+    "size": 13963,
+    "mtime": 1751571548.9618661
+  },
+  "docs/python-ext.md": {
+    "hash": "411a10e8704b5e310f733c0d4f9da3a077afbdf28e36094dc28366f61dc9e809",
+    "size": 12980,
+    "mtime": 1751571548.9661975
+  },
+  "docs/archive/mcp-remove.md": {
+    "hash": "3811db3a5a9b4877f948145044bc57ea2dbcfc29ea582e0a909d79d6707d9e9e",
+    "size": 6846,
+    "mtime": 1750900508.7421923
+  },
+  "tests/unit/test_chunks.py": {
+    "hash": "cbb1ea1f89be23f3030b236b26346391bfe8e6b1fb1ac8b3982b767d8c554be9",
+    "size": 14666,
+    "mtime": 1751065815.7562764
+  },
+  "claude_indexer/__main__.py": {
+    "hash": "80ddd67293d196a6ea744ff45b8f075abf171a61fcc6ca9ad577853586af3635",
+    "size": 210,
+    "mtime": 1751067020.2126846
+  },
+  "mcp-qdrant-memory/src/index.ts": {
+    "hash": "5be23687015eed1fe9f340ef14a0b34e6917ce3fb86caa58a273f13c4b6fd08f",
+    "size": 24786,
+    "mtime": 1751919172.8464825
+  },
+  "mcp-qdrant-memory/test-streaming-token-management.js": {
+    "hash": "b160fd6ca8d9c71165af0f3166e73ca6b7ac14c35990db4fc92eebab6e74be15",
+    "size": 8258,
+    "mtime": 1750913648.0625265
+  },
+  "mcp-qdrant-memory/test-edge-cases.js": {
+    "hash": "68357c68e860208d1110b5a57146207199a075b574ab28ee79db1cbbd5ea7f01",
+    "size": 12377,
+    "mtime": 1750913880.203077
+  },
+  "claude_indexer/indexer_logging.py": {
+    "hash": "d59c354929aa276251c3455d7091ead72df3cb845f1e3a39a634c3738df322a7",
+    "size": 6281,
+    "mtime": 1751081177.9332635
+  },
+  "CLAUDE.md": {
+    "hash": "553e9fbca51c265453c8ac939e6026572891f7f88ed3e9fc3355b3186a411c79",
+    "size": 14730,
+    "mtime": 1751926581.5204427
+  },
+  "utils/check_collections.py": {
+    "hash": "09683b2331af15b2eb6721840868aa242df314202e6f795d162b7718a300006a",
+    "size": 1133,
+    "mtime": 1750888587.0963867
+  },
+  "mcp-qdrant-memory/src/config.ts": {
+    "hash": "4dffde3c9169a22e44fde9c80bf0df679c990334b49b417f4c2254c60013e600",
+    "size": 750,
+    "mtime": 1750808380.3147464
+  },
+  ".pytest_cache/README.md": {
+    "hash": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad",
+    "size": 302,
+    "mtime": 1751910136.0698023
+  },
+  "mcp-qdrant-memory/global.d.ts": {
+    "hash": "2381cecec4c502e8326b51f35739e26a68db0104578ce7147d6edc8e85453ca0",
+    "size": 25,
+    "mtime": 1750808380.3127348
+  },
+  "mcp-qdrant-memory/debug-relationships.js": {
+    "hash": "b7748beb6a58f7a6c657e71480466bd1281c4c76bbccbb4f751cbf30d54b7197",
+    "size": 3835,
+    "mtime": 1750913687.455221
+  },
+  "claude_indexer/storage/qdrant.py": {
+    "hash": "69c0142882a00d068834a465cc60088bef5c5115194ea4f9e50e23ca5f2a8be8",
+    "size": 43695,
+    "mtime": 1751914399.1494749
+  },
+  "mcp-qdrant-memory/src/tokenCounter.ts": {
+    "hash": "c46df951ae2361bd3cacd2d94de28994eb18fcb3cc072a0e0ba081f70bab192a",
+    "size": 7698,
+    "mtime": 1751914893.2186422
+  },
+  "claude_indexer/config/legacy.py": {
+    "hash": "b6532a7a9b532a58870e5e611d97d294913d1acd2d2d3a7137fc2d19e6faa0c2",
+    "size": 3293,
+    "mtime": 1751574659.7520692
+  },
+  "test_parser_fix/test.html": {
+    "hash": "1355d10ec19f13bee50a898775a0f008d4295e8b8bedd35373fea6188a93706a",
+    "size": 40,
+    "mtime": 1751577071.2896411
+  },
+  "tests/unit/test_config.py": {
+    "hash": "e199b7ac6087c93a230ef05f8221e02da5202372ce2c4499f6aae31f09ac7a91",
+    "size": 12934,
+    "mtime": 1750870065.0718503
+  },
+  "tests/integration/test_delete_event.py": {
+    "hash": "4c1a3cc947854ebdf938968eda3eaaa0c4ee2bcac4e18a0e969968282d4d3be5",
+    "size": 28851,
+    "mtime": 1751915200.6368163
+  },
+  "docs/archive/read_graph.md": {
+    "hash": "da90050fded1a6bfefd3ad21b8cd3e71097553ee35944386afa0ab18827366c2",
+    "size": 6501,
+    "mtime": 1750898780.693394
+  },
+  "test_comprehensive_parsers/test_documentation.txt": {
+    "hash": "15b46519bfc0ddf8e5ebc5bc2abbeed7739c4abc12a9892ee0f15f5eba3c9165",
+    "size": 3980,
+    "mtime": 1751588948.0578427
+  },
+  "tests/integration/test_progressive_disclosure.py": {
+    "hash": "59130e7b52ce16a5bc14ae5ee02034c72dc3de32ed2e548b1c12b82111ff75b9",
+    "size": 20989,
+    "mtime": 1751929598.657694
+  },
+  "claude_indexer/analysis/__init__.py": {
+    "hash": "28e50a0e24f1308f516c97b9fe7d74b25260601cea84c01048ea810584f66532",
+    "size": 309,
+    "mtime": 1750870064.7913997
+  },
+  "docs/cleanup.md": {
+    "hash": "fec9c91bf15a23be5c7efc9c4cb0e7c22a75fb5fa18b0325aeb6ec66415892fe",
+    "size": 13149,
+    "mtime": 1750819241.9367187
+  },
+  "claude_indexer/analysis/css_parser.py": {
+    "hash": "fbadbae71a02c6a58031569bee43c370aec33491ce42e7dd65f68448a5b9caf1",
+    "size": 10941,
+    "mtime": 1751586104.1538146
+  },
+  "mcp-qdrant-memory/src/persistence/qdrant.ts": {
+    "hash": "9565e020e0e35b19d01da9c6839d901721667511b6240ec8b2e13109bf49de3a",
+    "size": 44229,
+    "mtime": 1751918603.7949047
+  },
+  "utils/qdrant_stats.py": {
+    "hash": "0cc22ab9f6cf6a4215d0e95b996ad7a8fa092dd719297835b3317d998fda9ab2",
+    "size": 45692,
+    "mtime": 1751571548.9748797
+  },
+  "test_parser_fix/comprehensive/test.md": {
+    "hash": "48f73ec3ae154e88880eedb0690233db32457bee00aaaa6fe059be4a683f6f09",
+    "size": 6770,
+    "mtime": 1751578245.5626168
+  },
+  "docs/archive/mcp_removal_plan.md": {
+    "hash": "aa4a289839143953137a6cb5b4d236a22e7d589858acae976b5c9349145815b9",
+    "size": 9371,
+    "mtime": 1750900389.558764
+  },
+  "mcp-qdrant-memory/OPTIMIZATION_SUMMARY.md": {
+    "hash": "985447a8a9782b888f1887334474602bb4e6e218f3df077f19a7d61ad6dbc57d",
+    "size": 3611,
+    "mtime": 1750913917.9811666
+  },
+  "docs/archive/CLAUDE_backup.md": {
+    "hash": "db65f5d5e3ea6d5d046017338be406e5cd2071a781271b3dc2fe199ecde6ad69",
+    "size": 50466,
+    "mtime": 1750884307.0858362
+  },
+  "tests/unit/test_python_file_operations.py": {
+    "hash": "504e0202c1f2524d73ef1003cea7b4a1db4f6b85400942d559e9d2098f3b5da3",
+    "size": 8889,
+    "mtime": 1751930435.563892
+  },
+  "claude_indexer/analysis/base_parsers.py": {
+    "hash": "923305683dca3bf093579d9d4eba791e548e53a56041d615c17b845437b0547a",
+    "size": 3910,
+    "mtime": 1751571548.9450455
+  },
+  "mcp-qdrant-memory/docs/PRD.md": {
+    "hash": "bc3df7d7c1f2d8941c9de4651e38f9215dc4768b0cee88dba6784e3b98658659",
+    "size": 2218,
+    "mtime": 1750808380.31247
+  },
+  "claude_indexer/analysis/json_parser.py": {
+    "hash": "99a08799c3d4b63f606c2d05998f19512b4622b357a730929e929d0a6ceb0a42",
+    "size": 35546,
+    "mtime": 1751844123.4094887
+  },
+  "mcp-qdrant-memory/README.md": {
+    "hash": "0fd9a1cf7d1689e23c9b56322e92cae5d754edb844c075a906ac50c6d7054b1a",
+    "size": 13199,
+    "mtime": 1751921338.435458
+  },
+  "mcp-qdrant-memory/src/fetch-override.ts": {
+    "hash": "e885bf087e3ccceb87d4edf349b5be2b6243758dcc99e7b2fc1474e75f34f85e",
+    "size": 300,
+    "mtime": 1750808380.314964
+  },
+  "mcp-qdrant-memory/src/validation.ts": {
+    "hash": "23968dc217d716a8f90d0d829352143835a64b79cb6588aa22c7ceefde3314b4",
+    "size": 6239,
+    "mtime": 1751573070.376218
+  },
+  "mcp-qdrant-memory/src/types.ts": {
+    "hash": "ba740d3652e726071eefc19d67a695487bfec78952dbdeb63578c1f4ee04afdd",
+    "size": 2547,
+    "mtime": 1751573070.3756666
+  },
+  "docs/archive/integration.md": {
+    "hash": "db24fa4f8cdecb8c3f4a9a381fdeb01d8a7d284ff60998211b446b8ad07a84b6",
+    "size": 64478,
+    "mtime": 1751571548.9637818
+  },
+  "test_parser_fix/comprehensive/test.html": {
+    "hash": "c56b796b690ca9bd148235ccdded0a90e007c5475f9f26a7d31eaba134484cad",
+    "size": 6588,
+    "mtime": 1751577885.1861382
+  },
+  "prompts/summory_claude.md": {
+    "hash": "a93aad8389e9e36d4fadd973e700ec8bb521092225d6f66dc0c31dbab3767e67",
+    "size": 13308,
+    "mtime": 1750995517.6804829
+  },
+  "test_comprehensive_parsers/test_styles.css": {
+    "hash": "dc6b1a2e765bda0ee9dd0590f61109b8982a1a34f5df82554447ba3d5fb84fff",
+    "size": 2346,
+    "mtime": 1751588750.401253
+  },
+  "docs/archive/optimization.md": {
+    "hash": "8f2f955fca29ec2e40531856b4e770f6792d2e0789be8e04e386106fc4920b07",
+    "size": 27268,
+    "mtime": 1750870064.7982175
+  },
+  "mcp-qdrant-memory/test-mcp-no-json.js": {
+    "hash": "fa944aa7bebf16f503806f6d78c867b9cc661d2cd63b5e347dc3e7c70a9ff710",
+    "size": 1683,
+    "mtime": 1750915608.9438765
+  },
+  "claude_indexer/embeddings/__init__.py": {
+    "hash": "206c52d9612f5e43639403153f99e1b209fc2797758bad9b0724be7d0673c26b",
+    "size": 291,
+    "mtime": 1750870064.794594
+  },
+  "claude_indexer/chat/summarizer.py": {
+    "hash": "e0474efb29ca22899e8b110c193bbfaf6c174aa4166497569f5eb8e55f10c55f",
+    "size": 11711,
+    "mtime": 1751603028.6600194
+  },
+  "claude_indexer/config/config_loader.py": {
+    "hash": "1e66eaf4b855becd78db9308c3b3cf41a04a95df28721ce6d8dcf960dea18351",
+    "size": 7434,
+    "mtime": 1751592247.8371038
+  },
+  "tests/unit/test_embeddings.py": {
+    "hash": "ee67257260e6ed11c30b0d3dea9042f25bd47f6ad54a2abf0c15668233df1866",
+    "size": 22259,
+    "mtime": 1751004051.9801416
+  },
+  "claude_indexer/analysis/html_parser.py": {
+    "hash": "6f8046129124fc3a14e7bba61a0320748b402df852ab73ef962ea52451e07164",
+    "size": 12959,
+    "mtime": 1751586128.0169547
+  },
+  "test_parser_fix/test.md": {
+    "hash": "a6f4e2492743e35d1df38962ae85d4db1d91b3d367a7045695a6835160a3da5f",
+    "size": 96,
+    "mtime": 1751577545.1873999
+  },
+  "mcp-qdrant-memory/src/streamingResponseBuilder.ts": {
+    "hash": "98c79ca7e0150ac808911ee42e024aff385e5eadf67f31b726b58676de39f909",
+    "size": 17169,
+    "mtime": 1751912394.43303
+  },
+  "docs/archive/method6.md": {
+    "hash": "3542b314534e32e1123bc037ca12cfe8e7ae1626a7c274c9df3a71aa490f75a1",
+    "size": 20956,
+    "mtime": 1750888838.5243828
+  },
+  "claude_indexer/main.py": {
+    "hash": "f5ad9f3013673fc526396ce5b5dc65bcc1e717739ffea54119645c3b2f033a63",
+    "size": 34686,
+    "mtime": 1751571548.9567795
+  },
+  "claude_indexer/chat/html_report.py": {
+    "hash": "e0e02ce802597839a99fd77c52475aca6e4692979639ba3311bd6efc94cb7714",
+    "size": 40105,
+    "mtime": 1751571548.951423
+  },
+  "claude_indexer/__init__.py": {
+    "hash": "b1586a6ec36c461769b2b19abd7ced10652419afe0fc65c4029c595276d44d41",
+    "size": 658,
+    "mtime": 1751571548.9447696
+  },
+  "settings.template.txt": {
+    "hash": "d4b1a77efe0ee2b297d4638f81d327948b3b09c973a617a3a647f1c0b6f1ec90",
+    "size": 1640,
+    "mtime": 1751571548.9689324
+  },
+  "docs/archive/refactor.md": {
+    "hash": "fe21c86ca073163f91c1500e8c6dd70fa7d44c9defcc07fcc2045585fbbb12aa",
+    "size": 7274,
+    "mtime": 1750870065.0644968
+  },
+  "tests/unit/test_chat.py": {
+    "hash": "1f6f0ebf91f7b0b460114ec627bf56ce400004134f2b63b6b98a07b8279f2f67",
+    "size": 16141,
+    "mtime": 1751003989.1923714
+  },
+  "test_parser_fix/comprehensive/test.txt": {
+    "hash": "c9ae15bc964aa0f512ea38970a09817b9cf72209dcc12f29500b122ae6a00522",
+    "size": 5945,
+    "mtime": 1751578159.8523014
+  },
+  "claude_indexer/indexer.py": {
+    "hash": "8f0b620bb7aabf62e8b9b70fc6ee02c07262674441d71a59a66191c63bc09c35",
+    "size": 66006,
+    "mtime": 1751608943.186532
+  },
+  "claude_indexer/chat/__init__.py": {
+    "hash": "9345426ebaccb98be12b6e29134fc2b8ca5936e32f167af3d0efd2a6baca2b89",
+    "size": 463,
+    "mtime": 1751003589.060866
+  },
+  "tests/unit/test_v24_storage.py": {
+    "hash": "bfb32e947c76dc866fc8092fa042d2fdf912d71cd443a348557c54c28b1c5220",
+    "size": 16012,
+    "mtime": 1751071914.5345192
+  },
+  "docs/archive/orphan-relation-layer2.md": {
+    "hash": "37af2fe9ac0a6bbe4992aac6430928d1b395006419715874380072d8e82e5e9b",
+    "size": 8162,
+    "mtime": 1750953889.459164
+  },
+  "docs/archive/voyage.md": {
+    "hash": "634c90264b461d906bdb61fb32ff618697702b057cf32c1c23a8a947df3382a5",
+    "size": 17576,
+    "mtime": 1751081177.9391513
+  },
+  "tests/unit/test_dual_pipeline.py": {
+    "hash": "b89d93ae772aede25c80f92fb7ccdb6b99c522471d4eec7dd259b30fd7106edf",
+    "size": 15351,
+    "mtime": 1751065881.341494
+  },
+  "utils/fix_state_desync.py": {
+    "hash": "4488928658c3e44aaba1ac74e2e3d1d6ceeb8aa5940d6819361c28bb600b1981",
+    "size": 914,
+    "mtime": 1751049878.3334348
+  },
+  "docs/archive/tests.md": {
+    "hash": "fd465b9105dd4b53e8bc56524207a76c16451911c2de5d5843bf3cf226f35745",
+    "size": 8999,
+    "mtime": 1750870065.0648975
+  },
+  "docs/configs.md": {
+    "hash": "e6cccd6a566a2be15000f42926e5055293fb52d625b724545acdc8d2442db208",
+    "size": 44148,
+    "mtime": 1751571548.9649608
+  },
+  "mcp-qdrant-memory/test-implementation.js": {
+    "hash": "4da31a8e19366ddb42b6f085bd8873dfe4ba2c9b64a629ccef0003a14c4ccffd",
+    "size": 10125,
+    "mtime": 1750897510.259197
+  },
+  "docs/archive/mcp-update.md": {
+    "hash": "28090212d4a3240c4a3f892b415940aa1a940105d0bbd614dede9a153052ef59",
+    "size": 3844,
+    "mtime": 1750896984.098115
+  },
+  "test_comprehensive_parsers/test_python.py": {
+    "hash": "f0d4af72dd0a5cf5996ce97059ee6026135ab1b6aed8f22ceb506e96d9c3d106",
+    "size": 1672,
+    "mtime": 1751588744.5416365
+  },
+  "docs/archive/more_files.md": {
+    "hash": "6fac743d8107e5cd46bdbb13075cbfa893c9da1c86d7e6514125117f8650db11",
+    "size": 39101,
+    "mtime": 1751571548.9644156
+  },
+  "docs/evaluation.md": {
+    "hash": "2256ec8d82d2e84c55a66714cdceeea6fb98a9d63aae997eda7ede103a44542f",
+    "size": 7565,
+    "mtime": 1750987081.4756372
+  },
+  "claude_indexer/embeddings/voyage.py": {
+    "hash": "691fdfe25389c394ca92fb0d1085ffef90cc8e3c39d7f92be01e762f306fa982",
+    "size": 9742,
+    "mtime": 1750988498.2170916
+  },
+  "test_parser_fix/comprehensive/test.js": {
+    "hash": "9035148270e9dc1102e508e9fdf167e63eeaf9476e9f702661ac40b7576e4caa",
+    "size": 9342,
+    "mtime": 1751578015.8241184
+  },
+  "claude_indexer/embeddings/base.py": {
+    "hash": "89d1241e1dd8a0f5f1518fddaf2d6ac91ffceff9c87835c43a1546be0f82791a",
+    "size": 7569,
+    "mtime": 1750870064.795205
+  },
+  "docs/archive/next_step.md": {
+    "hash": "fff839f920840684e7b9fe934c033703fe828cc85b0d4ff46ae52230d85bfd23",
+    "size": 11379,
+    "mtime": 1750828003.657554
+  },
+  "claude_indexer/requirements.txt": {
+    "hash": "a0419941656ebd165c0dc88328dac0eb265198380ae3573ebcbd4e1393181f23",
+    "size": 420,
+    "mtime": 1750870065.059418
+  },
+  "claude_indexer/service.py": {
+    "hash": "4ec893acad26c72e3da3e95c24704bd7692fabe5995816d72a755812e419af4c",
+    "size": 12446,
+    "mtime": 1751571548.9580095
+  },
+  "README.md": {
+    "hash": "4b701bcd3706f9c801b3882f40b6d928b3595fc4cf787df8ab965dafc7683731",
+    "size": 41429,
+    "mtime": 1751653580.3129387
+  },
+  "claude_indexer/config/models.py": {
+    "hash": "a394a5130dc8bd05305ee8bc91a573d42d1bc3cdf43a01c71e8ec6aa6391d843",
+    "size": 4601,
+    "mtime": 1751571548.9542108
+  },
+  "claude_indexer/config/__init__.py": {
+    "hash": "97afd7eeda391fe4dd941e2ab1a8046abcf8525b9d32cf8d39f74f2aca0f7c5c",
+    "size": 1053,
+    "mtime": 1751571548.9531758
+  },
+  "claude_indexer/config/config_schema.py": {
+    "hash": "4a15d03bff5a6dadf862e3fe03a98953c7b66e7eacd7592143517f22b6f7280c",
+    "size": 3631,
+    "mtime": 1751571548.9537096
+  },
+  "tests/unit/test_parser.py": {
+    "hash": "233f6bb3a374dc852bf84f3d3517bf06bbac959b6b8f60a58ffd31ae51b30053",
+    "size": 18260,
+    "mtime": 1750870065.0739667
+  },
+  "tests/integration/test_indexer_flow.py": {
+    "hash": "f73d2bc8cf7720b984aef9683d4951fb9fbad9ac7c073fab790254f1ba5f779d",
+    "size": 48725,
+    "mtime": 1751916261.1549625
+  },
+  "docs/archive/get_implement_scope.md": {
+    "hash": "0c39ae8a7df565fc5bdf9f6f11751027931e7b8c7d594d6d02d76de2bf4ec49c",
+    "size": 9458,
+    "mtime": 1751571548.9622302
+  },
+  "utils/manual_memory_backup.py": {
+    "hash": "993b77f3cd4acd3a8ee986830a9f38af848fb0b0420d1fb837768c7e7561e3f3",
+    "size": 25601,
+    "mtime": 1751603053.3111055
+  },
+  "claude_indexer/watcher/handler.py": {
+    "hash": "6726da2beb99cff7648ab81797dce4d9973e08820fb78fc9f2b889921ebe0d7a",
+    "size": 26456,
+    "mtime": 1751931771.4571273
+  },
+  "tests/unit/test_cli.py": {
+    "hash": "e953dfa5b986bc47332ddce6340ea2c2d855e41a94e49603654daefe41abc8d1",
+    "size": 28876,
+    "mtime": 1751002401.7870104
+  },
+  "utils/find_missing_files.py": {
+    "hash": "0e035bff4770f7912b31df9e94eb63744d3e692affc0d62f8052a1422ec683b9",
+    "size": 10154,
+    "mtime": 1751571548.9736097
+  },
+  "test_parser_fix/test.js": {
+    "hash": "0748809f5c013aa4a4faac7073f1d8823a1358448e1427c697570ab34028aebc",
+    "size": 36,
+    "mtime": 1751577073.3739634
+  },
+  "claude_indexer/analysis/yaml_parser.py": {
+    "hash": "fb46adb5b7907979e3d074a9310cb4a5509b1b7ef8e4fa1a22ab77690832f26e",
+    "size": 12364,
+    "mtime": 1751586209.237167
+  },
+  "claude_indexer/storage/__init__.py": {
+    "hash": "ac5b3b02518641a1e857fe2ae0ee2f263a341fcb7bc7f7ce8bcf3016a5de830a",
+    "size": 278,
+    "mtime": 1750870064.7966852
+  },
+  "requirements.txt": {
+    "hash": "a8da3e8b6cd3a9e79924d92ff6a9d777412873e903503520aaf997ffa155d628",
+    "size": 239,
+    "mtime": 1751571548.9685605
+  },
+  "claude_indexer/storage/base.py": {
+    "hash": "53e70d1c901fafd8c53d1dce6935216bfb4cd5c08795f275f2f54948fe2f3b94",
+    "size": 14327,
+    "mtime": 1751844751.9026356
+  },
+  "tests/conftest.py": {
+    "hash": "d20fdb16a2dd42e9c14f8bd7c6505c40c50acf167b9f40948b610cdfa22d4bee",
+    "size": 25056,
+    "mtime": 1751912204.2869065
+  },
+  "docs/archive/ast-research.md": {
+    "hash": "2ee552878a01c097e62a80862ca60c1ebcedeaff65892efb1bf4ea679047c800",
+    "size": 10303,
+    "mtime": 1751060788.5582678
+  },
+  "_statistics": {
+    "files_processed": 1,
+    "total_tracked": 163,
+    "entities_created": 5369,
+    "relations_created": 8105,
+    "implementation_chunks_created": 3343,
+    "processing_time": 0.0,
+    "timestamp": 1751932914.553788
+  },
+  "test_auto_config/hello.py": {
+    "hash": "f5706ec714f93d134d0df5dc8c024fda1079dd7f448a43d5cf481cab4fd56562",
+    "size": 18,
+    "mtime": 1751593560.0110981
+  },
+  "test_auto_config/hello.js": {
+    "hash": "c7d5e04a887a2f17515a21ed92a67ee9f53a4cfd67326bbb4a1293af37134b8a",
+    "size": 21,
+    "mtime": 1751593560.011641
+  },
+  "claude_indexer/cli_full.py": {
+    "hash": "4aa5b4eda756be45bda03ee8724d05501b1fcd98db58adec1341d31abbfcb4f9",
+    "size": 68882,
+    "mtime": 1751919573.655427
+  },
+  "test_parser_fix/test_auto.py": {
+    "hash": "b61c875db4d564efb4af194ce6995e7be1c8b5a3d7c1f3d31a56420b7ef5c93f",
+    "size": 2794,
+    "mtime": 1751667190.8206868
+  },
+  "debug_incremental_search.py": {
+    "hash": "ad3ac249de054115c3f303f652f610079dfbdcd16843e90127c16195b224fbc5",
+    "size": 7126,
+    "mtime": 1751911185.5857913
+  },
+  "tmp/incremental_test/calculator.py": {
+    "hash": "f96439adeb0c747d66c15f54d2b4f01e71ffb0a21a835aa496adc883c4d90431",
+    "size": 195,
+    "mtime": 1751911202.0606666
+  },
+  "clean.md": {
+    "hash": "753e5d5bc9455541ecfb93f693ef67259e55fbaa6cdce50d79f422c9fd7e509f",
+    "size": 19632,
+    "mtime": 1751918721.831347
+  },
+  "claude_indexer/cleanup/__init__.py": {
+    "hash": "b28acf0ba275cbd6f2fe1597a276e0fe57060b61f423de136bbc4c2c17274e2d",
+    "size": 680,
+    "mtime": 1751918937.6243255
+  },
+  "claude_indexer/cleanup/detection.py": {
+    "hash": "40eb50dc9ed85aa51ef621e4dec50086fa6fa753878bfe2437ec2f6268519bfa",
+    "size": 6250,
+    "mtime": 1751924496.2739036
+  },
+  "claude_indexer/cleanup/clustering.py": {
+    "hash": "6c637c92636ecd0a84d32498a8d6299f84267509c94f2cf3c5b8fa01c3f3843c",
+    "size": 11992,
+    "mtime": 1751919056.3067503
+  },
+  "claude_indexer/cleanup/scorer.py": {
+    "hash": "998d76be5a36c4d826739b7f7a8f1845b1c77c74cd24e2a18ace05aa6f965158",
+    "size": 13809,
+    "mtime": 1751925882.5647576
+  },
+  "claude_indexer/cleanup/resolver.py": {
+    "hash": "61ae68ec8ef7f4e613316a7a0169000909bfb5008e3d97c41333e6e3e837c4c0",
+    "size": 20730,
+    "mtime": 1751930439.0993626
+  },
+  "claude_indexer/cleanup/executor.py": {
+    "hash": "213a66019cb83b2b8d78e4ac1f692ec160aa611749c626ff218fc15532c827f6",
+    "size": 15124,
+    "mtime": 1751919288.2674448
+  },
+  "claude_indexer/cleanup/safety.py": {
+    "hash": "ed0e666509140e0e540aa1477cafed786902704406d919a647e69afe233a31ea",
+    "size": 18836,
+    "mtime": 1751919377.8589928
+  },
+  "claude_indexer/cleanup/pipeline.py": {
+    "hash": "18ba5f8f054bd89654ed05135ca2d089a41751e0b6f2578b968ced7ac75ee76f",
+    "size": 18823,
+    "mtime": 1751932885.0027163
+  },
+  "tests/unit/test_cleanup/test_detection.py": {
+    "hash": "7c5f4a52153a535fa74f90cf72ca1c9b24db8782616f088de83dfb5dec037c87",
+    "size": 11658,
+    "mtime": 1751919680.2562459
+  },
+  "tests/unit/test_cleanup/test_integration.py": {
+    "hash": "1a2dcd4c1d431895215b1c13555918fef023c6aece36143cc537056d056e281e",
+    "size": 17190,
+    "mtime": 1751919764.8915331
+  },
+  "tests/integration/test_cleanup_end_to_end.py": {
+    "hash": "6f0fe9d2786897f9cf1c4f95a700c3fa1f4d670652d1e75c69052563c424fc6e",
+    "size": 24608,
+    "mtime": 1751928557.47564
+  },
+  "tmp/test-docs/README.md": {
+    "hash": "4b701bcd3706f9c801b3882f40b6d928b3595fc4cf787df8ab965dafc7683731",
+    "size": 41429,
+    "mtime": 1751920187.7100813
+  },
+  "tmp/test-docs/clean.md": {
+    "hash": "753e5d5bc9455541ecfb93f693ef67259e55fbaa6cdce50d79f422c9fd7e509f",
+    "size": 19632,
+    "mtime": 1751920187.7106416
+  },
+  "claude_indexer/cleanup/llm_merger.py": {
+    "hash": "1dc97fea005aa3a0dd807b09313b6320df1aaa1c4e534d478a68cdbc41c03bc3",
+    "size": 11494,
+    "mtime": 1751930340.4855924
+  },
+  "test_llm_merger.py": {
+    "hash": "20c79136f42bee4b96c56cfff1de5d5b14b5d949cc07df951e9dc7186e6b4ec9",
+    "size": 5277,
+    "mtime": 1751930502.783392
+  },
+  "debug_watcher_js.py": {
+    "hash": "d2f13f281a70f78a1455cb15f83eeca67e1b84ad60a8cb34aee7a265f3596221",
+    "size": 7780,
+    "mtime": 1751930946.228471
+  },
+  "debug_watcher_simple.py": {
+    "hash": "4691255642586702679970a12c88ef9f09fc29cadb06cbb1a6587a6c774c895e",
+    "size": 4790,
+    "mtime": 1751931019.3671663
+  },
+  "debug_watcher_indexing.py": {
+    "hash": "19531a5237d506b0c6a3a81c5cd8d0e1cb3b518217e0e36c46284bd0992bbc6a",
+    "size": 6855,
+    "mtime": 1751931226.1678774
+  },
+  "debug_watcher_event_chain.py": {
+    "hash": "298e99d4796ffec2c91e42a5a7f46de1cef71b6287208bab78b20b237d001e0a",
+    "size": 6207,
+    "mtime": 1751931495.1490939
+  },
+  "debug_filter_logic.py": {
+    "hash": "b9326027bea4fe842dc4d538f862f829a5e0e21fbdf6644b20eb42d9ba0ffe7d",
+    "size": 3293,
+    "mtime": 1751931603.9700096
+  },
+  "debug_path_mismatch.py": {
+    "hash": "f47ad1290fb3f8be66643e07b6ef8c57561c21d7c168c53cc108c57852fed3cd",
+    "size": 3026,
+    "mtime": 1751931733.29885
+  },
+  "test_pipeline_llm.py": {
+    "hash": "2b3728c9a88a4cd5c9a5b21e032c4e63549e46d6189e60a2432cb1be893d103d",
+    "size": 3949,
+    "mtime": 1751932300.8899662
+  },
+  "utils/make_manuals_list.py": {
+    "hash": "0a83136e87a99ca1f08a8dffb37bd34849ccb860c5e110f5764807f60a71a82d",
+    "size": 6146,
+    "mtime": 1751932823.8718345
+  },
+  "prompts/clean_manual_entries.md": {
+    "hash": "ffee4cc2ac83b4ebbc1782a069ad2eb45d9a212cdcb9bcf6887b8de071941684",
+    "size": 6400,
+    "mtime": 1751932768.312772
+  },
+  "memories.md": {
+    "hash": "abdd2991761ad4254d731db80ba0d59a6fe4da3ea0732087d42ccfe598850077",
+    "size": 446179,
+    "mtime": 1751932860.7956307
+  }
+}

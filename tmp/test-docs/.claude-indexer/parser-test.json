@@ -1,0 +1,21 @@
+{
+  "clean.md": {
+    "hash": "753e5d5bc9455541ecfb93f693ef67259e55fbaa6cdce50d79f422c9fd7e509f",
+    "size": 19632,
+    "mtime": 1751920187.7106416
+  },
+  "README.md": {
+    "hash": "4b701bcd3706f9c801b3882f40b6d928b3595fc4cf787df8ab965dafc7683731",
+    "size": 41429,
+    "mtime": 1751920187.7100813
+  },
+  "_statistics": {
+    "files_processed": 2,
+    "total_tracked": 2,
+    "entities_created": 266,
+    "relations_created": 264,
+    "implementation_chunks_created": 193,
+    "processing_time": 20.848154067993164,
+    "timestamp": 1751920218.048713
+  }
+}

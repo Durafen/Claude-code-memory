@@ -17,6 +17,7 @@ from .scorer import QualityScorer, QualityScore
 from .resolver import ConflictResolver, ResolutionPlan
 from .executor import CleanupExecutor, SafetyConfig, ExecutionResult
 from .safety import SafetyManager
+from .llm_merger import LLMMerger
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +99,8 @@ class MemoryCleanupPipeline:
         
         # Initialize components
         self.clusterer = SimilarityClusterer(self.config.similarity_threshold)
-        self.scorer = QualityScorer(self.config.openai_api_key, self.config.model)
-        self.resolver = ConflictResolver()
+        self.scorer = QualityScorer(self.config.openai_api_key, "gpt-4.1-mini")
+        self.resolver = ConflictResolver(llm_merger=LLMMerger(api_key=self.config.openai_api_key))
         self.safety_manager = SafetyManager(store)
         self.executor = CleanupExecutor(store, self.safety_manager)
         
@@ -212,8 +213,8 @@ class MemoryCleanupPipeline:
             # Get all entries from collection
             all_entries = []
             
-            # Use scroll to get all entries efficiently
-            scroll_result = self.store._scroll_collection(collection_name)
+            # Use scroll to get all entries efficiently WITH VECTORS for clustering
+            scroll_result = self.store._scroll_collection(collection_name, with_vectors=True)
             if scroll_result:
                 all_entries.extend(scroll_result)
             
@@ -225,13 +226,19 @@ class MemoryCleanupPipeline:
             auto_indexed_count = 0
             
             for entry in all_entries:
-                # Extract payload for analysis
-                payload = entry.get('payload', entry)
+                # Extract payload for analysis (entry is a Record object from Qdrant)
+                payload = entry.payload
                 
                 entry_type = classify_entry_type(payload)
                 
                 if entry_type == 'clean':
-                    manual_entries.append(entry)
+                    # Convert Record to Dict format expected by other components
+                    dict_entry = {
+                        'id': entry.id,
+                        'payload': entry.payload,
+                        'vector': getattr(entry, 'vector', None)
+                    }
+                    manual_entries.append(dict_entry)
                 elif entry_type == 'preserve':
                     auto_indexed_count += 1
                 else:

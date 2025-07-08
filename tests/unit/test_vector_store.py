@@ -564,19 +564,19 @@ class TestQdrantStore:
             
             store = QdrantStore()
             
-            # Mock existing entities
+            # Mock existing entities (v2.4 format)
             mock_entity_points = [
-                MagicMock(payload={"name": "entity1"}),
-                MagicMock(payload={"name": "entity2"}),
-                MagicMock(payload={"name": "entity3"})
+                MagicMock(payload={"entity_name": "entity1", "type": "chunk", "chunk_type": "metadata"}),
+                MagicMock(payload={"entity_name": "entity2", "type": "chunk", "chunk_type": "metadata"}),
+                MagicMock(payload={"entity_name": "entity3", "type": "chunk", "chunk_type": "metadata"})
             ]
             
-            # Mock relations - some orphaned, some valid
+            # Mock relations - some orphaned, some valid (v2.4 format)
             mock_relation_points = [
-                MagicMock(id="rel1", payload={"type": "relation", "from": "entity1", "to": "entity2"}),  # Valid
-                MagicMock(id="rel2", payload={"type": "relation", "from": "entity1", "to": "deleted_entity"}),  # Orphaned
-                MagicMock(id="rel3", payload={"type": "relation", "from": "deleted_entity2", "to": "entity3"}),  # Orphaned
-                MagicMock(id="rel4", payload={"type": "relation", "from": "entity2", "to": "entity3"})  # Valid
+                MagicMock(id="rel1", payload={"type": "chunk", "chunk_type": "relation", "entity_name": "entity1", "relation_target": "entity2"}),  # Valid
+                MagicMock(id="rel2", payload={"type": "chunk", "chunk_type": "relation", "entity_name": "entity1", "relation_target": "deleted_entity"}),  # Orphaned
+                MagicMock(id="rel3", payload={"type": "chunk", "chunk_type": "relation", "entity_name": "deleted_entity2", "relation_target": "entity3"}),  # Orphaned
+                MagicMock(id="rel4", payload={"type": "chunk", "chunk_type": "relation", "entity_name": "entity2", "relation_target": "entity3"})  # Valid
             ]
             
             # Mock the _scroll_collection method directly

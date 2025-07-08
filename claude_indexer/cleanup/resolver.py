@@ -15,6 +15,7 @@ import difflib
 
 from .clustering import SimilarityCluster
 from .scorer import QualityScore
+from .llm_merger import LLMMerger
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,16 @@ class ResolutionPlan:
 class ConflictResolver:
     """Resolve contradictory patterns intelligently."""
     
-    def __init__(self):
-        """Initialize the conflict resolver."""
+    def __init__(self, llm_merger: Optional[LLMMerger] = None, enable_llm_merge: bool = True):
+        """
+        Initialize the conflict resolver.
+        
+        Args:
+            llm_merger: LLMMerger instance for intelligent merging (optional)
+            enable_llm_merge: Whether to enable LLM-powered merging
+        """
         self.logger = logging.getLogger(__name__)
+        self.llm_merger = llm_merger or LLMMerger(enabled=enable_llm_merge)
         
         # Version patterns for different technologies
         self.version_patterns = {
@@ -112,7 +120,7 @@ class ConflictResolver:
         elif quality_conflicts['significant_difference']:
             return self._keep_highest_quality(cluster, quality_scores)
         elif content_conflicts['are_compatible']:
-            return self._merge_compatible_entries(cluster, quality_scores)
+            return await self._merge_compatible_entries(cluster, quality_scores)
         elif temporal_conflicts['has_outdated']:
             return self._archive_outdated_entries(cluster, temporal_conflicts)
         else:
@@ -405,30 +413,16 @@ class ConflictResolver:
             confidence=0.9
         )
     
-    def _merge_compatible_entries(
+    async def _merge_compatible_entries(
         self, 
         cluster: SimilarityCluster, 
         quality_scores: Optional[List[QualityScore]]
     ) -> ResolutionPlan:
-        """Merge compatible entries into a single comprehensive entry."""
-        # Create merged entry by combining information
-        merged_content = []
-        merged_name_parts = []
+        """Merge compatible entries using LLM intelligence or fallback."""
+        # Use LLM merger for intelligent merging
+        merge_result = await self.llm_merger.merge_compatible_entries(cluster)
         
-        for entry in cluster.entries:
-            payload = entry.get('payload', entry)
-            
-            # Collect names
-            name = payload.get('name', '')
-            if name and name not in merged_name_parts:
-                merged_name_parts.append(name)
-            
-            # Collect content
-            content = self._extract_content_text(entry)
-            if content and content not in merged_content:
-                merged_content.append(content)
-        
-        # Create merged entry
+        # Create merged entry using LLM result
         base_entry = cluster.entries[0].copy()
         base_payload = base_entry.get('payload', base_entry)
         
@@ -436,15 +430,28 @@ class ConflictResolver:
             **base_entry,
             'payload': {
                 **base_payload,
-                'name': ' | '.join(merged_name_parts),
-                'content': '\n\n---\n\n'.join(merged_content),
+                'name': merge_result.merged_name,
+                'content': merge_result.merged_content,
                 'merged_from': [
                     entry.get('payload', entry).get('name', f'entry_{i}') 
                     for i, entry in enumerate(cluster.entries)
                 ],
-                'merge_timestamp': datetime.now(timezone.utc).isoformat()
+                'merge_timestamp': datetime.now(timezone.utc).isoformat(),
+                'llm_merge_info': {
+                    'confidence': merge_result.confidence,
+                    'reasoning': merge_result.reasoning,
+                    'source_count': merge_result.source_count,
+                    'tokens_used': merge_result.tokens_used,
+                    'llm_enabled': self.llm_merger.enabled
+                }
             }
         }
+        
+        # Use LLM confidence for plan confidence
+        confidence = max(0.7, merge_result.confidence)  # Minimum 0.7 for compatibility
+        reasoning_suffix = f" (LLM confidence: {merge_result.confidence:.2f})"
+        if merge_result.reasoning:
+            reasoning_suffix += f" - {merge_result.reasoning}"
         
         return ResolutionPlan(
             action=ResolutionAction.MERGE_COMPATIBLE,
@@ -452,8 +459,8 @@ class ConflictResolver:
             entries_to_remove=cluster.entries,
             entries_to_merge=cluster.entries,
             merged_entry=merged_entry,
-            reasoning=f"Merging {cluster.size} compatible entries into comprehensive entry",
-            confidence=0.7
+            reasoning=f"Merging {cluster.size} compatible entries{reasoning_suffix}",
+            confidence=confidence
         )
     
     def _archive_outdated_entries(

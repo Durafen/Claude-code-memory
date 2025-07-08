@@ -326,8 +326,10 @@ class Watcher:
             raise ImportError("Watchdog not available. Install with: pip install watchdog")
         
         from watchdog.observers import Observer
+        import os
         
-        self.repo_path = Path(repo_path)
+        # Normalize path to handle symlinks (critical for macOS /var -> /private/var)
+        self.repo_path = Path(os.path.realpath(repo_path))
         self.config = config
         self.embedder = embedder
         self.store = store

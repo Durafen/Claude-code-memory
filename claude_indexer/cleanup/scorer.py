@@ -200,6 +200,12 @@ Respond ONLY with valid JSON in this exact format:
                 
                 content = response.choices[0].message.content.strip()
                 
+                # Clean up JSON if wrapped in code blocks
+                if content.startswith('```json'):
+                    content = content.replace('```json', '').replace('```', '').strip()
+                elif content.startswith('```'):
+                    content = content.replace('```', '').strip()
+                
                 # Parse JSON response
                 try:
                     scores = json.loads(content)
@@ -220,7 +226,7 @@ Respond ONLY with valid JSON in this exact format:
                     
                 except (json.JSONDecodeError, ValueError) as e:
                     self.logger.warning(f"Invalid LLM response format (attempt {attempt + 1}): {e}")
-                    self.logger.debug(f"Raw response: {content}")
+                    self.logger.warning(f"Raw response: '{content}'")
                     
                     if attempt == max_retries - 1:
                         return None

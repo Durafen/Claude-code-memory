@@ -657,11 +657,11 @@
   "_statistics": {
     "files_processed": 1,
     "total_tracked": 163,
-    "entities_created": 5369,
-    "relations_created": 8105,
-    "implementation_chunks_created": 3343,
+    "entities_created": 5358,
+    "relations_created": 8101,
+    "implementation_chunks_created": 3345,
     "processing_time": 0.0,
-    "timestamp": 1751932914.553788
+    "timestamp": 1751934159.361294
   },
   "test_auto_config/hello.py": {
     "hash": "f5706ec714f93d134d0df5dc8c024fda1079dd7f448a43d5cf481cab4fd56562",
@@ -714,9 +714,9 @@
     "mtime": 1751919056.3067503
   },
   "claude_indexer/cleanup/scorer.py": {
-    "hash": "998d76be5a36c4d826739b7f7a8f1845b1c77c74cd24e2a18ace05aa6f965158",
-    "size": 13809,
-    "mtime": 1751925882.5647576
+    "hash": "e210b45173de1dd50e68ad23e105b866dc87b368aa913c65208b9f0f2689a04f",
+    "size": 14139,
+    "mtime": 1751933157.2241118
   },
   "claude_indexer/cleanup/resolver.py": {
     "hash": "61ae68ec8ef7f4e613316a7a0169000909bfb5008e3d97c41333e6e3e837c4c0",
@@ -814,13 +814,13 @@
     "mtime": 1751932823.8718345
   },
   "prompts/clean_manual_entries.md": {
-    "hash": "ffee4cc2ac83b4ebbc1782a069ad2eb45d9a212cdcb9bcf6887b8de071941684",
-    "size": 6400,
-    "mtime": 1751932768.312772
+    "hash": "288f8f9d8e73f35a5a009ef0205629d05e00f4cb9cd0fca4c2ab34361c03439a",
+    "size": 7141,
+    "mtime": 1751934106.5792074
   },
   "memories.md": {
-    "hash": "abdd2991761ad4254d731db80ba0d59a6fe4da3ea0732087d42ccfe598850077",
-    "size": 446179,
-    "mtime": 1751932860.7956307
+    "hash": "4a56ef89125b5bc131e0708f155d8dd9286d71b6fa2f4dc0e5c42a3492326588",
+    "size": 451278,
+    "mtime": 1751933839.7235765
   }
 }

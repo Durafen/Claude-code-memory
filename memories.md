@@ -1,6 +1,6 @@
-# Manual Entries Task List - parser-test-memory
+# Manual Entries Task List - claude-memory
 
-All 421 manual entries (excluding documentation) formatted as task list
+All 416 manual entries (excluding documentation) formatted as task list
 
 Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
@@ -14,21 +14,9 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **get_implementation token overflow bug** (ID: `1318037369`)
-
-    ISSUE: get_implementation with scope='dependencies' returns 27K+ tokens, exceeding 25K limit. LOCATION: mcp-qdrant-memory/src/index.ts line 466-467 in getEntitySpecificGraph method. ROOT CAUSE: Direct JSON.stringify(entityGraph) without token management like read_graph uses. SYMPTOM: MCP tool response exceeds maximum allowed tokens (25000) error. PATTERN: Same token overflow issue we fixed for read_graph with StreamingResponseBuilder. SOLUTION: Apply StreamingResponseBuilder with 24k token limit to getEntitySpecificGraph method. CODE LOCATION: const responseText = JSON.stringify(entityGraph); needs streaming response wrapper. PRIORITY: High - breaks get_implementation functionality for large entity networks
-
----
-
 [ ] **Rethink MCP Default Limits Strategy** (ID: `1582209217`)
 
     Current defaults may still be suboptimal for different codebase sizes. Fixed defaults (150/50/100) work for 12k entity codebases but may be wrong for others. Small projects (<1k entities): Current defaults return too much unnecessary data. Giant projects (>50k entities): Even 150 limit might be too restrictive. Token consumption varies by entity complexity, not just count. Need dynamic defaults based on collection size detection. Consider: Auto-detect collection size and adjust limits proportionally. Proposal: Small (<1k)=50, Medium (1k-10k)=100, Large (10k-50k)=150, XL (>50k)=200. Alternative: Let smart mode auto-calculate optimal limit based on token budget. Challenge: Balance between comprehensive results and token efficiency. Testing needed: Profile token usage across different project sizes. Consider user-configurable defaults in MCP server environment variables
-
----
-
-[ ] **Watcher JS File Filter Bug** (ID: `1619745768`)
-
-    Critical bug: Watcher handles Python file operations but ignores JavaScript files completely. Root cause: In handler.py:336-345, Watcher.__init__ tries ProjectConfigManager.get_include_patterns() but catches ALL exceptions and falls back to hardcoded ['*.py', '*.md'] patterns. Project config exists at .claude-indexer/config.json with correct JS patterns: *.js, *.jsx, *.ts, *.tsx. WatcherBridgeHandler uses include_patterns from Watcher init which defaults to only Python files when exception occurs. File filtering happens in _should_process_file() line 526: if not self._matches_patterns(path.name, self.include_patterns). Solution: Fix exception handling in Watcher.__init__ to properly load project config patterns or improve fallback logic. Critical finding: Watcher failing to load project config due to Pydantic BaseModel error: 'BaseModel.__init__() takes 1 positional argument but 2 were given'. Error occurs in Watcher.__init__ lines 334-345 when trying ProjectConfigManager.get_include_patterns(). When exception occurs, watcher falls back to hardcoded defaults: include_patterns = ['*.py', '*.md']. This explains why JS files are ignored - project config WITH correct JS patterns exists but can't be loaded due to Pydantic version mismatch. Solution needed: Fix BaseModel initialization compatibility issue or improve fallback pattern detection. Observed: 'Could not load project config, using defaults: BaseModel.__init__() takes 1 positional argument but 2 were given'. SOLUTION IMPLEMENTED: Fixed hardcoded fallback patterns in handler.py:347. Changed from ['*.py', '*.md'] to comprehensive patterns including JS files. Root cause was inadequate fallback when ProjectConfig loading failed. CURRENT STATUS: BaseModel error not reproducing - may have been transient. RESULT: JS files now processed by watcher (confirmed test-watcher.js was detected and handled). Implementation: Improved fallback patterns ensure JS support even if project config fails to load. Pattern list: *.py, *.pyi, *.js, *.jsx, *.ts, *.tsx, *.mjs, *.cjs, *.html, *.htm, *.css, *.json, *.yaml, *.yml, *.md, *.txt. RESOLUTION COMPLETE: cli_full.py line 474 now correctly uses ProjectConfigManager(project_path) instead of ProjectConfig(project_path). Configuration loading works properly. Issue was resolved and no longer exists as a bug.
 
 ---
 
@@ -38,9 +26,9 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Rapid relation loss during file deletion** (ID: `1947449624`)
+[ ] **Watcher JS File Filter Bug** (ID: `2442157338`)
 
-    ORIGINAL PROBLEM: Lost ~3,000-4,000 relations during single file deletion events in rapid succession. TIMELINE: 04:29:43-04:29:47 - README.md deletion caused 4,204 orphaned relations to be removed from 11,692 total. FILE TRIGGER: mcp-qdrant-memory/README.md deletion detected by file watcher caused cascading relation cleanup. MATH VERIFICATION: 11,692 relations → 7,488 relations = 4,204 relations removed (confirmed in logs). NOT A BUG: This was legitimate orphan cleanup - README.md contained 67 entities with extensive cross-references. ROOT CAUSE: Large documentation files create many relations, deletion triggers proper orphan cleanup. USER PERCEPTION: Appears like data loss but actually correct behavior - removing orphaned relations prevents database corruption. RESOLUTION: No action needed - rapid relation removal during file deletion is intentional data integrity protection
+    Critical bug: Watcher handles Python file operations but ignores JavaScript files completely. Root cause: In handler.py:336-345, Watcher.__init__ tries ProjectConfigManager.get_include_patterns() but catches ALL exceptions and falls back to hardcoded ['*.py', '*.md'] patterns. Project config exists at .claude-indexer/config.json with correct JS patterns: *.js, *.jsx, *.ts, *.tsx. WatcherBridgeHandler uses include_patterns from Watcher init which defaults to only Python files when exception occurs. File filtering happens in _should_process_file() line 526: if not self._matches_patterns(path.name, self.include_patterns). Solution: Fix exception handling in Watcher.__init__ to properly load project config patterns or improve fallback logic. Critical finding: Watcher failing to load project config due to Pydantic BaseModel error: 'BaseModel.__init__() takes 1 positional argument but 2 were given'. Error occurs in Watcher.__init__ lines 334-345 when trying ProjectConfigManager.get_include_patterns(). When exception occurs, watcher falls back to hardcoded defaults: include_patterns = ['*.py', '*.md']. This explains why JS files are ignored - project config WITH correct JS patterns exists but can't be loaded due to Pydantic version mismatch. Solution needed: Fix BaseModel initialization compatibility issue or improve fallback pattern detection. Observed: 'Could not load project config, using defaults: BaseModel.__init__() takes 1 positional argument but 2 were given'. SOLUTION IMPLEMENTED: Fixed hardcoded fallback patterns in handler.py:347. Changed from ['*.py', '*.md'] to comprehensive patterns including JS files. Root cause was inadequate fallback when ProjectConfig loading failed. CURRENT STATUS: BaseModel error not reproducing - may have been transient. RESULT: JS files now processed by watcher (confirmed test-watcher.js was detected and handled). Implementation: Improved fallback patterns ensure JS support even if project config fails to load. Pattern list: *.py, *.pyi, *.js, *.jsx, *.ts, *.tsx, *.mjs, *.cjs, *.html, *.htm, *.css, *.json, *.yaml, *.yml, *.md, *.txt. RESOLUTION COMPLETE: cli_full.py line 474 now correctly uses ProjectConfigManager(project_path) instead of ProjectConfig(project_path). Configuration loading works properly. Issue was resolved and no longer exists as a bug.
 
 ---
 
@@ -62,9 +50,9 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **CRITICAL: JS/TS Inheritance Relations Still Missing** (ID: `3632652408`)
+[ ] **Missing Timestamp Infrastructure for Manual Entry Boosting** (ID: `3699910292`)
 
-    🚨 CRITICAL ISSUE DISCOVERED: JavaScript/TypeScript inheritance relations NOT working in current implementation. ✅ ENTITIES EXIST: DatabaseManager, CacheManager, BaseManager entities are created properly. ❌ INHERITANCE RELATIONS MISSING: No 'inherits' or 'extends' relations found in search results. 🔍 TEST CASE VERIFICATION:. • JavaScript: JSONParser extends BaseParser, XMLParser extends BaseParser, ValidationError extends Error. • TypeScript: DatabaseManager extends BaseManager, CacheManager extends BaseManager, CustomError extends Error, ValidationError extends CustomError. 📊 SEARCH RESULTS:. • Search for "inherits extends" --type relation: No results found. • Search for "BaseParser JSONParser XMLParser extends" --type relation: No results found. • Classes exist as entities but inheritance relationships missing. 🔍 ROOT CAUSE ANALYSIS NEEDED:. • _extract_inheritance_relations exists in javascript_parser.py:488. • Previous memory indicates "14 inheritance relations now correctly extracted" but not for our test files. • Gap between implemented function and actual parsing of JS class extends syntax. • May be Tree-sitter AST node type mismatch or parsing logic issue. 📋 NEXT STEPS:. • Debug _extract_inheritance_relations in javascript_parser.py. • Check Tree-sitter AST for class_declaration with extends_clause. • Verify class_heritage parsing for JavaScript vs TypeScript. • Test with inheritance-specific test files. ⚠️ PRIORITY: HIGH - This affects fundamental code relationship tracking for JS/TS projects. ✅ RESOLVED: JavaScript/TypeScript inheritance relations ARE WORKING in current implementation!. 🔧 ROOT CAUSE: Search tool limitation, not extraction failure. ✅ VERIFIED: Direct database query shows 18 inheritance relations working:. • DatabaseManager: inherits: BaseManager. • CacheManager: inherits: BaseManager. • ServiceError: inherits: Error. • ValidationError: inherits: CustomError. • TypeScriptProcessor: inherits: DataProcessor. • User: inherits: UserInterface. • Auditable: inherits: Timestamped. • And 11 more inheritance relations properly extracted. 🔍 ISSUE: CLI search tool not finding relations by relation_type filtering. ✅ WORKAROUND: Direct Qdrant queries work perfectly for relation verification. 📈 STATUS CHANGED: ACTIVE_ISSUE → RESOLVED
+    ISSUE: No timestamp tracking exists anywhere in our vector database system, preventing implementation of recency-based boosting for manual entries. SCOPE: Both claude-indexer and MCP server lack timestamp fields in entity payloads. Neither indexed_at, created_at, nor any temporal metadata is stored. IMPACT: Cannot implement timestamp boosting for newer manual entries without adding fundamental timestamp infrastructure first. EVIDENCE: Direct database inspection shows payloads contain only {entity_name, entity_type, content, chunk_type} - no temporal fields. CURRENT STATE: All 45,959 entries across 13 collections lack creation/modification timestamps. PROPOSED SOLUTION: Add timestamp fields to both indexer payload creation and MCP persistEntity() function. Implement datetime.now().isoformat() during entity storage. IMPLEMENTATION LOCATIONS: claude_indexer/indexer.py entity creation, mcp-qdrant-memory/src/persistence/qdrant.ts persistEntity() method. PREREQUISITE: Timestamp infrastructure must be implemented before any recency boosting logic can be effective. RESEARCH SHOWS: Industry standard for vector DB recency boosting uses exponential decay formulas like Math.exp(-days_old/60) with 30-60 day half-lives. USER REQUEST: Originally wanted to boost newer manual entries first in search results, but discovered fundamental infrastructure gap
 
 ---
 
@@ -142,6 +130,12 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **Claude Code Memory System Overview** (ID: `2993201211`)
+
+    MULTI-LANGUAGE SUPPORT: Python, JavaScript/TypeScript, JSON, YAML, HTML, CSS, Text files (24 extensions total) with Tree-sitter AST parsing, Universal parser registry with language-specific implementations, Cross-language relation tracking (HTML→CSS, JavaScript→JSON dependencies). PROJECT CONFIGURATION: Use .claude-indexer/config.json for project-specific settings, Hierarchical configuration with global/project/API levels, Auto-detected incremental mode based on state file existence. SYSTEM BENEFITS: Automatic context (Claude knows entire project structure), Semantic search (find code by intent not keywords), Cross-session memory (persistent understanding), True automation (zero manual intervention), Pattern recognition (learns coding patterns), Dependency tracking (understands impact of changes). PREREQUISITES: Python 3.12+ installed, Node.js 18+ for MCP server, Git for version control, Claude Code installed and configured, Qdrant running (Docker or local). TECHNOLOGY STACK: delorenj/mcp-qdrant-memory + Tree-sitter + Jedi + advanced automation provides enterprise-grade memory capabilities while remaining accessible for individual developers and teams
+
+---
+
 [ ] **Universal Parser Registry Flow** (ID: `3167188467`)
 
     Central registry in claude_indexer/analysis/parser.py manages all parser types. Automatic parser selection based on file extensions - no manual configuration needed. ParserRegistry.get_parser(file_path) returns appropriate TreeSitterParser instance. Supports 24 file extensions across 10+ programming languages. Updated _register_default_parsers() includes: JavaScriptParser, JSONParser, HTMLParser, CSSParser, YAMLParser, TextParser. Maintains backward compatibility with existing PythonParser and MarkdownParser. CoreIndexer integration seamless - no changes needed to existing indexing workflow. Extension mapping: .js/.ts → JavaScriptParser, .json → JSONParser, .html → HTMLParser, etc.
@@ -175,12 +169,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **Claude Indexer Version History v2.2-v1.x** (ID: `3713922259`)
 
     architecture_pattern: Claude Indexer Version History v2.2-v1.x | PATTERN: Progressive architecture evolution from dual-mode to simplified Direct Qdrant | SOLUTION: v2.2 Layer 2 orphaned relation cleanup with Qdrant scroll API | IMPLEMENTATION: Auto-detection mode - state file determines incremental vs full (15x faster) | RESULTS: v2.0 Breaking changes - removed MCP backend, simplified architecture (-445 LOC) | SCALABILITY: v1.x dual-mode to v2.x single backend reduced complexity by 30% | PREVENTION: Each version improved automation and reduced manual intervention | IMPLEMENTATION: 35+ new tests for v2.2, 158/158 passing with simplified architecture
-
----
-
-[ ] **Claude Code Memory System Overview** (ID: `3756388349`)
-
-    MULTI-LANGUAGE SUPPORT: Python, JavaScript/TypeScript, JSON, YAML, HTML, CSS, Text files (24 extensions total) with Tree-sitter AST parsing, Universal parser registry with language-specific implementations, Cross-language relation tracking (HTML→CSS, JavaScript→JSON dependencies). PROJECT CONFIGURATION: Use .claude-indexer/config.json for project-specific settings, Hierarchical configuration with global/project/API levels, Auto-detected incremental mode based on state file existence. SYSTEM BENEFITS: Automatic context (Claude knows entire project structure), Semantic search (find code by intent not keywords), Cross-session memory (persistent understanding), True automation (zero manual intervention), Pattern recognition (learns coding patterns), Dependency tracking (understands impact of changes). PREREQUISITES: Python 3.12+ installed, Node.js 18+ for MCP server, Git for version control, Claude Code installed and configured, Qdrant running (Docker or local). TECHNOLOGY STACK: delorenj/mcp-qdrant-memory + Tree-sitter + Jedi + advanced automation provides enterprise-grade memory capabilities while remaining accessible for individual developers and teams
 
 ---
 
@@ -236,6 +224,12 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **Claude Code Memory Configuration System** (ID: `891218369`)
+
+    CONFIGURATION HIERARCHY: Three-level system - Global config (~/.claude-indexer/config.json for service settings), Project config ({project}/.claude-indexer/config.json for project-specific), API settings (settings.txt for API keys and embedding providers). STATE MANAGEMENT: State files at {project}/.claude-indexer/{collection}.json track incremental indexing metadata, Logs at {project}/logs/{collection}.log for project-specific debugging, Incremental mode auto-detected based on state file existence for 15x faster processing. EMBEDDING PROVIDERS: Voyage AI recommended (85% cost reduction) - VOYAGE_API_KEY, EMBEDDING_PROVIDER=voyage, EMBEDDING_MODEL=voyage-3-lite; OpenAI default - OPENAI_API_KEY, EMBEDDING_PROVIDER=openai, EMBEDDING_MODEL=text-embedding-3-small. DIRECT QDRANT INTEGRATION: Auto-detects Full mode (first run) vs Incremental mode (subsequent runs 15x faster), --clear preserves manual memories, --clear-all deletes everything including manual entries. ESSENTIAL COMMANDS: MCP setup (claude-indexer add-mcp -c project-name), File watching (claude-indexer watch start -p /path -c name --debounce 3.0), Service management (claude-indexer service start, claude-indexer service add-project), Search (claude-indexer search 'query' -p /path -c name --type entity)
+
+---
+
 [ ] **Prerequisites and System Requirements** (ID: `942951316`)
 
     PYTHON: Version 3.12+ required for modern async and typing features. NODEJS: Version 18+ required for MCP server functionality. GIT: Version control for change tracking and automation hooks. CLAUDE_CODE: Installed and configured for MCP integration. QDRANT: Running instance (Docker or local) on port 6333. ARCHITECTURE: Supports macOS, Linux, Windows with consistent functionality
@@ -266,15 +260,15 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **project-configuration-system-v26** (ID: `2277529265`)
+[ ] **parser-test-memory MCP Testing Environment** (ID: `2184195749`)
 
-    Each project can have its own .claude-indexer/config.json for custom settings. Configuration includes indexing.file_patterns with include/exclude arrays. Parser-specific config: javascript (use_ts_server, jsx, typescript), json (extract_schema, special_files), text (chunk_size, max_line_length). Configuration Hierarchy (Priority Order): 1. Project Config (.claude-indexer/config.json) - Highest priority, 2. Environment Variables - Override specific values, 3. Global Config (settings.txt) - Default values, 4. System Defaults - Minimal fallback. Project-level customization allows per-project parser behavior and file filtering. JSON schema support for package.json and tsconfig.json special handling. Text processing configurable with chunk_size and max_line_length parameters
+    MCP Server: parser-test-memory for isolated testing environment. Database Collection: parser-test for comprehensive validation without production contamination. Access Pattern: mcp__parser-test-memory__ prefix for all test operations. Testing Scope: Indexer validation, parser testing, relation verification, incremental updates, chunk processing. Workflow: 1) Index test files with claude-indexer -c parser-test, 2) Validate via MCP tools (search_similar, read_graph), 3) Test specific components with get_implementation. Safety Protocol: Complete isolation from production claude-memory collection. Performance: Ideal for debugging parser changes and indexer functionality. Integration: MCP server configured for comprehensive test validation
 
 ---
 
-[ ] **Claude Code Memory Configuration System** (ID: `2292305144`)
+[ ] **project-configuration-system-v26** (ID: `2277529265`)
 
-    CONFIGURATION HIERARCHY: Three-level system - Global config (~/.claude-indexer/config.json for service settings), Project config ({project}/.claude-indexer/config.json for project-specific), API settings (settings.txt for API keys and embedding providers). STATE MANAGEMENT: State files at {project}/.claude-indexer/{collection}.json track incremental indexing metadata, Logs at {project}/logs/{collection}.log for project-specific debugging, Incremental mode auto-detected based on state file existence for 15x faster processing. EMBEDDING PROVIDERS: Voyage AI recommended (85% cost reduction) - VOYAGE_API_KEY, EMBEDDING_PROVIDER=voyage, EMBEDDING_MODEL=voyage-3-lite; OpenAI default - OPENAI_API_KEY, EMBEDDING_PROVIDER=openai, EMBEDDING_MODEL=text-embedding-3-small. DIRECT QDRANT INTEGRATION: Auto-detects Full mode (first run) vs Incremental mode (subsequent runs 15x faster), --clear preserves manual memories, --clear-all deletes everything including manual entries. ESSENTIAL COMMANDS: MCP setup (claude-indexer add-mcp -c project-name), File watching (claude-indexer watch start -p /path -c name --debounce 3.0), Service management (claude-indexer service start, claude-indexer service add-project), Search (claude-indexer search 'query' -p /path -c name --type entity)
+    Each project can have its own .claude-indexer/config.json for custom settings. Configuration includes indexing.file_patterns with include/exclude arrays. Parser-specific config: javascript (use_ts_server, jsx, typescript), json (extract_schema, special_files), text (chunk_size, max_line_length). Configuration Hierarchy (Priority Order): 1. Project Config (.claude-indexer/config.json) - Highest priority, 2. Environment Variables - Override specific values, 3. Global Config (settings.txt) - Default values, 4. System Defaults - Minimal fallback. Project-level customization allows per-project parser behavior and file filtering. JSON schema support for package.json and tsconfig.json special handling. Text processing configurable with chunk_size and max_line_length parameters
 
 ---
 
@@ -338,12 +332,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **parser-test-memory MCP Testing Environment** (ID: `4189737441`)
-
-    MCP Server: parser-test-memory for isolated testing environment. Database Collection: parser-test for comprehensive validation without production contamination. Access Pattern: mcp__parser-test-memory__ prefix for all test operations. Testing Scope: Indexer validation, parser testing, relation verification, incremental updates, chunk processing. Workflow: 1) Index test files with claude-indexer -c parser-test, 2) Validate via MCP tools (search_similar, read_graph), 3) Test specific components with get_implementation. Safety Protocol: Complete isolation from production claude-memory collection. Performance: Ideal for debugging parser changes and indexer functionality. Integration: MCP server configured for comprehensive test validation
-
----
-
 [ ] **README Documentation Update** (ID: `4217679251`)
 
     Repositioned Claude Code self-installation as the primary setup method instead of manual installation. Changed main header from '30 Seconds' to 'Activate God Mode Fast' for better clarity. Made manual installation the secondary option with proper heading hierarchy. Emphasized zero-effort automation through Claude Code's built-in capabilities. Improved user experience by leading with the easiest installation path. Commit: docs: prioritize Claude Code self-installation as primary setup method
@@ -396,6 +384,47 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **Complete Memory Leak Detection and Service Monitoring Guide** (ID: `233959861`)
+
+    **COMPREHENSIVE SERVICE RESOURCE MONITORING STRATEGY**
+    
+    **Problem Domain**: Memory leak detection and resource management in long-running services with continuous monitoring.
+    
+    **Complete Workflow**:
+    1. **Service Architecture**: Multi-project daemon with isolated watchers prevents cross-project interference. Service management includes start/stop/status commands for lifecycle control.
+    2. **Resource Monitoring**: Token management with smart summarization prevents 393k overflow, maintains <25k responses. Background processes track memory usage patterns during extended operations.
+    3. **Memory Leak Detection**: Watch for indexing bloat (>120% = investigate, >150% = force optimization), monitor subprocess timeouts in test suites, track async vs sync state mismatches.
+    4. **Log Analysis**: Project logs at {project_path}/logs/{collection_name}.log, service logs at ~/.claude-indexer/logs/. Use --verbose flag for detailed troubleshooting, tail -f for real-time monitoring.
+    5. **Performance Metrics**: Response time tracking (2.9ms excellent baseline), entity processing rates, collection health monitoring via qdrant_stats.py.
+    
+    **Best Practices**:
+    - **Daemon Isolation**: Service isolation prevents cross-project interference, independent watchers for each project
+    - **Resource Limits**: Automatic entity limiting (50 per type default), configurable token limits prevent overflow
+    - **State Management**: SHA256-based state persistence, incremental processing reduces 94% processing overhead
+    - **Debug Protocols**: Use dedicated test collections (debug-test, watcher-test) to avoid production contamination
+    - **Backup Systems**: Manual memory backup provides safety during maintenance operations
+    
+    **Common Pitfalls**:
+    - **Async Lag**: State files update atomically but Qdrant upserts happen asynchronously without wait=True
+    - **Test Timeouts**: Subprocess calls without timeout parameters cause hanging in integration tests
+    - **Observer Issues**: File modification detection failures often appear as watcher problems but are async chain breaks
+    - **Memory Accumulation**: Background services accumulate resources over time without proper cleanup cycles
+    
+    **Tools & Commands**:
+    - `python utils/qdrant_stats.py` - monitor collection health and resource usage
+    - `claude-indexer service status --verbose` - detailed service diagnostics
+    - `tail -f {project_path}/logs/{collection_name}.log` - real-time monitoring
+    - `timeout 30 to timeout 110` - prevent hanging operations in production
+    - Signal handling (SIGINT, SIGTERM) for graceful daemon shutdown
+    
+    **Cross-References**:
+    - **Performance Pattern**: Token management optimization and incremental processing
+    - **Implementation Pattern**: Background service architecture with multi-project support
+    - **Configuration Pattern**: Project-level config with debounce settings and file watching
+    - **Architecture Pattern**: Service isolation and state persistence strategies
+
+---
+
 [ ] **Final Relation Analysis Report v2.7.1** (ID: `280463095`)
 
     SEMANTIC FILTERING VERIFICATION COMPLETE. MAJOR SUCCESS: Garbage pandas relations (to_csv, to_json) now properly handled - converted to semantic file operation relations with import_type metadata. REMAINING GARBAGE: Still extracting 'or', 'objects', 'Path' as function calls in semantic_metadata.calls. INHERITANCE BREAKTHROUGH: HTMLParser→TreeSitterParser, JSONParser→TreeSitterParser relations now working. MISSING CRITICAL: Inner function calls (_extract_file_operations→find_file_operations), import statements, RelationFactory calls. PROGRESS METRICS: find_file_operations 22→8 relations (garbage reduction), HTMLParser 48→33 relations, JSONParser 38→51 relations. ROOT CAUSE: Tree-sitter capturing semantic_metadata vs actual relation extraction - two different systems. SEMANTIC SUCCESS: pandas methods now create proper file operation relations with metadata context. NEXT PHASE: Need import statement parsing, inner function tracking, factory pattern recognition. CORRECTION: Memory recheck reveals original assessment was incorrect. SUCCESS: Inner function relations ARE working (find_file_operations → extract_string_literal). SUCCESS: Factory pattern relations ARE working (HTMLParser → create_imports_relation). SUCCESS: Inheritance relations confirmed working (HTMLParser → TreeSitterParser). ONLY MISSING: Import statement parsing (from X import Y patterns). ACTUAL STATUS: 🟢 Major Success - 90% of critical relations working correctly. Entity-specific debugging methodology highly effective for accurate analysis. Relation extraction system performing much better than initially assessed
@@ -408,9 +437,9 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Ultra-Minimal Query Pattern Discovery** (ID: `328087607`)
+[ ] **MCP Search Theory Testing Methodology** (ID: `317436647`)
 
-    CHAMPION PATTERN: 'entity create_metadata_chunk' = 1.035 score (+12.7% vs baseline). WINNER CHARACTERISTICS: 24 characters (62% reduction), perfect precision, right function ranked first. FAILURE PATTERN: Adding words to already-optimized searches reduces performance. UNIVERSAL RULE: Direct entity names work best when baseline is strong (>1.0 score). CONTEXT ENHANCEMENT: Only helps weak searches (<0.9 score). TESTED FORMATS: Questions ('Which entity is named X?') work well, commands ('Get X') add noise. KEY INSIGHT: Sometimes less is more - shortest query delivers best results for poorly-performing searches only.
+    METHODOLOGY: Systematic approach to validate search theories with real data before implementation. TESTED THEORY: 'exact:' prefix detection for field-based searches. RESULTS: Theory failed - 'exact: login' performed worse than semantic search, MCP treats prefixes as phrase search, no field filtering occurs. VALIDATION FRAMEWORK: 1) Test with actual codebase entities, 2) Compare baselines vs enhancements, 3) Measure scores across entity types, 4) Verify ranking accuracy. DISCOVERY: Natural language instructions work better than artificial syntax. CRITICAL LESSON: Test theories empirically before building complex solutions - assumptions often fail when confronted with real data.
 
 ---
 
@@ -456,15 +485,15 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **June 27 2025 Clear Operation Bug Discovery** (ID: `674805841`)
+[ ] **Claude Code Memory Debugging and Logging Patterns** (ID: `625119742`)
 
-    debugging_pattern: June 27 2025 Clear Operation Bug Discovery | DISCOVERY: Clear operation has inconsistent automated entity detection logic vs stats counting | ROOT CAUSE: qdrant.py:491-496 missing automation fields check (line_number, signature, docstring, etc.) | STATS LOGIC: Counts entities with ANY automation field as automated | CLEAR LOGIC: Only removes entities with non-empty file_path OR relations structure | RESULT: 4 automated entities survive --clear operation when they should be removed | DISCREPANCY: MCP shows 223 entities, qdrant_stats shows 226 points - timing/async gap | INVESTIGATION METHOD: Used Task agent to analyze clear vs stats detection algorithms | LOCATION: claude_indexer/storage/qdrant.py lines 491-496 needs automation fields elif block | FIX NEEDED: Add elif any(field in point.payload for field in automation_fields) check | IMPACT: --clear doesn't fully clear automated entities as users expect
+    PROJECT FILE ORGANIZATION: State files at {project_path}/.claude-indexer/{collection_name}.json track incremental indexing metadata, Project logs at {project_path}/logs/{collection_name}.log for debugging, Project config at {project_path}/.claude-indexer/config.json for project-specific settings, Service logs at ~/.claude-indexer/logs/ as fallback, Service config at ~/.claude-indexer/config.json for global configuration. DEBUG COMMANDS: claude-indexer -p /path -c name --verbose for troubleshooting, claude-indexer service status --verbose for detailed service logs, tail -f {project_path}/logs/{collection_name}.log for real-time monitoring, claude-indexer -p /path/to/small-test-dir -c debug-test --verbose for testing (recommended 1-2 Python files only for cleaner output). MCP SERVER SETUP PATTERNS: Option 1 (recommended) - claude-indexer add-mcp -c project-name reads API keys from settings.txt automatically, Option 2 (manual) - claude mcp add project-memory with explicit environment variables for OPENAI_API_KEY, QDRANT_API_KEY, QDRANT_URL, QDRANT_COLLECTION_NAME. TESTING BEST PRACTICES: Use dedicated test collections (watcher-test, debug-test) to avoid production contamination, Use 1-2 Python files for cleaner debug output, Test indexing/relations/file processing/incremental updates/parser functionality separately, MCP server already configured for watcher-test collection
 
 ---
 
-[ ] **MCP Search Results Sorting Fix - July 2, 2025** (ID: `675468256`)
+[ ] **June 27 2025 Clear Operation Bug Discovery** (ID: `674805841`)
 
-    ISSUE: MCP search results were not sorted by score despite scores being preserved. ROOT CAUSE: searchSimilar() applies score boosts (1.4x metadata, 1.3x functions/classes, 1.2x implementation) but never re-sorts results afterward. BEHAVIOR: Qdrant returns results sorted, but after applying different multipliers, order becomes incorrect. FIX LOCATION: mcp-qdrant-memory/src/persistence/qdrant.ts line 436. SOLUTION: Added validResults.sort((a, b) => b.score - a.score) before return statement. IMPLEMENTATION: Results now properly sorted by boosted scores (highest first). BUILD STATUS: npm run build completed successfully. STATUS: Fixed and deployed - MCP search results now properly sorted by relevance score
+    debugging_pattern: June 27 2025 Clear Operation Bug Discovery | DISCOVERY: Clear operation has inconsistent automated entity detection logic vs stats counting | ROOT CAUSE: qdrant.py:491-496 missing automation fields check (line_number, signature, docstring, etc.) | STATS LOGIC: Counts entities with ANY automation field as automated | CLEAR LOGIC: Only removes entities with non-empty file_path OR relations structure | RESULT: 4 automated entities survive --clear operation when they should be removed | DISCREPANCY: MCP shows 223 entities, qdrant_stats shows 226 points - timing/async gap | INVESTIGATION METHOD: Used Task agent to analyze clear vs stats detection algorithms | LOCATION: claude_indexer/storage/qdrant.py lines 491-496 needs automation fields elif block | FIX NEEDED: Add elif any(field in point.payload for field in automation_fields) check | IMPACT: --clear doesn't fully clear automated entities as users expect
 
 ---
 
@@ -492,12 +521,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Smart Clearing Strategy Implementation** (ID: `795327048`)
-
-    debugging_pattern: Smart Clearing Strategy Implementation | PATTERN: Differentiated clearing strategies for manual vs automated content | PROBLEM: --clear-all deleted valuable manual insights along with auto-indexed data | SOLUTION: --clear preserves manual memories, --clear-all removes everything | IMPLEMENTATION: Detection via presence of automation fields in entity metadata | RESULTS: Zero manual entry loss during routine maintenance operations | PREVENTION: Backup system provides additional safety for critical insights | SCALABILITY: Works efficiently with collections containing millions of points
-
----
-
 [ ] **manual_memory_backup logging bug** (ID: `823753160`)
 
     The backup_monitor.log file is being created in the main project directory instead of the proper logs/ directory. According to indexer_logging.py:144-158, logs should go to: 1) {project_path}/logs/{collection_name}.log or 2) ~/.claude-indexer/logs/claude-indexer.log as fallback. The backup_manual_entries function in manual_memory_backup.py:265-268 correctly creates a backups/ directory for backup files, but any logging from this script should use the proper logging infrastructure. Solution: Ensure manual_memory_backup.py uses the setup_logging() function from indexer_logging.py instead of creating logs in the main directory
@@ -522,6 +545,12 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **July 2025 Pytest Major Fixes** (ID: `933059831`)
+
+    MAJOR SUCCESS: Fixed critical integration test failures in test_indexer_flow.py. ROOT CAUSE 1: no_errors_in_logs function too strict - failed on legitimate WARNING messages about collection not existing. SOLUTION 1: Enhanced error detection to skip benign warnings like 'Failed to get global entities' and 'collection doesn't exist'. ROOT CAUSE 2: CLI output format changed - tests expected 'Files processed: X' but CLI shows 'Total Vectored Files: X'. SOLUTION 2: Made CLI output assertions flexible to accept multiple valid formats. ROOT CAUSE 3: State file validation expected hash/size/mtime for ALL entries including _statistics metadata. SOLUTION 3: Skip validation for special metadata entries starting with underscore. RESULTS: TestACustomIncrementalBehavior 4/4 tests now PASSING (was 0/4). UNIT TESTS: 214/248 passing (86.3% pass rate) vs previous much lower rate. REMAINING: Some search functionality and progressive disclosure tests still need work. PATTERN: Integration tests more sensitive to CLI output format changes than unit tests. TIMING: Tests complete quickly after fixes - no more timeout issues. VALIDATION: Fixed tests properly verify incremental indexing, file deletion, and state management
+
+---
+
 [ ] **Logging Test Failures Pattern** (ID: `936798034`)
 
     debugging_pattern: Logging Test Failures Pattern | TESTS FAILING: test_scroll_debug_logging, test_infinite_loop_warning_logging, test_max_iterations_warning_logging | ISSUE: Debug and warning log messages not being captured correctly in mocked tests | ROOT CAUSE: Mock logger expectations don't match actual logging behavior in updated code | PATTERN: Unit tests with mocked components failing due to incorrect logging expectations | PRIORITY: Low - test maintenance issue not functional regression
@@ -531,12 +560,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **OrphanCleanupEnhancement** (ID: `951386158`)
 
     SOLUTION: Module resolution enhancement for _cleanup_orphaned_relations. Root cause: Import relations created with module names (claude_indexer.analysis.entities) but entities stored as file paths (/path/to/entities.py). Enhancement strategy: Add module-to-filepath resolution before orphan detection. Safety analysis: 18 callers including CoreIndexer, AsyncWatcherHandler, collection management - ALL benefit from more accurate orphan detection. Implementation location: QdrantStore._cleanup_orphaned_relations method. No breaking changes - same interface, improved accuracy. Prevents legitimate Python import relations from being deleted as false orphans
-
----
-
-[ ] **Memory-Driven Debugging Workflow** (ID: `987984812`)
-
-    §dm shortcut: Debug with memory - search similar patterns first, analyze with historical context, store solution patterns discovered. §l shortcut: Analyze running logs, find errors/warnings, check memory for similar error patterns, show summary, store new error patterns discovered. Don't store just bug info - store solutions, insights about how code works, and resolution patterns. Use semantic search before implementing: search_similar for finding related entities and past solutions. Cross-session continuity: rely on memory to maintain context between Claude Code sessions rather than re-explaining. Memory-first approach: search existing memory for relevant patterns, solutions, architectural decisions before starting tasks
 
 ---
 
@@ -762,12 +785,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Claude Code Memory Debugging and Logging Patterns** (ID: `1987455280`)
-
-    PROJECT FILE ORGANIZATION: State files at {project_path}/.claude-indexer/{collection_name}.json track incremental indexing metadata, Project logs at {project_path}/logs/{collection_name}.log for debugging, Project config at {project_path}/.claude-indexer/config.json for project-specific settings, Service logs at ~/.claude-indexer/logs/ as fallback, Service config at ~/.claude-indexer/config.json for global configuration. DEBUG COMMANDS: claude-indexer -p /path -c name --verbose for troubleshooting, claude-indexer service status --verbose for detailed service logs, tail -f {project_path}/logs/{collection_name}.log for real-time monitoring, claude-indexer -p /path/to/small-test-dir -c debug-test --verbose for testing (recommended 1-2 Python files only for cleaner output). MCP SERVER SETUP PATTERNS: Option 1 (recommended) - claude-indexer add-mcp -c project-name reads API keys from settings.txt automatically, Option 2 (manual) - claude mcp add project-memory with explicit environment variables for OPENAI_API_KEY, QDRANT_API_KEY, QDRANT_URL, QDRANT_COLLECTION_NAME. TESTING BEST PRACTICES: Use dedicated test collections (watcher-test, debug-test) to avoid production contamination, Use 1-2 Python files for cleaner debug output, Test indexing/relations/file processing/incremental updates/parser functionality separately, MCP server already configured for watcher-test collection
-
----
-
 [ ] **Auto-Indexing Duplicate Entity Bug - Complete Analysis December 2024** (ID: `1987803033`)
 
     EXACT MECHANISM IDENTIFIED: Auto-indexing creates duplicate entities because run_indexing_with_specific_files() does NOT delete existing entities before creating new ones.. ASYMMETRIC BEHAVIOR: Deleted files call run_indexing_with_shared_deletion() which properly deletes first (handler.py:177), but modified/created files call run_indexing_with_specific_files() which skips deletion step (handler.py:148).. BUG LOCATION: claude_indexer/watcher/handler.py line 148 - _process_file_change() calls run_indexing_with_specific_files() without entity cleanup. MISSING LOGIC: run_indexing_with_specific_files() at main.py:157 goes directly to _process_file_batch() and _store_vectors() without calling _handle_deleted_files() first. WORKING DELETION WORKFLOW: run_indexing_with_shared_deletion() (main.py:14) calls indexer._handle_deleted_files() which uses find_entities_for_file() to find and delete existing entities. EXACT FIX NEEDED: Add entity cleanup loop in run_indexing_with_specific_files() before line 157 - for each file in paths_to_process: call indexer._handle_deleted_files(collection_name, relative_path). CODE PATTERN: Convert Path to relative_path using path.relative_to(project), then call indexer._handle_deleted_files(collection_name, str(relative_path)). VERIFICATION: This explains all 5 duplicate files found - utils/qdrant_stats.py, handler.py, chat_processor.py, storage.py, and others created through auto-indexing. IMPACT: Every file modification through watcher creates NEW entities instead of replacing old ones, causing exponential duplicate growth
@@ -813,6 +830,12 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **OrphanCleanupFix_v2.7.2_COMPLETE** (ID: `2147394345`)
 
     PRODUCTION DEPLOYMENT: Enhanced orphan cleanup with comprehensive module resolution. Commit: 7f822b7 - feat: implement enhanced orphan cleanup with comprehensive module resolution. Resolution strategies: File-level modules, relative imports, package-level imports. Performance: 115 legitimate orphans cleaned, 0 false positives. Impact: All 18 orphan cleanup callers benefit from enhanced accuracy. Testing: Comprehensive validation with real-world scenarios. Status: Ready for production use across Python projects with module imports. Version: v2.7.2 enhancement to core orphan detection system
+
+---
+
+[ ] **Test Search Logic Fix July 2025** (ID: `2192418212`)
+
+    MAJOR SUCCESS: Fixed test search verification logic causing widespread test failures | ROOT CAUSE: Tests were checking hit.payload.get('name', '') which is always 'NO_NAME', instead of 'entity_name' where actual names are stored | FIXES APPLIED: 1) Enhanced verify_entity_searchable() in conftest.py to use unique entity name matching logic 2) Fixed individual test search patterns in test_indexer_flow.py to check entity_name, name, and content fields | RESULTS: Multiple previously failing tests now pass: test_index_and_search_workflow, test_incremental_indexing_workflow, test_full_index_flow_with_real_files, test_incremental_indexing_flow | PATTERN: Search failures often require checking multiple payload fields (entity_name, name, content) rather than just one field | IMPLEMENTATION: Updated search logic to exclude relations and file paths, focus on unique entity names for precise test expectations
 
 ---
 
@@ -873,12 +896,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **Relation Extraction Issues** (ID: `2338082868`)
 
     CRITICAL: Missing inner function relations in Tree-sitter parsing. Parser functions call nested helper functions but relations not tracked. _extract_file_operations → find_file_operations relation missing. find_file_operations → extract_string_literal relation missing. Cross-file inheritance relations missing (Parser → TreeSitterParser). Import relations from entities.py missing in all parsers. GARBAGE: Generic word extraction creating false function calls. GARBAGE: Pandas method names (to_csv, to_json) extracted as calls. GARBAGE: Built-in operators (or, and) treated as function calls. Root cause: Tree-sitter parser capturing string literals as function names. Need semantic filtering to distinguish actual calls vs string content. UPDATE: Systematic verification completed. MISSING: Inheritance relations (HTMLParser extends TreeSitterParser). MISSING: File-to-file import statements (html_parser.py imports base_parsers.py). MISSING: RelationFactory.create_imports_relation() calls not tracked as HTMLParser → RelationFactory. WORKING: Inner function calls within methods properly tracked. WORKING: Cross-file function calls properly tracked. ROOT CAUSE: Tree-sitter not extracting class inheritance and import statements. SOLUTION NEEDED: Add import statement parsing and inheritance detection. COMPREHENSIVE ROOT CAUSE ANALYSIS COMPLETED. 1. INHERITANCE RELATIONS MISSING - ROOT CAUSE: _extract_named_entity() method in parser.py:262-268 creates class entities but does not extract inheritance from Tree-sitter class_definition nodes with argument_list. 2. IMPORT RELATIONS PARTIALLY MISSING - ROOT CAUSE: Only Jedi analysis extracts imports (parser.py:342-349), Tree-sitter import_statement and from_import_statement nodes are not parsed. 3. RELATIONFACTORY CALLS WORKING - Testing verified these ARE tracked correctly (HTMLParser calls create_imports_relation found). 4. GARBAGE RELATIONS FILTERED - Current entity-aware filtering working, no obvious garbage patterns in current memory. KEY FIXES NEEDED: 1) Add Tree-sitter class inheritance parsing in _extract_named_entity 2) Add Tree-sitter import statement extraction alongside Jedi
-
----
-
-[ ] **MCP Search Theory Testing Methodology** (ID: `2339752034`)
-
-    METHODOLOGY: Systematic approach to validate search theories with real data before implementation. TESTED THEORY: 'exact:' prefix detection for field-based searches. RESULTS: Theory failed - 'exact: login' performed worse than semantic search, MCP treats prefixes as phrase search, no field filtering occurs. VALIDATION FRAMEWORK: 1) Test with actual codebase entities, 2) Compare baselines vs enhancements, 3) Measure scores across entity types, 4) Verify ranking accuracy. DISCOVERY: Natural language instructions work better than artificial syntax. CRITICAL LESSON: Test theories empirically before building complex solutions - assumptions often fail when confronted with real data.
 
 ---
 
@@ -969,12 +986,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **Embedding_Metadata_Dilution_Analysis_2025** (ID: `2707052863`)
 
     FINDING: Metadata-heavy embedding content reduces similarity scores vs pure function names. QUERY_RESULTS: 'subtract function' = 0.602, 'subtract' = 0.416 (counter-intuitive). CONTENT_ANALYSIS: Metadata string includes file paths, descriptions, duplicated content. EMBEDDING_CONTENT: 'Description: subtract(a, b)\n\nSubtract second number from first. | Function: subtract | Defined in: ...'. SCORE_INTERPRETATION: 0.60 may be normal for metadata-heavy content, not necessarily low quality. CLI_VS_MCP_DISCREPANCY: CLI scores 0.811 vs MCP 0.602 for same query - different embedding providers suspected. PATTERN: Complex metadata strings dilute exact match signals in semantic embeddings. RECOMMENDATION: Consider pure function name indexing alongside metadata for exact matches
-
----
-
-[ ] **July 2025 Pytest Major Fixes** (ID: `2784340418`)
-
-    MAJOR SUCCESS: Fixed critical integration test failures in test_indexer_flow.py. ROOT CAUSE 1: no_errors_in_logs function too strict - failed on legitimate WARNING messages about collection not existing. SOLUTION 1: Enhanced error detection to skip benign warnings like 'Failed to get global entities' and 'collection doesn't exist'. ROOT CAUSE 2: CLI output format changed - tests expected 'Files processed: X' but CLI shows 'Total Vectored Files: X'. SOLUTION 2: Made CLI output assertions flexible to accept multiple valid formats. ROOT CAUSE 3: State file validation expected hash/size/mtime for ALL entries including _statistics metadata. SOLUTION 3: Skip validation for special metadata entries starting with underscore. RESULTS: TestACustomIncrementalBehavior 4/4 tests now PASSING (was 0/4). UNIT TESTS: 214/248 passing (86.3% pass rate) vs previous much lower rate. REMAINING: Some search functionality and progressive disclosure tests still need work. PATTERN: Integration tests more sensitive to CLI output format changes than unit tests. TIMING: Tests complete quickly after fixes - no more timeout issues. VALIDATION: Fixed tests properly verify incremental indexing, file deletion, and state management
 
 ---
 
@@ -1092,12 +1103,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Watcher File Detection Failure Analysis** (ID: `3470989385`)
-
-    CRITICAL FINDING: Watcher never detects file modifications - collection remains at exactly 25 points before and after file changes. FILE MODIFICATION CONFIRMED: Test successfully writes new_watched_function to foo.py but watcher doesn't process it. ASYNC CHAIN BROKEN: Either watchdog Observer not detecting file changes OR event scheduling/processing failing. TIMING NOT THE ISSUE: Even with 1.0s sleep, no processing occurs - indicates detection failure not timing. ROOT CAUSE HYPOTHESIS: Watcher initialization or Observer setup issue preventing file system event detection. NEXT STEPS: Need to trace Observer setup, event handler attachment, and file system monitoring activation. MAJOR PROGRESS: Event loop fixes successful - watcher starts properly and initial indexing works (25 points created). ROOT CAUSE IDENTIFIED: File modifications are NOT being detected by watcher system - collection remains at exactly 25 points after file changes. ASYNC CHAIN BROKEN: File modification detection fails at Observer level - either watchdog Observer not detecting changes OR WatcherBridgeHandler not scheduling events. SEARCH ISSUE SECONDARY: Entity search fails because new_watched_function never gets indexed due to detection failure. NEXT STEP: Debug why watchdog Observer or async event scheduling fails in test environment despite proper event loop context.
-
----
-
 [ ] **JavaScript Parser Inheritance Extraction Fix** (ID: `3473888094`)
 
     Fixed missing class inheritance (extends/implements) relations in JavaScript parser by correcting Tree-sitter AST navigation. Root cause: Tree-sitter JavaScript parser uses 'extends' and 'implements' node types directly, not 'extends_clause'/'implements_clause'. Solution: Updated _extract_inheritance_relations() method in javascript_parser.py to look for direct 'extends'/'implements' nodes under 'class_heritage'. Validation: 14 inheritance relations now correctly extracted including Entity→Timestamped→Auditable→User→AdminUser→SuperAdmin chain. Associated with claude_indexer/analysis/javascript_parser.py lines 457-513
@@ -1122,9 +1127,9 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Watcher vs Incremental Cleanup Lag Root Cause** (ID: `3554469633`)
+[ ] **JSON Streaming Parser Content Array Fix** (ID: `3528280526`)
 
-    debugging_pattern: Watcher vs Incremental Cleanup Lag Root Cause | ROOT CAUSE: Watcher creates/monitors files faster than incremental indexing can process them | SYMPTOM: File count mismatch between watcher state tracking (immediate) and actual Qdrant indexing (async) | MECHANISM: State files update atomically but Qdrant upserts happen asynchronously without wait=True | TIMING GAP: Watcher registers file changes instantly, but background indexing lags behind | IMPACT: Creates discrepancy between tracked files vs indexed entities in database | SOLUTION: Add proper synchronization with wait=True in Qdrant upserts or debounce file events | PREVENTION: Monitor processing queue depth and add backpressure mechanisms | DEBUG PATTERN: Use qdrant_stats.py to identify async vs sync state mismatches
+    ROOT CAUSE: JSON streaming parser hardcoded content_arrays list excludes 'content' array that business book files use. SYMPTOMS: All JSON files fail with 'Parse failure' - streaming parser finds 0 items, creates file entities only. INVESTIGATION: Streaming parser checks specific arrays: ['topics', 'posts', 'articles', 'comments', 'messages', 'threads', 'forums', 'site_pages', 'items'] but not 'content'. FIX: Add 'content' to content_arrays list in _extract_content_items_streaming function line 578-579. RESULT: After fix, files with 'content' arrays process successfully (6-58 chunks per file vs 0 before). LOCATION: claude_indexer/analysis/json_parser.py:578-579 in _extract_content_items_streaming method. CODE_CHANGE: content_arrays = [..., 'content'] - simple one-word addition fixes all business book JSON parsing. UPDATE: Also added 'chunks' array for business book files structure - business books use {'chunks': [...]} instead of {'content': [...]}. Both content_arrays now supported: 'content' (for products) and 'chunks' (for business books). CHUNK NUMBERING BUG FIX: Modified _create_content_entity_name() to use JSON chunk_number field when available instead of stream index. BEFORE: entity names used index+1 (sequential across collection: 1,2,3,4...). AFTER: entity names use item['chunk_number'] from JSON preserving per-book numbering. LOGIC: if 'chunk_number' in item: use chunk_num, else fallback to index+1 for non-book files. RESULT: Business books should now show correct chunk numbers (1-35, 1-148) instead of global sequential numbers
 
 ---
 
@@ -1152,12 +1157,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Observer Working But Log Monitoring Issue** (ID: `3654285972`)
-
-    Critical debugging pattern: Watchdog Observer appeared broken but was actually working perfectly. Root cause: User monitoring wrong log files or locations for event detection. Solution approach: Create debug event handler with extensive logging to prove Observer functionality. Key insight: Always test with debug wrapper before assuming Observer is broken. macOS filesystem events: Observer can detect file creation, modification, deletion successfully. Actual processing: Files were being detected, indexed, and stored in database correctly. Log locations: Different collections write to different log files in project/logs/ directory. Testing methodology: DebugIndexingEventHandler with on_modified/on_created logging proves functionality. Performance: 8 method calls, 5 events received, 1 processed, 3 ignored (normal filtering). File patterns: JavaScript, text files detected correctly with project config patterns
-
----
-
 [ ] **Entity ID Generation Inconsistency Bug - Root Cause Analysis** (ID: `3657657126`)
 
     INCONSISTENT ID METHODS: Multiple ID generation functions create different IDs for same logical entity. EVIDENCE: 33% duplication rate - 2,580 unique entity names but 3,840 unique entity keys in database. ID FORMAT MISMATCH: EntityChunk.create_metadata_chunk() uses hash(file_path)::name::metadata vs create_entity_point() uses file_path::name. UPSERT FAILURE: Same entity gets different IDs each processing run, causing upsert to create duplicates instead of updating. SAMPLE PROOF: Executive Summary entity has 8 duplicates, restart has 6 duplicates, /docs/integration.md has 149 duplicates. DATABASE ANALYSIS: 9,484 total points with 862 entities having duplicate names (massive storage bloat). DETERMINISTIC BUT INCONSISTENT: Each method is deterministic but different methods used in different code paths. SOLUTION REQUIRED: Standardize on single ID generation method across all entity creation paths. ROOT CAUSE CONFIRMED: Python hash() function is NOT consistent across different Python processes/sessions. Testing shows hash('/test/file.py') produces different values each run: 6368671782095141366, 1569252191207376995, 5778746202516312094. IMPACT: EntityChunk.create_metadata_chunk() uses hash(file_path) in ID format hash(file_path)::name::metadata. Each indexer run generates different IDs for same logical entities. Upsert mechanism fails because it searches for previous ID but entity now has completely different ID. SOLUTION: Replace hash(file_path) with hashlib.sha256(str(file_path)).hexdigest()[:16] for deterministic cross-session file identification. EVIDENCE: ID generation is consistent WITHIN single session but breaks ACROSS sessions due to Python's hash randomization.
@@ -1173,12 +1172,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **Log Placement Strategy** (ID: `3722445082`)
 
     Project logs location: {project_path}/logs/{collection_name}.log with fallback to ~/.claude-indexer/logs/ when no project path available. Enable verbose logging with --verbose flag for detailed troubleshooting output. Use timeout 30 to timeout 110 max when running python scripts to prevent hanging. Monitor real-time logs: tail -f {project_path}/logs/{collection_name}.log during operation. For testing relation formats and orphan cleanup - use small test directory (1-2 Python files) for cleaner debug output. Log monitoring approach: Check service status with detailed logs using --verbose flag. Error outputs must be logged even when debug mode is off for production visibility
-
----
-
-[ ] **JSON Streaming Parser Content Array Fix** (ID: `3753979070`)
-
-    ROOT CAUSE: JSON streaming parser hardcoded content_arrays list excludes 'content' array that business book files use. SYMPTOMS: All JSON files fail with 'Parse failure' - streaming parser finds 0 items, creates file entities only. INVESTIGATION: Streaming parser checks specific arrays: ['topics', 'posts', 'articles', 'comments', 'messages', 'threads', 'forums', 'site_pages', 'items'] but not 'content'. FIX: Add 'content' to content_arrays list in _extract_content_items_streaming function line 578-579. RESULT: After fix, files with 'content' arrays process successfully (6-58 chunks per file vs 0 before). LOCATION: claude_indexer/analysis/json_parser.py:578-579 in _extract_content_items_streaming method. CODE_CHANGE: content_arrays = [..., 'content'] - simple one-word addition fixes all business book JSON parsing. UPDATE: Also added 'chunks' array for business book files structure - business books use {'chunks': [...]} instead of {'content': [...]}. Both content_arrays now supported: 'content' (for products) and 'chunks' (for business books). CHUNK NUMBERING BUG FIX: Modified _create_content_entity_name() to use JSON chunk_number field when available instead of stream index. BEFORE: entity names used index+1 (sequential across collection: 1,2,3,4...). AFTER: entity names use item['chunk_number'] from JSON preserving per-book numbering. LOGIC: if 'chunk_number' in item: use chunk_num, else fallback to index+1 for non-book files. RESULT: Business books should now show correct chunk numbers (1-35, 1-148) instead of global sequential numbers
 
 ---
 
@@ -1272,12 +1265,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Test Search Logic Fix July 2025** (ID: `4177031382`)
-
-    MAJOR SUCCESS: Fixed test search verification logic causing widespread test failures | ROOT CAUSE: Tests were checking hit.payload.get('name', '') which is always 'NO_NAME', instead of 'entity_name' where actual names are stored | FIXES APPLIED: 1) Enhanced verify_entity_searchable() in conftest.py to use unique entity name matching logic 2) Fixed individual test search patterns in test_indexer_flow.py to check entity_name, name, and content fields | RESULTS: Multiple previously failing tests now pass: test_index_and_search_workflow, test_incremental_indexing_workflow, test_full_index_flow_with_real_files, test_incremental_indexing_flow | PATTERN: Search failures often require checking multiple payload fields (entity_name, name, content) rather than just one field | IMPLEMENTATION: Updated search logic to exclude relations and file paths, focus on unique entity names for precise test expectations
-
----
-
 [ ] **JavaScript Parser Missing Relations Solution** (ID: `4203606078`)
 
     Successfully identified and implemented fixes for 3 missing JavaScript/TypeScript relation types. Class inheritance: Tree-sitter provides class_heritage → extends_clause/implements_clause nodes. Exception handling: Tree-sitter provides try_statement, catch_clause, finally_clause, throw_statement nodes. Decorators: Tree-sitter TypeScript provides decorator nodes with target identification. Root cause: JavaScript parser was missing extraction logic for these node types. External testing validated all fixes work correctly before implementation. Test results: 2 inheritance, 9 exception, 10 decorator relations extracted successfully. Solution approach: Add node type detection and relation creation in _extract_* methods
@@ -1334,6 +1321,14 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+## Ideas
+
+[ ] **Manual Entry Recency Boosting Implementation Ideas** (ID: `4000113272`)
+
+    CONCEPT: Implement timestamp-based score boosting for manual entries to prioritize newer debugging patterns and implementation solutions in search results.. MATHEMATICAL APPROACH: Use exponential decay formula score *= (1.0 + 0.3 * Math.exp(-days_old / 60)) giving 30% max boost with 60-day half-life, aligning with industry best practices.. DETECTION LOGIC: Leverage existing is_manual_entry pattern - entries without file_path/line_number automation fields get recency consideration.. INFRASTRUCTURE REQUIREMENTS: Add indexed_at timestamp to both claude-indexer payload creation and MCP persistEntity() method using datetime.now().isoformat().. BOOST PARAMETERS: 30% maximum boost (matching our function/class boosts), 60-day half-life (research-backed), 6-month complete fade for balance.. INTEGRATION POINT: Insert boost logic in mcp-qdrant-memory/src/persistence/qdrant.ts after existing entity type boosts (line 463), before results sorting.. FALLBACK STRATEGY: For existing entries without timestamps, could use Qdrant point ID generation time or default to neutral scoring.. USER EXPERIENCE: Fresh debugging patterns and implementation insights surface first, encouraging knowledge base maintenance and continuous learning.. PERFORMANCE IMPACT: Minimal - single timestamp comparison per manual entry during search, leverages existing boost infrastructure.. BACKWARDS COMPATIBILITY: Existing entries continue working normally, new entries get enhanced temporal relevance.. FUTURE ENHANCEMENTS: Could extend to auto-indexed entries for code freshness, implement sliding window boosts, or add user-configurable decay rates.
+
+---
+
 ## Implementation Pattern
 
 [ ] **Import Orphan Fix Complete** (ID: `46030270`)
@@ -1384,12 +1379,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Background Service Architecture** (ID: `296180107`)
-
-    implementation_pattern: Background Service Architecture | PATTERN: Daemon process for continuous file monitoring | SOLUTION: Multi-project service with independent watchers | IMPLEMENTATION: Service management with start/stop/status commands | RESULTS: Automated indexing without manual intervention | PREVENTION: Service isolation prevents cross-project interference
-
----
-
 [ ] **MCP_legacy_cleanup_2025** (ID: `303468788`)
 
     CLEANUP COMPLETE: Successfully removed legacy persistence/ directory and duplicate config.ts from MCP codebase. VERIFICATION: 1) Build works perfectly after deletion (npm run build succeeds), 2) All imports already point to src/ compiled version, 3) tsconfig.json only compiles src/ directory, 4) Test files use dist/ (compiled from src/), 5) No production dependencies on legacy code. REMOVED: /persistence/qdrant.ts (legacy with ada-002 embeddings), /config.ts (duplicate of src/config.ts). KEPT: src/persistence/ and src/config.ts (current implementation). REASON: Legacy code was MCP submodule remnant from before src/ reorganization. IMPACT: Cleaner codebase, no confusion between legacy and current code.
@@ -1399,12 +1388,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **Parser Implementation Flow** (ID: `307722361`)
 
     Flow: parse() → extract entities → create chunks → create relations → return ParserResult. Every parser MUST create: 1) File entity first, 2) Language-specific entities, 3) Metadata chunks, 4) Implementation chunks, 5) Relations. Error handling pattern: Collect errors in result.errors but continue parsing - never throw exceptions. Progressive disclosure: Metadata chunks for fast search, implementation chunks loaded on-demand via get_implementation()
-
----
-
-[ ] **CLAUDE.md Anti-Bias Implementation** (ID: `318013288`)
-
-    Successfully implemented comprehensive anti-bias rules in ~/.claude/CLAUDE.md to force code-first memory searches. Added 🚨 ANTI-BIAS RULE section with mandatory search priority: 1) metadata, 2) function/class/interface, 3) implementation, 4) manual patterns LAST. Fixed Debug Workflow to search entityTypes=['metadata', 'function'] instead of ['metadata', 'debugging_pattern']. Fixed Code Exploration to search entityTypes=['metadata', 'function'] instead of ['function', 'implementation_pattern']. Added SEARCH ANTI-BIAS RULE to memory strategy section warning about AI's natural preference for manual entries. Kept shortcuts (§m, §d) generic and clean while anti-bias section provides comprehensive guidance. Addresses critical issue where AI naturally gravitates toward implementation_pattern/debugging_pattern instead of actual code. Commit 18511fb: feat: implement anti-bias rules for code-first memory search - 57 insertions, 18 deletions across 3 files. Root cause: AI prefers human-curated manual entries over raw technical code metadata - now systematically corrected
 
 ---
 
@@ -1450,9 +1433,9 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Enhanced CLI Search Output Implementation** (ID: `454020992`)
+[ ] **Manual Memory Backup CLI Target Collection Support** (ID: `450666032`)
 
-    Implemented comprehensive debugging output for CLI search command in cli_full.py. Added query time tracking, entity metadata display, relations fetching, code previews, and semantic context. Enhanced format includes: location with line numbers, implementation status, chunk types, entity IDs, observations, relations graph, complexity scores, and summary statistics. Uses visual separators and emojis for better readability: 📍 Location, 🏷️ Type, 📦 Collection, 🔧 Implementation, 📊 Metadata, 📝 Observations, 🔗 Relations, 💻 Code Preview, 🧩 Semantic Context. Tracks statistics: entity type breakdown, average scores, files touched, and query time. Relations are dynamically fetched using get_entity_relations helper function. Handles missing fields gracefully with fallback values. Verbose mode shows full debugging details including semantic metadata (calls, imports, exceptions). Implementation in search command at lines 730-900 in cli_full.py
+    BACKUP COMMAND: python utils/manual_memory_backup.py backup -c collection-name creates timestamped JSON backup with manual entries detection. RESTORE TO DIFFERENT COLLECTION: python utils/manual_memory_backup.py restore -f backup.json -c target-collection-name allows cross-collection restoration. DEFAULT RESTORE BEHAVIOR: Without -c parameter, restores to original collection from backup metadata. IMPLEMENTATION: restore function line 284 uses target_collection = collection_name or original_collection pattern. CLI PARAMETER: Both -c and --collection flags supported for specifying target collection during restore. DRY RUN SUPPORT: Add --dry-run flag to preview restoration without executing changes. MANUAL ENTRY DETECTION: Smart classification distinguishes manual vs auto-indexed entries with 100% accuracy. BACKUP FORMAT: JSON files saved as manual_entries_backup_{collection}_{timestamp}.json in backups/ directory. CROSS-PROJECT MIGRATION: Enables moving manual insights between different memory collections. USE CASES: Pre-clearing backups, collection migration, testing with parser-test-memory, team collaboration. LIMITATION: Main CLI claude-indexer restore command lacks target collection parameter (only manual_memory_backup.py has it). SUCCESSFUL TEST: Backed up 618 manual entries from claude-memory collection to backups/manual_entries_backup_claude-memory_20250707_221933.json
 
 ---
 
@@ -1471,6 +1454,58 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **GPT-4.1-mini Chat Summarization Implementation** (ID: `490092715`)
 
     implementation_pattern: GPT-4.1-mini Chat Summarization Implementation | COMMIT: 9e20450 - feat: implement GPT-4.1-mini chat summarization with legacy cleanup | IMPLEMENTATION: Complete chat history processing system with Claude Code JSONL parser | PERFORMANCE: 78% cost reduction vs GPT-3.5-turbo, 15x faster than full re-indexing | QUALITY: Superior code understanding (92% vs 85% quality score) with 1M token context | ARCHITECTURE: Added claude_indexer/chat/ module with parser.py and summarizer.py | FEATURES: 7-category semantic classification, full conversation analysis, entity integration | API_INTEGRATION: OpenAI GPT-4.1-mini with comprehensive error handling and retry logic | LEGACY_CLEANUP: Removed get_context_window method and message truncation logic | TESTING: Production-ready with 158/158 tests passing, demonstrated with real chat files | CLI_COMMANDS: Added chat-index and chat-search commands to main interface
+
+---
+
+[ ] **Commit f948cb1 - JSON Parser Enhancement for Book Content** (ID: `502780762`)
+
+    Enhanced JSON parser entity naming for book content with chunk_number-based naming system. Added support for title/subject/name fields combined with chunk numbering for better entity identification. Extended content arrays to include 'content' and 'chunks' for broader parsing coverage. Improved entity naming consistency for structured content like business books and articles. 17 lines added to claude_indexer/analysis/json_parser.py with backward compatibility maintained. Commit f948cb1 successfully pushed to remote repository
+
+---
+
+[ ] **Complete Search Performance Optimization Guide** (ID: `552262563`)
+
+    **COMPREHENSIVE SEARCH OPTIMIZATION STRATEGY**
+    
+    **Problem Domain**: Real-time search performance optimization across indexing, query processing, and result delivery systems.
+    
+    **Complete Workflow**:
+    1. **Indexing Performance**: Tree-sitter + Jedi dual-parser architecture achieves 36x speed improvement with 1-2s per file processing. Incremental indexing with SHA256-based change detection provides 15x performance boost.
+    2. **Query Optimization**: Direct entity names outperform verbose patterns by 4-13%. Use entity names for specific searches (>1.0 scores), descriptive phrases for exploration (<0.9 scores).
+    3. **Vector Storage**: Progressive disclosure with metadata-first search achieves 3.99ms response times. Implementation chunks loaded on-demand for 90% speed improvement.
+    4. **Index Management**: Qdrant HNSW indexing threshold=100 prevents stalls. Monitor for >120% bloating, trigger optimization via threshold adjustment.
+    5. **Result Processing**: Score boosting (1.4x metadata, 1.3x functions, 1.2x implementation) with proper sorting by boosted scores.
+    
+    **Best Practices**:
+    - **Incremental Mode**: Auto-detection based on state file existence, processes only changed files
+    - **Embedding Optimization**: Voyage AI provides 85% cost reduction vs OpenAI with comparable quality
+    - **Token Management**: Smart summarization prevents 393k token overflow, maintains <25k responses
+    - **Search Strategy**: Start with exact names, enhance only for poor baseline scores (<0.9)
+    - **Performance Monitoring**: Sub-second search latency target, comprehensive benchmarking with 80+ queries
+    
+    **Common Pitfalls**:
+    - **Index Stalls**: Collections stuck at intermediate percentages - lower indexing_threshold to force rebuild
+    - **Query Complexity**: Verbose queries hurt high-performing searches, keep queries minimal
+    - **Orphan Cleanup**: Aggressive cleanup after bulk operations can appear as data loss - timing issue
+    - **Threshold Misconfiguration**: Default 20MB threshold too high for small collections, use 100KB
+    
+    **Tools & Commands**:
+    - `python utils/qdrant_stats.py` - monitor collection health and indexing progress
+    - `performance_benchmark.py` - validate search performance with quantified metrics
+    - PATCH `/collections/{name}` with `optimizers_config.indexing_threshold` - force optimization
+    - Score interpretation: 0.70+ excellent, 0.60-0.70 good, <0.60 low relevance
+    
+    **Cross-References**:
+    - **Integration Pattern**: MCP server architecture with metadata-first progressive disclosure
+    - **Performance Pattern**: Multi-layer optimization from parsing to search delivery
+    - **Debugging Pattern**: Index stall resolution and orphan cleanup timing
+    - **Architecture Pattern**: Dual-pipeline with Tree-sitter + Jedi semantic analysis
+
+---
+
+[ ] **Cleanup Detection Function Usage Pattern** (ID: `568044806`)
+
+    CORRECT FUNCTION: Use classify_entry_type(payload) == 'clean' to count entries proceeding to cleanup phase. WRONG FUNCTION: is_manual_entry(payload) counts all manual entries including preserved documentation. KEY DIFFERENCE: classify_entry_type() applies business logic - documentation gets 'preserve' even if manual. CLEANUP PIPELINE: Only entries with classification='clean' proceed to quality scoring and potential removal. TESTING PATTERN: Always test the complete classification pipeline, not just detection logic. PRACTICAL EXAMPLE: parser-test has 618 manual entries but only 421 will be cleaned (197 docs preserved). CODE TEMPLATE: classification = classify_entry_type(payload); if classification == 'clean': clean_count += 1. MEMORY STORAGE: Store this pattern to avoid confusion between detection vs cleanup classification
 
 ---
 
@@ -1495,12 +1530,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **Claude Indexer v2.3+ Updates** (ID: `730754517`)
 
     implementation_pattern: Claude Indexer v2.3+ Updates | f563efb: Improved dual provider support and error handling | Fixed embedder configuration to use proper API key based on provider setting (openai_api_key vs voyage_api_key) | Added graceful collection not found error handling in Qdrant scroll operations | Enhanced test isolation with temporary state directory | Dual provider architecture now correctly switches between OpenAI and Voyage AI APIs | Error resilience: missing collections return empty results instead of exceptions
-
----
-
-[ ] **search_filtering_enhancement_commit_aa0e1b5** (ID: `749098578`)
-
-    Enhanced search capabilities with dual filtering approach: filter_type for entity types and chunk_type for chunk types. Fixed critical config typo: '*,json' corrected to '*.json' for proper JSON file indexing. Added comprehensive docstring to search_similar method explaining all parameters. Documented CLI vs MCP search capability differences - CLI has limited filtering vs MCP unified entityTypes. Provided clear examples for CLI --type entity/relation/all parameters. Commit aa0e1b5 includes both functionality enhancement and documentation improvements. Pattern: Enhanced search granularity without breaking backward compatibility
 
 ---
 
@@ -1600,6 +1629,12 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **entity naming consistency fix v2.8** (ID: `1195779092`)
+
+    Successfully implemented entity naming consistency fix across all parsers (CSS, HTML, JSON, YAML). Changed entity_name from file_path.name to str(file_path) in 11 locations across 4 parser files. Fixes critical progressive disclosure bug where file-level metadata chunks showed has_implementation: false despite having implementation chunks. Root cause: entity name mismatch between file entities (full paths) and implementation chunks (filenames only). Comprehensive testing validates all 7 parser types now working correctly with truth-based has_implementation flags. Committed as: fix: entity naming consistency across parsers for progressive disclosure (commit 81dfc92). Entity-chunk relationships now work reliably for get_implementation() calls on file-level entities. Applied fixes: css_parser.py (2 locations), html_parser.py (2 locations), json_parser.py (5 locations), yaml_parser.py (2 locations)
+
+---
+
 [ ] **Complete Config System Integration Verification** (ID: `1258462197`)
 
     Successfully verified ALL config system integrations working properly. Fixed critical issues: embedder/storage registries now handle IndexerConfig objects. Backward compatibility maintained: load_config signature supports both settings files and project paths. All components connected: settings.txt → IndexerConfig → registries → CoreIndexer. Project config overrides working: custom collections properly applied. Parser config injection ready: ConfigLoader.get_parser_config() implemented. Zero code duplication achieved: single source of truth in config package. Production ready: comprehensive integration tests passing. Registry fixes: separate config handling for embedders vs stores. CoreIndexer integration: automatic ConfigLoader creation and parser injection
@@ -1615,6 +1650,12 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **watch_start_clear_flag_implementation** (ID: `1358521812`)
 
     Successfully added --clear and --clear-all flags to watch start command. Implementation follows same pattern as main index command: check mutual exclusivity, create indexer components, call clear_collection with preserve_manual flag. Pattern: Add click options -> validate mutual exclusivity -> create embedder/store/indexer -> call clear_collection -> continue with normal flow. Location: claude_indexer/cli_full.py lines 415-469. Test confirmed: claude-indexer watch start --help shows new options properly
+
+---
+
+[ ] **CLAUDE.md Optimization Implementation 2025** (ID: `1391735231`)
+
+    PATTERN: Memory-driven documentation optimization - move detailed technical patterns to searchable memory while keeping essential commands in file. IMPLEMENTATION: Section-by-section analysis and migration - Configuration hierarchy → configuration_pattern, MCP setup/logging → debugging_pattern, System overview → architecture_pattern. RESULTS: Reduced CLAUDE.md from ~17KB to ~13KB (247 lines modified: 91 insertions, 158 deletions), Enhanced memory-first approach with §m shortcuts for detailed information. COMMIT: 50fe003 refactor: optimize CLAUDE.md by moving detailed patterns to memory, Included .gitignore updates to exclude test directories and prompts. BENEFITS: File focuses on immediate productivity patterns, Detailed technical info remains searchable via memory, Better Claude Code productivity through streamlined documentation
 
 ---
 
@@ -1678,6 +1719,12 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **INTELLIGENT_SYNTHESIS Resolution Action Design** (ID: `1667604216`)
+
+    CONCEPT: New resolution action for combining complementary (not duplicate) entries into comprehensive high-value guides through LLM intelligence.. PURPOSE: Transform scattered partial knowledge into complete, structured, actionable documentation that serves as authoritative reference.. TRIGGER CONDITIONS: Multiple entries covering different aspects of the same domain/workflow, each with unique valuable information but incomplete individually.. ALGORITHM: 1) Detect complementary entries (different aspects, same domain) 2) Use LLM to identify knowledge gaps 3) Synthesize comprehensive guide 4) Structure with clear sections 5) Add cross-references and examples.. EXAMPLE 1: Authentication Debugging - Combine 'JWT validation errors', 'OAuth flow issues', 'Session timeout problems' → 'Complete Authentication Troubleshooting Guide' with systematic diagnosis workflow.. EXAMPLE 2: Database Performance - Merge 'Index optimization tips', 'Query profiling steps', 'Connection pool tuning' → 'Comprehensive Database Performance Optimization Guide' with diagnosis → optimization → monitoring flow.. EXAMPLE 3: CI/CD Pipeline - Synthesize 'GitHub Actions setup', 'Docker optimization', 'Deployment strategies' → 'Complete CI/CD Implementation Guide' with step-by-step workflow.. EXAMPLE 4: Error Handling - Combine 'Logging best practices', 'Exception handling patterns', 'Monitoring setup' → 'Complete Error Management Strategy' with prevention → detection → resolution framework.. DETECTION LOGIC: Use semantic embeddings to find entries with complementary coverage (low overlap, high domain relevance), LLM analysis to confirm knowledge gaps can be filled.. VALUE PROPOSITION: Creates authoritative guides that eliminate need to search multiple entries, provides complete workflows, reduces cognitive load for users seeking comprehensive solutions.. COST CONSIDERATION: Higher token usage than simple merging but creates exponentially more valuable content - one synthesis replaces need for multiple searches.. QUALITY METRICS: Completeness score (coverage of domain aspects), actionability score (clear next steps), structure score (logical organization), reference score (useful examples).
+
+---
+
 [ ] **refactor_duplicate_code_consolidation** (ID: `1748967959`)
 
     Consolidated duplicate code definitions across modules (commit 937dc7e). Removed duplicate load_config function from utils/manual_memory_backup.py - now imports from canonical claude_indexer.config. Removed duplicate ProjectConfig class from claude_indexer/config/models.py - now imports from config_schema. Established single source of truth for each class/function to improve maintainability. No functional changes, only import consolidation - maintains backward compatibility. Prevents entity indexing issues from duplicate definitions. Part of 8-item refactoring plan to address code duplications identified in Claude Code Memory v2.7.1
@@ -1687,6 +1734,12 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **JavaScript TypeScript Parser Implementation** (ID: `1766489255`)
 
     Handles .js, .jsx, .ts, .tsx, .mjs, .cjs files with tree-sitter-javascript. Extracts functions (including arrow functions), classes, TypeScript interfaces, and imports. Function detection: function_declaration, arrow_function, function_expression, method_definition. Progressive disclosure: metadata chunk with signature, implementation chunk with full code. Semantic analysis: function call extraction, cyclomatic complexity calculation. Special handling for method_definition (class methods) and arrow function variable assignments. TypeScript features: interface extraction, return type detection, parameter type handling. Import relation creation for module dependencies with import_type='module'
+
+---
+
+[ ] **Manual Entry List Generator Implementation - Commit 94180ee** (ID: `1782651205`)
+
+    Successfully implemented and committed manual entry list generator with comprehensive cleanup pipeline enhancements. Created utils/make_manuals_list.py script that generates markdown task lists from any Qdrant collection using cleanup pipeline is_manual_entry() detection logic. Key features: command-line parameters (-c collection, -o output), automatic documentation exclusion, [ ] checkbox formatting with titles and IDs, collection name in headers. Enhanced cleanup pipeline with LLMMerger integration for intelligent merging of compatible entries. Updated test expectations for current parser behavior and improved file operation detection. Removed prompts/ from .gitignore to include cleanup documentation. Commit 94180ee includes 18 files changed with 6,190 insertions, successfully tested on claude-memory (428 entries) and parser-test-memory (421 entries). Tool enables converting memory collections into actionable task lists for systematic cleanup workflows. Integration with existing cleanup pipeline ensures accurate manual vs auto-indexed entry detection.
 
 ---
 
@@ -1714,9 +1767,27 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **July 2025 Comprehensive Test Fixes Commit** (ID: `1889010758`)
+
+    COMMIT: a5e2d85 - comprehensive test reliability improvements. SCOPE: Fixed 5 files with 300+ line changes across test infrastructure. CORE PYTEST FIXES: Enhanced error detection, flexible CLI output matching, state validation. STORAGE BUG FIX: chunk_type vs type field correction in relation filtering. TEST INFRASTRUCTURE: Unique entity filtering, mock improvements, field mapping updates. SEARCH IMPROVEMENTS: Better entity_name vs name field handling across test suite. MOCK FIXES: Enhanced e2e test mocking for better isolation. ENTITY COUNTING: Improved delete event test logic for accurate verification. RESULTS ACHIEVED: TestACustomIncrementalBehavior 4/4 passing, unit tests 214/248 passing. PATTERN: Systematic approach to test reliability - infrastructure + specific fixes. VALIDATION: All changes committed and pushed successfully. IMPACT: Major improvement in test suite stability and reliability
+
+---
+
+[ ] **Manual Entry Category Enhancement - Ideas Category Addition** (ID: `1926073480`)
+
+    FEATURE: Added 'ideas' category to manual entry system for project ideas and feature brainstorming. LOCATIONS UPDATED: CLAUDE.md (9-category system), ChatSummarizer patterns, backup utility entity types. PATTERNS: idea, feature, suggestion, enhancement, brainstorm, concept, proposal, future, roadmap, vision, inspiration, innovation. ARCHITECTURE: Maintains backward compatibility while expanding categorization capabilities. COMMIT: ccf521c - feat: add ideas category to manual entry system. USE CASES: Project roadmaps, feature requests, enhancement suggestions, creative brainstorming sessions. INTEGRATION: Works with existing MCP memory search and classification systems. COMPLETENESS: Fully integrated across ChatSummarizer, backup utility, and documentation
+
+---
+
 [ ] **enhanced-python-file-operations-v26-patterns** (ID: `1939334723`)
 
     20+ New File Operation Patterns with semantic relation creation. Pandas operations auto-detected: df = pd.read_csv creates pandas_csv_read relation, df.to_json creates pandas_json_write relation, pd.read_excel creates pandas_excel_read relation. Pathlib operations: Path('config.txt').read_text() creates path_read_text relation, Path('output.txt').write_text creates path_write_text relation. Requests/API operations: requests.get('api/data.json') creates requests_get relation, requests.post creates requests_post relation. Configuration files: configparser.ConfigParser().read creates config_ini_read relation, toml.load creates toml_read relation. All file operations create semantic relations with specific import_type values for precise search and dependency tracking. Auto-detection of file operation patterns without manual configuration. Integration with existing progressive disclosure architecture
+
+---
+
+[ ] **mcp-qdrant-memory v2.4 release** (ID: `2004109356`)
+
+    v2.4 production ready release with auto-reduce token management. Auto-reduce token management with exponential backoff (0.7 reduction factor, 10 max attempts). 25k token compliance with 96% safety margin for maximum utilization. Streaming response builder with progressive content building and section priorities. Industry-standard token counting (chars/4) with intelligent truncation. Enhanced entity-specific graph filtering (v2.7) with 10-20 focused relations. Comprehensive testing and verification of all graph functions completed. All parameter combinations verified working correctly (read_graph, search_similar, get_implementation). Progressive disclosure architecture validated and tested. Smart token management with configurable limits per scope (20 logical, 30 dependencies). Backward compatibility maintained for v2.3 and v2.4 chunk formats. Performance optimized for large collections (2000+ vectors). Documentation updated with production-ready status and verification badges. Commit 1635b64: feat v2.4 production ready - auto-reduce token management & verified features. Successfully pushed to main branch. Test script test-v24-features.mjs created for validation. Build successful with npm run build. All MCP functions tested and verified working
 
 ---
 
@@ -1738,6 +1809,18 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **search_filtering_enhancement_commit_aa0e1b5** (ID: `2081286351`)
+
+    Enhanced search capabilities with dual filtering approach: filter_type for entity types and chunk_type for chunk types. Fixed critical config typo: '*,json' corrected to '*.json' for proper JSON file indexing. Added comprehensive docstring to search_similar method explaining all parameters. Documented CLI vs MCP search capability differences - CLI has limited filtering vs MCP unified entityTypes. Provided clear examples for CLI --type entity/relation/all parameters. Commit aa0e1b5 includes both functionality enhancement and documentation improvements. Pattern: Enhanced search granularity without breaking backward compatibility
+
+---
+
+[ ] **Manual Entry List Generator Script - make_manuals_list.py** (ID: `2160763015`)
+
+    Created utils/make_manuals_list.py script that generates markdown task lists from all manual entries in any Qdrant collection using cleanup pipeline detection logic. Script uses is_manual_entry() function to accurately identify manual vs auto-indexed entries, excludes documentation types as specified, and formats each entry with [ ] checkbox prefix for task management. Key features: accepts -c collection and -o output parameters, uses ConfigLoader for Qdrant connection, scrolls through entire collection with pagination, groups entries by entity_type for organization. Successfully tested on claude-memory (428 entries) and parser-test-memory (421 entries) collections. Output format includes entry title, ID, and content with proper indentation under checkboxes. Breakdown shows distribution across debugging_pattern (160), implementation_pattern (166), and other manual entry types. Usage: python utils/make_manuals_list.py -c collection-name -o output-file.md. Essential tool for converting memory collections into actionable task lists for project management and review workflows.
+
+---
+
 [ ] **Project Configuration Deployment Complete** (ID: `2168747208`)
 
     Successfully deployed project-level configuration for claude-code-memory. Project config: .claude-indexer/config.json with claude-memory-test collection. Multi-language support: 16 file types configured (Python, JS, TS, HTML, CSS, JSON, YAML, MD, etc.). File watching: 30-second debounce for efficient monitoring. Qdrant stats enhanced: indexing threshold display from API config. Collection health: 10,924 points, 105.5% indexing ratio, 8 optimal segments. Response time: 2.9ms excellent performance. Git commits: 87d7ebb project config + qdrant stats enhancements. System operational: unified config v2.6 fully deployed and functional. Zero code duplication achieved with clean architecture implementation
@@ -1747,12 +1830,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **MCP Score Boosting Enhancement** (ID: `2178288920`)
 
     Added 30% score boost for code entities (function, class, method) in MCP search results. Added 20% score boost for implementation chunks. Improves search relevance for development and debugging workflow. Implemented in src/persistence/qdrant.ts at result processing stage. Enhances Claude Code's ability to find relevant code during debugging sessions. Commit fbce8f2: feat: boost code entity scores for improved debugging workflow
-
----
-
-[ ] **July 2025 Comprehensive Test Fixes Commit** (ID: `2233566264`)
-
-    COMMIT: a5e2d85 - comprehensive test reliability improvements. SCOPE: Fixed 5 files with 300+ line changes across test infrastructure. CORE PYTEST FIXES: Enhanced error detection, flexible CLI output matching, state validation. STORAGE BUG FIX: chunk_type vs type field correction in relation filtering. TEST INFRASTRUCTURE: Unique entity filtering, mock improvements, field mapping updates. SEARCH IMPROVEMENTS: Better entity_name vs name field handling across test suite. MOCK FIXES: Enhanced e2e test mocking for better isolation. ENTITY COUNTING: Improved delete event test logic for accurate verification. RESULTS ACHIEVED: TestACustomIncrementalBehavior 4/4 passing, unit tests 214/248 passing. PATTERN: Systematic approach to test reliability - infrastructure + specific fixes. VALIDATION: All changes committed and pushed successfully. IMPACT: Major improvement in test suite stability and reliability
 
 ---
 
@@ -1786,27 +1863,15 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **CLAUDE.md Optimization Implementation 2025** (ID: `2305953079`)
+[ ] **GPT-Powered Memory Merge Implementation v1.0** (ID: `2307375628`)
 
-    PATTERN: Memory-driven documentation optimization - move detailed technical patterns to searchable memory while keeping essential commands in file. IMPLEMENTATION: Section-by-section analysis and migration - Configuration hierarchy → configuration_pattern, MCP setup/logging → debugging_pattern, System overview → architecture_pattern. RESULTS: Reduced CLAUDE.md from ~17KB to ~13KB (247 lines modified: 91 insertions, 158 deletions), Enhanced memory-first approach with §m shortcuts for detailed information. COMMIT: 50fe003 refactor: optimize CLAUDE.md by moving detailed patterns to memory, Included .gitignore updates to exclude test directories and prompts. BENEFITS: File focuses on immediate productivity patterns, Detailed technical info remains searchable via memory, Better Claude Code productivity through streamlined documentation
+    BREAKTHROUGH: Successfully implemented GPT-4.1-mini powered intelligent merging for memory cleanup system, replacing simple string concatenation with semantic content synthesis.. ARCHITECTURE: Created modular LLMMerger class following QualityScorer pattern with AsyncOpenAI integration, retry logic, and fallback to simple merging when disabled/failed.. INTEGRATION: Seamlessly integrated into ConflictResolver with enable/disable configuration, maintaining backward compatibility while enhancing merge quality.. PERFORMANCE: Test results show 95% confidence vs 50% fallback, 2.5x more comprehensive content, $0.000091 cost per merge operation using GPT-4.1-mini (83% cheaper than GPT-4o).. TESTING: Comprehensive validation with JWT authentication debugging entries demonstrates superior semantic understanding, content organization, and redundancy removal.. IMPLEMENTATION: Added llm_merge_info metadata to track confidence, reasoning, token usage, and LLM enablement status for complete audit trail.. COST EFFICIENCY: GPT-4.1-mini provides high-quality semantic merging at 1/10th the cost of manual review, with detailed reasoning and confidence scoring.. MODULAR DESIGN: LLMMerger can be disabled for cost-sensitive environments, automatically falling back to simple concatenation while maintaining system functionality.. QUALITY IMPROVEMENT: LLM creates coherent narratives with clear structure, preserves unique insights, removes redundancies, and maintains technical accuracy.. PRODUCTION READY: Fully integrated into cleanup pipeline with proper error handling, async support, and comprehensive usage statistics tracking.
 
 ---
 
 [ ] **Scope Limits Testing Success v2.4.1** (ID: `2316382059`)
 
     Successfully tested and validated updated semantic scope limits: logical 20→25, dependencies 30→40. QdrantStore dependencies scope returns exactly 40 chunks - perfectly hitting new limit without truncation. PythonParser logical scope returns 25 chunks - demonstrating increased capacity for same-file helpers. Testing confirmed entity name correction: 'QdrantStore' not 'QdrantPersistence' in claude-memory-test collection. Updated limits prevent context truncation for complex database/service classes with many imports and dependencies. Token efficiency maintained: ~11.5K tokens max vs 25K context window limit (54% headroom). Evidence-based optimization: Both QdrantStore and PythonParser previously hit or exceeded original limits. Conservative +25% and +33% increases provide safety margin without performance degradation
-
----
-
-[ ] **Manual Entry Category Enhancement - Ideas Category Addition** (ID: `2347386938`)
-
-    FEATURE: Added 'ideas' category to manual entry system for project ideas and feature brainstorming. LOCATIONS UPDATED: CLAUDE.md (9-category system), ChatSummarizer patterns, backup utility entity types. PATTERNS: idea, feature, suggestion, enhancement, brainstorm, concept, proposal, future, roadmap, vision, inspiration, innovation. ARCHITECTURE: Maintains backward compatibility while expanding categorization capabilities. COMMIT: ccf521c - feat: add ideas category to manual entry system. USE CASES: Project roadmaps, feature requests, enhancement suggestions, creative brainstorming sessions. INTEGRATION: Works with existing MCP memory search and classification systems. COMPLETENESS: Fully integrated across ChatSummarizer, backup utility, and documentation
-
----
-
-[ ] **Commit f948cb1 - JSON Parser Enhancement for Book Content** (ID: `2357169639`)
-
-    Enhanced JSON parser entity naming for book content with chunk_number-based naming system. Added support for title/subject/name fields combined with chunk numbering for better entity identification. Extended content arrays to include 'content' and 'chunks' for broader parsing coverage. Improved entity naming consistency for structured content like business books and articles. 17 lines added to claude_indexer/analysis/json_parser.py with backward compatibility maintained. Commit f948cb1 successfully pushed to remote repository
 
 ---
 
@@ -1828,9 +1893,9 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Search Optimization Research Complete 2025** (ID: `2383853603`)
+[ ] **CLAUDE.md Anti-Bias Implementation** (ID: `2436745945`)
 
-    COMPREHENSIVE STUDY: Evaluated hybrid search vs simple optimizations for claude-memory search quality. HYBRID SEARCH VERDICT: Complex 3-option implementation (6-8 weeks, 2x storage, migration complexity) delivers marginal gains (95% vs 80%) for massive effort (1000x cost). SEARCH QUERY OPTIMIZATION: 'entity create_metadata_chunk' achieved +12.7% improvement with 62% shorter query, but pattern only helps low-scoring searches (<0.9). Most entities perform excellently with direct names (>1.0 scores). PRODUCTION RULE: Use direct entity names for specific searches, descriptive phrases for exploration. Enhanced metadata content solves 80% of exact-match issues with 1% implementation effort. KEY INSIGHT: Sometimes simple solutions beat complex ones - always evaluate effort/benefit ratio.
+    Successfully implemented comprehensive anti-bias rules in ~/.claude/CLAUDE.md to force code-first memory searches. Added 🚨 ANTI-BIAS RULE section with mandatory search priority: 1) metadata, 2) function/class/interface, 3) implementation, 4) manual patterns LAST. Fixed Debug Workflow to search entityTypes=['metadata', 'function'] instead of ['metadata', 'debugging_pattern']. Fixed Code Exploration to search entityTypes=['metadata', 'function'] instead of ['function', 'implementation_pattern']. Added SEARCH ANTI-BIAS RULE to memory strategy section warning about AI's natural preference for manual entries. Kept shortcuts (§m, §d) generic and clean while anti-bias section provides comprehensive guidance. Addresses critical issue where AI naturally gravitates toward implementation_pattern/debugging_pattern instead of actual code. Commit 18511fb: feat: implement anti-bias rules for code-first memory search - 57 insertions, 18 deletions across 3 files. Root cause: AI prefers human-curated manual entries over raw technical code metadata - now systematically corrected
 
 ---
 
@@ -1846,12 +1911,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **parser_restructuring_commit_1df6126** (ID: `2545603543`)
-
-    Successfully completed truth-based has_implementation flag implementation across all 7 parsers. Fixed CSS parser syntax error handling for valid constructs like keyframe percentages. All parsers restructured to create implementation chunks first, then metadata with accurate flags. Validated scope functionality: JS/Python have full scope support, document types use file-level scope. Progressive disclosure architecture completed with proper get_implementation() functionality. Commit 1df6126: 11 files changed, 207 insertions, 434 deletions. Removed performance_benchmark.py and updated documentation
-
----
-
 [ ] **JSON Vectorization Analysis v2.7.1** (ID: `2561873927`)
 
     VECTORIZATION SCOPE: 8 JSON files in /pickuper/data/converted/ will generate 1,228 individual chunks for vector storage. CHUNKING LOGIC: JSONParser extracts items from content arrays ('items', 'site_pages') - each array item becomes separate EntityChunk with content field. FILE BREAKDOWN: mapi_site.json=800 chunks (site_pages array), mapi_secrets_guide.json=217 chunks, all_files_collection.json=73 chunks, stage_b_lesson.json=44 chunks, mapi.json=34 chunks, mapi_course_day_1.json=31 chunks, mapi_course_day_2.json=21 chunks, 3_ways_to_work_with_partner.json=8 chunks. AVERAGE: 153.5 chunks per file, total 1,228 vectorizable content pieces from Hebrew pickup course materials. TECHNICAL: Uses _extract_content_items() for files under streaming threshold, creates EntityChunk per item with chunk_type='implementation' and full content text including cleaned HTML/Hebrew
@@ -1861,12 +1920,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **SemanticScopeImplementationPlan** (ID: `2581714657`)
 
     Current get_implementation(entityName) returns only implementation chunks for exact entity match using Qdrant filter. Enhancement needed: Add scope parameter with values 'minimal' | 'logical' | 'dependencies'. Minimal: Current behavior - just the function implementation. Logical: Function + immediate helper functions/classes within same file. Dependencies: Function + imported modules/dependencies it uses. Implementation approach: Extend getImplementationChunks method with scope parameter and additional Qdrant queries. MCP server already has proper structure in index.ts:156-158 and validation in validation.ts. Semantic metadata available: calls, imports_used, complexity, exceptions_handled from parser.py extraction. Can leverage existing semantic_metadata to find related entities for logical and dependencies scopes
-
----
-
-[ ] **Advanced Automation Features Implementation** (ID: `2593334744`)
-
-    PATTERN: Multi-level automation system for real-time project monitoring. FILE_WATCHING: Single project with custom debounce settings (3.0s default). SERVICE_MANAGEMENT: Multi-project background service with add-project capability. GIT_HOOKS: Pre-commit automatic indexing with install/status commands. SEARCH_DISCOVERY: Semantic search with entity type filtering capabilities. SCALABILITY: Handles multiple projects simultaneously with service mode
 
 ---
 
@@ -1885,12 +1938,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **Voyage-Code-3 Integration Upgrade** (ID: `2655526108`)
 
     implementation_pattern: Voyage-Code-3 Integration Upgrade | Successfully upgraded from voyage-3-lite (512-dim) to voyage-code-3 (1024-dim) for code-optimized embeddings | Updated settings.txt: voyage_model=voyage-code-3 | Verified working with 1024-dimensional embeddings for code snippets | 13.80% better performance than OpenAI for code tasks according to benchmarks | 1/3 storage costs compared to OpenAI v3-large | Specializes in code retrieval optimization with 120K token context | Maintained existing Voyage AI provider configuration (embedding_provider=voyage) | Integration tested successfully with fibonacci function code embedding test
-
----
-
-[ ] **Project Configuration Auto-Creation Enhancement** (ID: `2663422780`)
-
-    FEATURE: Auto-create project config on first run for improved user experience. ENHANCEMENT: Added comprehensive exclude patterns (node_modules, .venv, *.log, build artifacts). LOCATIONS: config_loader.py auto-creation logic, project_config.py default exclude patterns. UX IMPROVEMENT: No manual init command needed - configs generate automatically. EXCLUDE PATTERNS: *.pyc, __pycache__, .git, .venv, node_modules, dist, build, *.min.js, .env, *.log, .mypy_cache, qdrant_storage, backups, *.egg-info, settings.txt, .claude-indexer, package-lock.json. COMMIT: 82e5761 - feat: enhance project configuration with auto-creation and defaults. WORKFLOW: Detects missing config, creates with project name and collection defaults. BENEFITS: Reduces setup friction, prevents indexing unwanted files, maintains clean collections
 
 ---
 
@@ -1936,9 +1983,21 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **Claude.md Search Strategy Enhancement Commit ab8adf0** (ID: `2825751955`)
+
+    Successfully updated global Claude Code instructions with search optimization guidance. Added search strategy rule: use direct entity names (hashPassword, DataManager) for specific searches, descriptive phrases ('authentication patterns') for broad exploration. Enhanced memory debugging workflow with entity-specific techniques and 🎯 Memory Graph Functions reference. Updated shortcuts with improved §d debugging pattern and memory integration guidelines. Commit ab8adf0 improves Claude Code's search effectiveness across all projects by teaching optimal search patterns based on intent.
+
+---
+
 [ ] **Entity Type Fallback Fix - dc71453** (ID: `2933663182`)
 
     Fixed entity type fallback logic in claude_indexer/storage/qdrant.py. Replaced nested get() calls with logical OR operator for cleaner code. Maintains same fallback behavior: entity_type -> entityType -> 'unknown'. Improves code readability and reduces redundant get() operations. Commit dc71453 - fix: improve entity type fallback logic in search results
+
+---
+
+[ ] **Enhanced CLI Search Output Implementation** (ID: `2950536508`)
+
+    Implemented comprehensive debugging output for CLI search command in cli_full.py. Added query time tracking, entity metadata display, relations fetching, code previews, and semantic context. Enhanced format includes: location with line numbers, implementation status, chunk types, entity IDs, observations, relations graph, complexity scores, and summary statistics. Uses visual separators and emojis for better readability: 📍 Location, 🏷️ Type, 📦 Collection, 🔧 Implementation, 📊 Metadata, 📝 Observations, 🔗 Relations, 💻 Code Preview, 🧩 Semantic Context. Tracks statistics: entity type breakdown, average scores, files touched, and query time. Relations are dynamically fetched using get_entity_relations helper function. Handles missing fields gracefully with fallback values. Verbose mode shows full debugging details including semantic metadata (calls, imports, exceptions). Implementation in search command at lines 730-900 in cli_full.py
 
 ---
 
@@ -1962,12 +2021,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Claude.md Search Strategy Enhancement Commit ab8adf0** (ID: `3078872514`)
-
-    Successfully updated global Claude Code instructions with search optimization guidance. Added search strategy rule: use direct entity names (hashPassword, DataManager) for specific searches, descriptive phrases ('authentication patterns') for broad exploration. Enhanced memory debugging workflow with entity-specific techniques and 🎯 Memory Graph Functions reference. Updated shortcuts with improved §d debugging pattern and memory integration guidelines. Commit ab8adf0 improves Claude Code's search effectiveness across all projects by teaching optimal search patterns based on intent.
-
----
-
 [ ] **Pre-Embedding Deduplication Solution v2.7.1** (ID: `3102434149`)
 
     SOLUTION: Deduplicate relations before embedding generation to avoid wasted API calls. LOCATION: Modify _store_vectors method in claude_indexer/indexer.py around line 520. CODE PATTERN: Add deduplication logic before relation_texts generation. IMPLEMENTATION: seen_relations = set(); unique_relations = []; for rel in relations: key = create_relation_key(rel); if key not in seen_relations: seen_relations.add(key); unique_relations.append(rel). KEY GENERATION: Use same logic as storage backend - include import_type in key when present. BENEFITS: 18% reduction in embedding API costs, faster processing, same final result. TESTING: Verify deduplication count matches storage statistics (2,614 duplicates removed). BACKWARDS COMPATIBLE: No changes to storage format or MCP interface
@@ -1986,9 +2039,27 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
+[ ] **MCP Vector Database Testing Strategy** (ID: `3138745031`)
+
+    Complete testing workflow using parser-test-memory MCP for indexer and parser validation. Phase 1: Index test files using claude-indexer -p /test-path -c parser-test --verbose. Phase 2: Validate indexing results via mcp__parser-test-memory__search_similar() for pattern verification. Phase 3: Test entity relationships using mcp__parser-test-memory__read_graph() for structure analysis. Phase 4: Verify specific implementations using mcp__parser-test-memory__get_implementation() for code retrieval. Benefits: Isolated testing environment prevents production contamination. Scope: Indexer functionality, parser accuracy, relation extraction, incremental updates, chunk processing. Performance: Use small test directories (1-2 Python files) for faster debugging cycles. Integration: MCP tools provide comprehensive validation of vector database content and search capabilities. Safety Protocol: All testing uses parser-test collection, never touches production claude-memory collection
+
+---
+
 [ ] **Multi-Repository Commit Workflow for MCP Project** (ID: `3207337862`)
 
     PATTERN: Dual git repository structure - main repo + mcp-qdrant-memory subdirectory with separate git repo. WORKFLOW: 1) Check git status in main repo, 2) Check git status in mcp-qdrant-memory/ subdirectory, 3) Commit main repo first, 4) cd mcp-qdrant-memory && commit MCP repo, 5) Push both repos separately. COMMANDS: git status (main), cd mcp-qdrant-memory && git status (sub), git add/commit/push (main), cd mcp-qdrant-memory && git add/commit/push (sub). STRUCTURE: /Claude-code-memory/ (main repo) contains /mcp-qdrant-memory/ (separate git repo with own .git folder). SHORTCUT §c REQUIRES: Two-step process - main repo commit/push, then mcp subdirectory commit/push. DISCOVERY: Found via 'cd mcp-qdrant-memory && git status' showing separate git repository status. BEST_PRACTICE: Always check both repositories for changes before using §c shortcut
+
+---
+
+[ ] **parser_restructuring_commit_1df6126** (ID: `3209118510`)
+
+    Successfully completed truth-based has_implementation flag implementation across all 7 parsers. Fixed CSS parser syntax error handling for valid constructs like keyframe percentages. All parsers restructured to create implementation chunks first, then metadata with accurate flags. Validated scope functionality: JS/Python have full scope support, document types use file-level scope. Progressive disclosure architecture completed with proper get_implementation() functionality. Commit 1df6126: 11 files changed, 207 insertions, 434 deletions. Removed performance_benchmark.py and updated documentation
+
+---
+
+[ ] **Memory Cleanup System Testing Results - Threshold 0.8 Selection** (ID: `3209233370`)
+
+    THRESHOLD DECISION: 0.8 similarity threshold selected for production memory cleanup pipeline after comprehensive testing. TESTING RESULTS: 618 entries → 406 clusters with 0.8 threshold, processing 328 entries (53% of database). COMPARISON ANALYSIS: 0.95 (41 entries - too conservative), 0.85 (129 entries - safe but limited), 0.80 (328 entries - optimal balance), 0.75 (303 entries - slightly aggressive). CLUSTERING PERFORMANCE: 116 multi-entry clusters found, largest cluster 37 restored_entry duplicates with 95.1% similarity. DUPLICATE DETECTION SUCCESS: Successfully identified major garbage collection targets (37 restored_entry placeholders), semantic duplicates, and cross-category similar patterns. QUALITY SCORING VALIDATION: GPT-4.1-mini scoring tested successfully with 5-dimension framework, $0.067 total cost for 421 entries. PRODUCTION READINESS: All pipeline components tested and verified - detection, clustering, quality scoring, threshold optimization complete. MEMORY IMPACT: 0.8 threshold provides optimal balance between thoroughness (catches semantic duplicates) and safety (avoids false positives). IMPLEMENTATION APPROACH: Conservative threshold with quality scoring conflict resolution ensures safe production deployment
 
 ---
 
@@ -2100,9 +2171,9 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **entity naming consistency fix v2.8** (ID: `3486400969`)
+[ ] **Cleanup Pipeline Classification Bug Fix - July 7, 2025** (ID: `3493128389`)
 
-    Successfully implemented entity naming consistency fix across all parsers (CSS, HTML, JSON, YAML). Changed entity_name from file_path.name to str(file_path) in 11 locations across 4 parser files. Fixes critical progressive disclosure bug where file-level metadata chunks showed has_implementation: false despite having implementation chunks. Root cause: entity name mismatch between file entities (full paths) and implementation chunks (filenames only). Comprehensive testing validates all 7 parser types now working correctly with truth-based has_implementation flags. Committed as: fix: entity naming consistency across parsers for progressive disclosure (commit 81dfc92). Entity-chunk relationships now work reliably for get_implementation() calls on file-level entities. Applied fixes: css_parser.py (2 locations), html_parser.py (2 locations), json_parser.py (5 locations), yaml_parser.py (2 locations)
+    CRITICAL FIX: Corrected cleanup pipeline classification logic from 'manual'/'auto-indexed' to 'clean'/'preserve' values. BUSINESS LOGIC: classify_entry_type() returns cleanup actions not content types - 'clean' means remove, 'preserve' means keep. UNIFIED FIELD NAMING: Updated detection.py to handle both entity_name/name and entity_type/entityType conventions. DOCUMENTATION PRESERVATION: Documentation entities now correctly marked as 'preserve' in classify_entry_type(), not filtered in is_manual_entry(). SCROLL METHOD FIX: Corrected scroll_collection() → _scroll_collection() method call in pipeline. COST OPTIMIZATION: Switched to GPT-4.1-mini model (83% cheaper than GPT-4o) for quality scoring. PRODUCTION IMPACT: Now correctly identifies 421 manual entries for cleanup while preserving 197 documentation entries. COMMIT: b4eec61 pushed to cleanup branch with comprehensive changelog and troubleshooting documentation
 
 ---
 
@@ -2160,15 +2231,21 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **MCP Vector Database Testing Strategy** (ID: `3760524402`)
+[ ] **Project Configuration Auto-Creation Enhancement** (ID: `3749577417`)
 
-    Complete testing workflow using parser-test-memory MCP for indexer and parser validation. Phase 1: Index test files using claude-indexer -p /test-path -c parser-test --verbose. Phase 2: Validate indexing results via mcp__parser-test-memory__search_similar() for pattern verification. Phase 3: Test entity relationships using mcp__parser-test-memory__read_graph() for structure analysis. Phase 4: Verify specific implementations using mcp__parser-test-memory__get_implementation() for code retrieval. Benefits: Isolated testing environment prevents production contamination. Scope: Indexer functionality, parser accuracy, relation extraction, incremental updates, chunk processing. Performance: Use small test directories (1-2 Python files) for faster debugging cycles. Integration: MCP tools provide comprehensive validation of vector database content and search capabilities. Safety Protocol: All testing uses parser-test collection, never touches production claude-memory collection
+    FEATURE: Auto-create project config on first run for improved user experience. ENHANCEMENT: Added comprehensive exclude patterns (node_modules, .venv, *.log, build artifacts). LOCATIONS: config_loader.py auto-creation logic, project_config.py default exclude patterns. UX IMPROVEMENT: No manual init command needed - configs generate automatically. EXCLUDE PATTERNS: *.pyc, __pycache__, .git, .venv, node_modules, dist, build, *.min.js, .env, *.log, .mypy_cache, qdrant_storage, backups, *.egg-info, settings.txt, .claude-indexer, package-lock.json. COMMIT: 82e5761 - feat: enhance project configuration with auto-creation and defaults. WORKFLOW: Detects missing config, creates with project name and collection defaults. BENEFITS: Reduces setup friction, prevents indexing unwanted files, maintains clean collections
 
 ---
 
 [ ] **CLI Interface Design** (ID: `3786818820`)
 
     implementation_pattern: CLI Interface Design | PATTERN: User-friendly command-line interface with comprehensive help | SOLUTION: Hierarchical command structure with contextual documentation | IMPLEMENTATION: argparse with subcommands and detailed help text | RESULTS: Intuitive CLI experience with discoverable features | PREVENTION: Clear interface reduces user errors and support requests
+
+---
+
+[ ] **Memory Cleanup Pipeline Flow - Production Architecture** (ID: `3795425180`)
+
+    PRODUCTION FLOW: 5-phase memory cleanup pipeline for processing large-scale manual entry collections. PHASE 1 - Discovery: Scan entire collection without limits, apply field-based detection is_manual_entry(payload), filter out auto-indexed entries (file_path, line_number markers), result: 421 manual entries identified from full dataset. PHASE 2 - Clustering: Extract embeddings from all 421 entries, run similarity clustering with configurable threshold (default 0.75), group semantically similar entries together, result: ~350-400 clusters (mostly singletons, some multi-entry conflicts). PHASE 3 - Quality Scoring: For each entry call GPT-4.1-mini with 5-dimension scoring framework (accuracy, completeness, specificity, reusability, recency), batch process with rate limiting (5 concurrent API calls), result: quality scores for all 421 entries. PHASE 4 - Conflict Resolution: For multi-entry clusters keep highest quality entry, for low-quality singletons mark for deletion, for high-quality entries preserve unchanged, result: resolution plan with keep/delete/merge actions. PHASE 5 - Execution: Apply resolution plan to database, delete low-quality duplicates, update remaining entries with consolidated information, generate comprehensive cleanup report with metrics. SCALABILITY: Memory-efficient processing in batches, not all entries loaded simultaneously, handles collections from hundreds to thousands of manual entries. TESTING APPROACH: Use limit=50 for development iteration, verify clustering logic on small datasets, then scale to full production runs without limits. PERFORMANCE: Production runs process ALL manual entries discovered, no artificial limits applied during real cleanup operations
 
 ---
 
@@ -2181,12 +2258,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **html_report_feature_commit_ca55e4e** (ID: `3821129654`)
 
     implementation_pattern: html_report_feature_commit_ca55e4e | Commit ca55e4e adds comprehensive HTML chat report generation functionality | New ChatHtmlReporter class with GPT analysis and conversation display capabilities | Added HTML report CLI command as part of chat subcommand group | Enhanced .gitignore to exclude chat_reports/ directory from version control | Completed test configuration alignment - all tests now use real API keys from settings.txt instead of hardcoded values | Modified tests/unit/test_embeddings.py to load real config for all embedding tests | Updated tests/e2e/test_end_to_end.py to use real API configuration | Added claude_indexer/chat/html_report.py with full HTML generation capabilities | Updated claude_indexer/chat/__init__.py to export new HTML reporter classes | Enhanced claude_indexer/cli_full.py with html_report command including conversation ID selection | Files modified: .gitignore, claude_indexer/chat/__init__.py, claude_indexer/cli_full.py, tests/e2e/test_end_to_end.py, tests/unit/test_embeddings.py | Files added: claude_indexer/chat/html_report.py | Key improvements: HTML report generation, test configuration robustness, chat analysis capabilities
-
----
-
-[ ] **Search Query Optimization Research 2025** (ID: `3824976086`)
-
-    FINDING: Direct entity names outperform verbose query patterns by 4-13%. TESTED: 'entity X' prefix only helps low-performing searches (<0.9 score), hurts high-performing ones (>1.0 score). OPTIMAL STRATEGY: Primary - use direct entity names (hashPassword, DataManager, TestSuite). Secondary - add context only for poor baseline scores. PERFORMANCE TIERS: 1.2+ excellent (direct only), 1.0-1.2 very good (direct only), 0.9-1.0 test both, <0.9 try enhancements. EXCEPTION: create_metadata_chunk improved +16.3% with 'entity' prefix due to complex name and low baseline. PRODUCTION RULE: Start with exact names, enhance only when needed. Simple beats verbose for semantic search.
 
 ---
 
@@ -2454,39 +2525,15 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 
 ---
 
-[ ] **Claude Indexer Performance Characteristics** (ID: `1639940901`)
-
-    performance_pattern: Claude Indexer Performance Characteristics | PATTERN: Multi-layer performance optimization from parsing to search | PROBLEM: Traditional parsers too slow for large codebases, 36x improvement needed | SOLUTION: Tree-sitter parser with Jedi semantic analysis for code understanding | IMPLEMENTATION: 1-2 seconds per Python file indexing with full semantic analysis | RESULTS: Sub-second semantic search latency across knowledge graphs | SCALABILITY: <10 files instant, 100-1000 files in minutes, enterprise-optimized | PREVENTION: Incremental updates provide 15x performance, only process changes
-
----
-
 [ ] **Qdrant Indexing Threshold Behavior** (ID: `1896313414`)
 
     Default indexing_threshold is 20000 KB (20MB) - segments below this size won't be indexed. At 59.4% indexing (6,465/10,887), segments are below threshold for HNSW index creation. Qdrant uses full-scan search on unindexed segments - more efficient for small data. Formula: 1KB = 1 vector of size 256, so threshold affects ~78,125 vectors (256-dim). Collections under 10,000 points often show <100% indexing as brute force is faster. Normal progression: 112% (optimization) → 73% (cleanup) → 59% (threshold-based indexing). Claude-indexer creates collections with indexing_threshold=100 KB by default (verified Dec 29 2024). Optimal performance settings: threshold=0 forces immediate HNSW indexing for all vectors. Trade-offs of threshold=0: +10-20% RAM, 2-5x slower inserts, but fastest possible searches. For 10K+ vector collections: threshold=0 recommended (minimal downside, major search speed gains). qdrant_stats.py now displays indexing_threshold with ⚙️ icon (added line 774)
 
 ---
 
-[ ] **v2.4 Progressive Disclosure Performance Validation** (ID: `2001015722`)
-
-    Successfully completed comprehensive performance benchmark for v2.4 Progressive Disclosure architecture. Metadata-first search achieves 3.99ms average response time (extremely fast). Full MCP workflow completes in 3.63ms average (search + implementation access). OpenAI embeddings cost $0.02 per 1K tokens with 371ms processing time per text. Benchmark infrastructure validates progressive disclosure is working correctly. Test collection contained only metadata chunks, no implementation chunks found. Performance benchmark script created: performance_benchmark.py with comprehensive testing. Results saved to: performance_benchmark_results_1751080018.json. All v2.4 architecture components functioning as designed. Ready for production deployment with validated performance characteristics
-
----
-
-[ ] **Token Management Optimization** (ID: `2167443768`)
-
-    performance_pattern: Token Management Optimization | PATTERN: Smart summarization prevents token overflow in large graphs | PROBLEM: Raw graph dump exceeded 393k tokens, breaking Claude's context window | SOLUTION: Enhanced read_graph with intelligent filtering and summarization | IMPLEMENTATION: Mode selection: smart (AI-optimized), entities, relationships, raw | RESULTS: <25k token responses while preserving essential information | SCALABILITY: Automatic entity limiting (50 per type default) with configurable limits | PREVENTION: Proactive token counting prevents context window overflow
-
----
-
 [ ] **relation-deduplication-optimization-v2.7.1** (ID: `2734731493`)
 
     PERFORMANCE OPTIMIZATION: Eliminated 18% wasted embeddings in relation processing. ROOT CAUSE: 14,269 relations generated but only 11,655 stored due to post-embedding deduplication. SOLUTION: Pre-embedding deduplication using RelationChunk.from_relation() keys in CoreIndexer._store_vectors(). IMPLEMENTATION: Added seen_relation_keys tracking before embed_batch() call. COST SAVINGS: Eliminates 2,614 duplicate API calls per full index (~18% reduction). RESULT: Identical database output with significantly reduced processing costs. CODE LOCATION: claude_indexer/indexer.py lines 517-540 (deduplication logic). LOGGING: Added debug messages showing duplicate count and API calls saved. BACKWARD COMPATIBLE: No changes to output format or functionality
-
----
-
-[ ] **Performance Optimization Results** (ID: `2736897745`)
-
-    performance_pattern: Performance Optimization Results | PATTERN: Multi-layer performance optimization strategy | SOLUTION: Incremental indexing with 15x speed improvement | IMPLEMENTATION: SHA256-based change detection and state persistence | RESULTS: Sub-second search latency across large codebases | PREVENTION: Performance monitoring prevents degradation over time | RESEARCH IDENTIFIED: Current incremental indexing scans ALL files for every change - significant overhead opportunity | PROBLEM SCOPE: 1000-file project processes all 1000 files for 1 file change (SHA256 + filesystem scan) | ARCHITECTURAL CONSTRAINT: User wants stable system without patches, code reuse, same functions together | OPTIMIZATION TARGET: Eliminate unnecessary file scanning and hash computation while preserving correctness | RESEARCH GOAL: 3 architectural options for better incremental implementation without code duplication | SOLUTION IMPLEMENTED: Created run_indexing_with_specific_files() function to eliminate watcher file discovery bottleneck | ARCHITECTURE: Watcher → run_indexing_with_specific_files([changed_file]) vs CLI → run_indexing() → discover files → run_indexing_with_specific_files(all_files) | PERFORMANCE GAIN: Watcher now processes single file instead of scanning entire project (61 files) for every change | CODE REUSE: Both CLI and watcher use same _process_file_batch() core logic, eliminating duplication | INTEGRATION VERIFIED: All tests pass, backward compatibility maintained, no breaking changes | PRODUCTION READY: Function handles setup, processing, state management, vector storage, orphaned cleanup | OPTIMIZATION SUCCESS: 4.3 second single file processing vs 2+ minute full project scan avoidance | COMMIT COMPLETED: feat: optimize watcher performance with targeted file processing (633b435) | PRODUCTION DEPLOYED: Watcher optimization successfully committed and pushed to main repository | CHANGE SUMMARY: 2 files changed, 167 insertions(+), 30 deletions(-) - efficient implementation | IMPLEMENTATION VERIFIED: run_indexing_with_specific_files() eliminates file discovery bottleneck | ARCHITECTURE CONFIRMED: CLI discovers → delegates vs Watcher processes directly for optimal performance | PERFORMANCE GAIN ACHIEVED: Single file processing (4.3s) vs full project scan avoidance (2+ minutes) | QUALITY MAINTAINED: Same _process_file_batch() core logic, state management, orphaned cleanup preserved | ZERO BREAKING CHANGES: Backward compatibility maintained, all existing functionality intact
 
 ---
 
@@ -2517,12 +2564,6 @@ Generated using cleanup pipeline logic (`is_manual_entry()` detection)
 [ ] **MCP Default Limits Optimization for Large Codebases** (ID: `3485706695`)
 
     Issue: Original defaults too low for 12k+ entity codebases (claude-memory-test collection). Discovery: Default read_graph limit=50 showed only 10 entities from 12,922 total points. Root cause: Conservative defaults designed for small projects don't scale to enterprise codebases. Token limit testing: limit=200 exceeded 25k token limit (30,695 tokens), limit=150 works perfectly. Search optimization: search_similar limit increased 10→50 for comprehensive results without token overflow. Smart mode: limitPerType increased 50→100 to show more entities per type in AI summaries. Entity-specific filtering: Works perfectly with fixed field mapping (entity_name/relation_target). Optimal defaults found: read_graph=150, search_similar=50, smart limitPerType=100. Benefits: 2-4x more results while maintaining 54% token headroom (11.5k/25k tokens). Implementation: Updated defaults in index.ts and qdrant.ts, tested all modes successfully
-
----
-
-[ ] **Performance Benchmarks v2.4 Validation Results** (ID: `4215720630`)
-
-    PATTERN: Comprehensive performance testing with quantified metrics. METADATA_SEARCH: 3.99ms average response time, target <4ms achieved. WORKFLOW_TOTAL: 3.63ms end-to-end MCP workflow performance. SAMPLE_SIZE: 80 queries across 8 test patterns for statistical validity. VALIDATION: All unit tests passing, 100% coverage maintained. BENCHMARK_FILES: performance_benchmark.py with detailed results in project memory
 
 ---
 

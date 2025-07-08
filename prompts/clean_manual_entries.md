@@ -19,9 +19,15 @@ Task: Process MANUAL memory entries only (not auto-indexed code) from memories.m
 3. Identify 10 unprocessed entries (those without [X] mark) 
 4. Create TodoWrite list with all 10 entries as separate tasks using the title and ID
 5. Process each entry one by one, marking as in_progress when starting
-6. For each entry, search for similar/duplicate/complementary entries using semantic embeddings
-7. Apply INTELLIGENT_SYNTHESIS to create comprehensive guides from partial solutions
-8. Mark todo as completed and add [X] in memories.md after processing each entry
+6. **For each entry, search memory for similar/duplicate/complementary entries using MCP search_similar**
+7. **Validate against current codebase: use search_similar with entityTypes=["function", "class", "metadata"] to verify information is still accurate and relevant**
+8. Apply INTELLIGENT_SYNTHESIS to create comprehensive guides from partial solutions
+9. Mark todo as completed and update memories.md:
+   - [X] for processed entries
+   - [D] for deleted entries 
+   - Add new comprehensive memories with [N] at the end of the file
+
+**Important**: Use memories.md only for task tracking and progress. All entry processing (finding related entries, synthesis, deletion) uses MCP memory search tools, not file content.
 
 ## MCP Memory Tools Required:
 - **Use mcp__claude-memory-memory__ prefix** for all memory operations on this project
@@ -33,6 +39,7 @@ Task: Process MANUAL memory entries only (not auto-indexed code) from memories.m
 
 ## Processing Instructions:
 - **SEARCH STRATEGY**: Use entityTypes=["debugging_pattern", "implementation_pattern", "knowledge_insight"] for manual entries
+- **EXCLUSIONS**: Skip processing entries categorized as "active_issue" or "ideas" - these are meant to remain as individual items
 - **DUPLICATE DETECTION**: Same topic, different wording (e.g., "auth debugging", "authentication errors") → keep highest quality, delete rest
 - **COMPLEMENTARY SYNTHESIS**: Different aspects, same domain → create authoritative guide
   * Example 1: "JWT validation errors" + "OAuth flow issues" + "Session timeout problems" → "Complete Authentication Troubleshooting Guide"
@@ -52,6 +59,7 @@ Task: Process MANUAL memory entries only (not auto-indexed code) from memories.m
   * ideas - Project ideas, feature suggestions, future enhancements
 - **QUALITY FOCUS**: Store solutions/insights about how code works, NOT just bug descriptions
 - **SEMANTIC ANALYSIS**: Identify 3 strongest indicators before categorizing, analyze actual problem domain not format
+- **TOKEN LIMIT**: Keep comprehensive guides under 750 tokens for optimal embedding performance and search accuracy
 - **EXECUTION**: Use delete_entities for removals, create_entities for new guides, add_observations for updates
 
 ## Structured Observation Format:
@@ -94,6 +102,7 @@ For comprehensive guides, use clear sections:
    SOLUTION: [Implementation approach]
    RESULTS: [Quantified outcomes]
 
-🗑️  Entries Deleted: [list with justification]
-✅ Status: [X] marked in memories.md
+🗑️  Entries Deleted: [list with justification] - mark these as [D] in memories.md
+📝 New Memory Created: [if synthesized] - add this as [N] at end of memories.md
+✅ Status: EDIT memories.md file to change [ ] to [X] for processed entry
 ```

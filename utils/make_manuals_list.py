@@ -85,13 +85,17 @@ async def find_all_manual_entries(collection_name: str) -> List[Dict[str, Any]]:
     return manual_entries
 
 
-def write_memories_md(entries: List[Dict[str, Any]], collection_name: str, output_file: str = "memories.md"):
+def write_memories_md(entries: List[Dict[str, Any]], collection_name: str, output_file: str = "memories.md", full_content: bool = False):
     """Write all manual entries to memories.md with [ ] checkbox format."""
     
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(f"# Manual Entries Task List - {collection_name}\n\n")
         f.write(f"All {len(entries)} manual entries (excluding documentation) formatted as task list\n\n")
         f.write("Generated using cleanup pipeline logic (`is_manual_entry()` detection)\n\n")
+        if full_content:
+            f.write("**Full content mode enabled**\n\n")
+        else:
+            f.write("**Names only mode** (use --full for complete content)\n\n")
         f.write("---\n\n")
         
         if not entries:
@@ -111,17 +115,22 @@ def write_memories_md(entries: List[Dict[str, Any]], collection_name: str, outpu
             f.write(f"## {entity_type.replace('_', ' ').title()}\n\n")
             
             for entry in type_entries:
-                # Add [ ] checkbox format at start
-                f.write(f"[ ] **{entry['title']}** (ID: `{entry['id']}`)\n\n")
+                # Add [ ] checkbox format at start with category
+                f.write(f"[ ] **{entry['title']}** ({entry['entity_type']}) (ID: `{entry['id']}`)\n")
                 
-                # Add content with proper indentation
-                content = entry['content']
-                if content:
-                    # Indent content under the checkbox
-                    indented_content = '\n'.join(f"    {line}" for line in content.split('\n'))
-                    f.write(f"{indented_content}\n\n")
-                
-                f.write("---\n\n")
+                # Add content only if full_content is True
+                if full_content:
+                    content = entry['content']
+                    if content:
+                        f.write("\n")
+                        # Indent content under the checkbox
+                        indented_content = '\n'.join(f"    {line}" for line in content.split('\n'))
+                        f.write(f"{indented_content}\n\n")
+                        f.write("---\n\n")
+                    else:
+                        f.write("\n")
+                else:
+                    f.write("\n")
 
 
 async def main():
@@ -131,12 +140,17 @@ async def main():
     parser = argparse.ArgumentParser(description="Generate memories.md with all manual entries in checkbox format")
     parser.add_argument("-c", "--collection", required=True, help="Collection name to process")
     parser.add_argument("-o", "--output", default="memories.md", help="Output file (default: memories.md)")
+    parser.add_argument("--full", action="store_true", help="Include full content (default: names only)")
     
     args = parser.parse_args()
     collection_name = args.collection
     
     print(f"🔍 Finding ALL manual entries (excluding documentation) in collection: {collection_name}")
     print("Using cleanup pipeline detection logic...")
+    if args.full:
+        print("📝 Full content mode enabled")
+    else:
+        print("📝 Names only mode (use --full for complete content)")
     
     try:
         entries = await find_all_manual_entries(collection_name)
@@ -144,7 +158,7 @@ async def main():
         print(f"✅ Found {len(entries)} manual entries")
         
         output_file = args.output
-        write_memories_md(entries, collection_name, output_file)
+        write_memories_md(entries, collection_name, output_file, args.full)
         
         print(f"📝 All manual entries written to: {output_file} with [ ] checkbox format")
         

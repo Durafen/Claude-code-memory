@@ -1,6 +1,7 @@
 """Data models for entities and relations extracted from code."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import List, Dict, Any, Optional, Literal
 from pathlib import Path
@@ -64,6 +65,7 @@ class EntityChunk:
             "entity_name": self.entity_name,
             "chunk_type": self.chunk_type,
             "content": self.content,
+            "created_at": datetime.now().isoformat(),
             **self.metadata
         }
         return payload
@@ -144,6 +146,7 @@ class RelationChunk:
             "relation_target": self.to_entity,
             "relation_type": self.relation_type.value,
             "content": self.content,
+            "created_at": datetime.now().isoformat(),
             "type": "chunk"
         }
         
@@ -185,9 +188,11 @@ class ChatChunk:
             "entity_name": f"chat_{self.chat_id}",
             "entity_type": "chat",
             "content": self.content,
+            "created_at": datetime.now().isoformat(),
             "type": "chunk"
         }
         
+        # Preserve original timestamp if provided, but also add created_at
         if self.timestamp:
             payload["timestamp"] = self.timestamp
             

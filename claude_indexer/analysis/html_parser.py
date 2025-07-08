@@ -51,6 +51,10 @@ class HTMLParser(TreeSitterParser):
             component_entities = self._extract_components(tree.root_node, content, file_path)
             entities.extend(component_entities)
             
+            # Extract inline CSS entities from <style> tags
+            inline_css_entities = self._extract_inline_css_entities(tree.root_node, content, file_path)
+            entities.extend(inline_css_entities)
+            
             # Extract links and form actions
             link_relations = self._extract_links(tree.root_node, content, file_path)
             relations.extend(link_relations)
@@ -302,4 +306,227 @@ class HTMLParser(TreeSitterParser):
         chunks.append(metadata_chunk)
         
         return chunks
+    
+    def _extract_inline_css_entities(self, root: Node, content: str, file_path: Path) -> List[Entity]:
+        """Extract CSS entities from <style> tag content using CSS parser logic."""
+        entities = []
+        
+        # Find all style elements
+        for style_element in self._find_nodes_by_type(root, ['style_element']):
+            # Get the text content of the style element (between <style> tags)
+            style_content = self._get_style_element_content(style_element, content)
+            
+            if style_content and style_content.strip():
+                # Parse CSS content using tree-sitter CSS
+                try:
+                    import tree_sitter_css as tscss
+                    import tree_sitter
+                    
+                    # Create CSS parser directly
+                    css_language = tscss.language()
+                    css_parser = tree_sitter.Parser(css_language)
+                    css_tree = css_parser.parse(bytes(style_content, "utf8"))
+                    
+                    # Extract CSS class definitions using CSS parser logic
+                    css_entities = []
+                    css_entities.extend(self._extract_css_class_definitions(css_tree.root_node, style_content, file_path, style_element.start_point[0] + 1))
+                    css_entities.extend(self._extract_css_id_definitions(css_tree.root_node, style_content, file_path, style_element.start_point[0] + 1))
+                    css_entities.extend(self._extract_css_variable_definitions(css_tree.root_node, style_content, file_path, style_element.start_point[0] + 1))
+                    
+                    entities.extend(css_entities)
+                    
+                except Exception as e:
+                    # If CSS parsing fails, still try to extract basic class/ID patterns
+                    basic_entities = self._extract_basic_css_patterns(style_content, file_path, style_element.start_point[0] + 1)
+                    entities.extend(basic_entities)
+        
+        return entities
+    
+    def _get_style_element_content(self, style_element: Node, content: str) -> str:
+        """Extract text content from style element."""
+        # Look for text content between style tags - HTML uses 'raw_text' for style content
+        for child in style_element.children:
+            if child.type in ['text', 'raw_text']:
+                return self.extract_node_text(child, content)
+        return ""
+    
+    def _extract_css_class_definitions(self, root: Node, css_content: str, file_path: Path, base_line: int) -> List[Entity]:
+        """Extract CSS class definitions from inline CSS using CSS parser logic."""
+        entities = []
+        
+        # Find all selectors that contain class selectors
+        for rule in self._find_nodes_by_type(root, ['rule_set']):
+            selectors = self._extract_css_selectors_from_rule(rule, css_content)
+            
+            for selector in selectors:
+                # Extract class names (starting with .)
+                if '.' in selector:
+                    class_parts = selector.split('.')
+                    for part in class_parts[1:]:  # Skip first empty part
+                        # Clean up class name (remove pseudo-selectors, etc.)
+                        class_name = part.split(':')[0].split('[')[0].split(' ')[0]
+                        if class_name:
+                            entity = Entity(
+                                name=f".{class_name}",
+                                entity_type=EntityType.DOCUMENTATION,  # CSS rules as documentation
+                                observations=[
+                                    f"Inline CSS class: .{class_name}",
+                                    f"Selector: {selector}",
+                                    f"Located in <style> tag in {file_path.name}"
+                                ],
+                                file_path=file_path,
+                                line_number=base_line + rule.start_point[0],
+                                metadata={
+                                    "type": "inline_css_class",
+                                    "class_name": class_name,
+                                    "full_selector": selector,
+                                    "source": "style_tag"
+                                }
+                            )
+                            entities.append(entity)
+        
+        return entities
+    
+    def _extract_css_id_definitions(self, root: Node, css_content: str, file_path: Path, base_line: int) -> List[Entity]:
+        """Extract CSS ID definitions from inline CSS."""
+        entities = []
+        
+        # Find all selectors that contain ID selectors
+        for rule in self._find_nodes_by_type(root, ['rule_set']):
+            selectors = self._extract_css_selectors_from_rule(rule, css_content)
+            
+            for selector in selectors:
+                # Extract ID names (starting with #)
+                if '#' in selector:
+                    id_parts = selector.split('#')
+                    for part in id_parts[1:]:  # Skip first part
+                        # Clean up ID name
+                        id_name = part.split(':')[0].split('[')[0].split(' ')[0]
+                        if id_name:
+                            entity = Entity(
+                                name=f"#{id_name}",
+                                entity_type=EntityType.DOCUMENTATION,
+                                observations=[
+                                    f"Inline CSS ID: #{id_name}",
+                                    f"Selector: {selector}",
+                                    f"Located in <style> tag in {file_path.name}"
+                                ],
+                                file_path=file_path,
+                                line_number=base_line + rule.start_point[0],
+                                metadata={
+                                    "type": "inline_css_id",
+                                    "id_name": id_name,
+                                    "full_selector": selector,
+                                    "source": "style_tag"
+                                }
+                            )
+                            entities.append(entity)
+        
+        return entities
+    
+    def _extract_css_variable_definitions(self, root: Node, css_content: str, file_path: Path, base_line: int) -> List[Entity]:
+        """Extract CSS variable definitions from inline CSS."""
+        entities = []
+        
+        for declaration in self._find_nodes_by_type(root, ['declaration']):
+            property_text = self.extract_node_text(declaration, css_content)
+            
+            # Check if this is a CSS variable (starts with --)
+            if property_text.strip().startswith('--'):
+                lines = property_text.split(':')
+                if len(lines) >= 2:
+                    var_name = lines[0].strip()
+                    var_value = ':'.join(lines[1:]).strip().rstrip(';')
+                    
+                    entity = Entity(
+                        name=var_name,
+                        entity_type=EntityType.DOCUMENTATION,
+                        observations=[
+                            f"Inline CSS variable: {var_name}",
+                            f"Value: {var_value}",
+                            f"Located in <style> tag in {file_path.name}"
+                        ],
+                        file_path=file_path,
+                        line_number=base_line + declaration.start_point[0],
+                        metadata={
+                            "type": "inline_css_variable",
+                            "variable_name": var_name,
+                            "value": var_value,
+                            "source": "style_tag"
+                        }
+                    )
+                    entities.append(entity)
+        
+        return entities
+    
+    def _extract_css_selectors_from_rule(self, rule: Node, css_content: str) -> List[str]:
+        """Extract selectors from a CSS rule (same logic as CSSParser)."""
+        selectors = []
+        
+        # Find selectors node
+        for child in rule.children:
+            if child.type == 'selectors':
+                selector_text = self.extract_node_text(child, css_content)
+                # Split by comma for multiple selectors
+                selectors.extend([s.strip() for s in selector_text.split(',')])
+                break
+        
+        return selectors
+    
+    def _extract_basic_css_patterns(self, css_content: str, file_path: Path, base_line: int) -> List[Entity]:
+        """Fallback: Extract basic CSS class/ID patterns using regex when tree-sitter fails."""
+        entities = []
+        import re
+        
+        # Extract class definitions using regex as fallback
+        class_pattern = r'\.([a-zA-Z][a-zA-Z0-9_-]*)\s*\{'
+        for match in re.finditer(class_pattern, css_content):
+            class_name = match.group(1)
+            line_offset = css_content[:match.start()].count('\n')
+            
+            entity = Entity(
+                name=f".{class_name}",
+                entity_type=EntityType.DOCUMENTATION,
+                observations=[
+                    f"Inline CSS class: .{class_name}",
+                    f"Located in <style> tag in {file_path.name}",
+                    "Extracted using regex fallback"
+                ],
+                file_path=file_path,
+                line_number=base_line + line_offset,
+                metadata={
+                    "type": "inline_css_class",
+                    "class_name": class_name,
+                    "source": "style_tag",
+                    "extraction_method": "regex_fallback"
+                }
+            )
+            entities.append(entity)
+        
+        # Extract ID definitions using regex as fallback
+        id_pattern = r'#([a-zA-Z][a-zA-Z0-9_-]*)\s*\{'
+        for match in re.finditer(id_pattern, css_content):
+            id_name = match.group(1)
+            line_offset = css_content[:match.start()].count('\n')
+            
+            entity = Entity(
+                name=f"#{id_name}",
+                entity_type=EntityType.DOCUMENTATION,
+                observations=[
+                    f"Inline CSS ID: #{id_name}",
+                    f"Located in <style> tag in {file_path.name}",
+                    "Extracted using regex fallback"
+                ],
+                file_path=file_path,
+                line_number=base_line + line_offset,
+                metadata={
+                    "type": "inline_css_id",
+                    "id_name": id_name,
+                    "source": "style_tag",
+                    "extraction_method": "regex_fallback"
+                }
+            )
+            entities.append(entity)
+        
+        return entities
     

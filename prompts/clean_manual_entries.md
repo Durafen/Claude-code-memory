@@ -19,18 +19,24 @@ Task: Maintain MANUAL memory entries only (not auto-indexed code) from memories.
 3. Identify 10 unprocessed entries (those without [X] mark) 
 4. Create TodoWrite list with all 10 entries as separate tasks using the title and ID
 5. Process each entry one by one, marking as in_progress when starting
-6. **For each entry, search memory for similar/duplicate/complementary entries using MCP search_similar**
+6. **For each entry, first search for the specific entry by title/ID to get its full content, then search for similar/duplicate/complementary entries using MCP search_similar**
 7. **Validate against current codebase: use search_similar with entityTypes=["function", "class", "metadata"] to verify information is still accurate and relevant**
 8. Apply memory consolidation: merge duplicates, update outdated info, resolve conflicts, and create comprehensive manual entries from partial memories
 9. Mark todo as completed and update memories.md:
    - [X] for processed entries
-   - [D] for deleted entries 
-   - Add new comprehensive memories with [N] at the end of the file
+   - [D] for deleted entries
 
 **Important**: Use memories.md only for task tracking and progress. All entry processing (finding related entries, synthesis, deletion) uses MCP memory search tools, not file content.
 
+## Developer-Focused Optimization:
+- **Prioritize coding assistance**: Keep debugging patterns, implementation solutions, best practices
+- **Eliminate noise**: Remove outdated tutorials, deprecated workflows, irrelevant context
+- **Enhance debugging**: Consolidate error patterns into comprehensive troubleshooting guides
+- **Reduce duplication**: Merge similar solutions to avoid conflicting advice
+- **Practical focus**: Emphasize actionable code solutions over theoretical discussions
+
 ## Outdated Information Cleanup:
-- Delete resolved bugs and fixed issues
+- Delete resolved bugs and fixed issues (but NEVER delete "active_issue" or "ideas" category entries)
 - Remove deprecated API references  
 - Update version-specific information
 - Eliminate obsolete configurations
@@ -39,7 +45,7 @@ Task: Maintain MANUAL memory entries only (not auto-indexed code) from memories.
 - **Search entityTypes=["function", "class", "metadata"] to validate technical details**
 
 ## MCP Memory Tools Required:
-- **Use mcp__claude-memory-memory__ prefix** for all memory operations on this project
+- **Use mcp__claude-memory-memory__ prefix** for this project (adjust prefix based on your MCP collection name)
 - **search_similar**: Find related entries using semantic search with entityTypes filtering
 - **delete_entities**: Remove outdated or duplicate entries by name
 - **create_entities**: Store new comprehensive guides with proper categorization
@@ -48,7 +54,8 @@ Task: Maintain MANUAL memory entries only (not auto-indexed code) from memories.
 
 ## Processing Instructions:
 - **SEARCH STRATEGY**: Use entityTypes=["debugging_pattern", "implementation_pattern", "knowledge_insight"] for manual entries
-- **EXCLUSIONS**: Skip processing entries categorized as "active_issue" or "ideas" - these are meant to remain as individual items
+- **UNCERTAINTY HANDLING**: If uncertain about whether to delete, merge, or keep an entry, STOP and ask the user for guidance before proceeding
+- **EXCLUSIONS**: NEVER process or delete (just pass) "active_issue" (current bugs) or "ideas" (brainstorming) entries - these must remain individual
 - **DUPLICATE DETECTION**: Same topic, different wording (e.g., "auth debugging", "authentication errors") → keep highest quality, delete rest
 - **MEMORY CONSOLIDATION**: Different aspects, same domain → create comprehensive manual entry
   * Example 1: "JWT validation errors" + "OAuth flow issues" + "Session timeout problems" → "Complete Authentication Troubleshooting Guide"
@@ -94,7 +101,7 @@ For comprehensive guides, use clear sections:
 6. **performance_pattern (8%)** - Optimization, caching, bottlenecks
    - *Keywords*: "performance", "optimization", "scalability", "memory", "speed", "bottleneck", "cache"
 7. **knowledge_insight** - Research findings, lessons learned, methodology
-8. **active_issue** - Current bugs requiring attention (delete when resolved)
+8. **active_issue** - Current bugs requiring attention
 9. **ideas** - Project ideas, feature suggestions, future enhancements
 
 ## Terminal-Formatted Output for Each Entry:
@@ -112,6 +119,6 @@ For comprehensive guides, use clear sections:
    RESULTS: [Quantified outcomes]
 
 🗑️  Entries Deleted: [list with justification] - mark these as [D] in memories.md
-📝 New Memory Created: [if synthesized] - add this as [N] at end of memories.md
+📝 New Memory Created: [if synthesized] - stored in memory database only
 ✅ Status: EDIT memories.md file to change [ ] to [X] for processed entry
 ```

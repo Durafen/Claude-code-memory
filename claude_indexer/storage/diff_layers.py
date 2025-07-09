@@ -79,13 +79,16 @@ class SmartRelationsProcessor:
                                     changed_entity_ids: Set[str]) -> tuple[List['Relation'], List['Relation']]:
         """Split relations into changed vs unchanged based on entity involvement"""
         
+        # Extract entity names from file_path::entity_name format
+        changed_names = {id.split("::")[-1] for id in changed_entity_ids}
+        
         relations_to_update = []
         relations_unchanged = []
         
         for relation in all_relations:
             # Check if relation involves any changed entity
-            if (relation.from_entity in changed_entity_ids or 
-                relation.to_entity in changed_entity_ids):
+            if (relation.from_entity in changed_names or 
+                relation.to_entity in changed_names):
                 relations_to_update.append(relation)
             else:
                 # Relation between two unchanged entities - skip

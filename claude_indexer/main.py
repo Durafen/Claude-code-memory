@@ -268,7 +268,9 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
         # Store vectors if we have entities or relations
         storage_success = True
         if entities or relations or implementation_chunks:
-            storage_success = indexer._store_vectors(collection_name, entities, relations, implementation_chunks)
+            # Git+Meta: compute changed entity IDs for event awareness
+            changed_entity_ids = {f"{entity.file_path}::{entity.name}" if entity.file_path else entity.name for entity in entities} if entities else set()
+            storage_success = indexer._store_vectors(collection_name, entities, relations, implementation_chunks, changed_entity_ids)
             if not storage_success:
                 if not quiet:
                     logger.error("❌ Failed to store vectors in Qdrant")

@@ -61,10 +61,13 @@ class EntityChunk:
     
     def to_vector_payload(self) -> Dict[str, Any]:
         """Convert to Qdrant payload format with progressive disclosure support."""
+        from ..storage.qdrant import ContentHashMixin
+        
         payload = {
             "entity_name": self.entity_name,
             "chunk_type": self.chunk_type,
             "content": self.content,
+            "content_hash": ContentHashMixin.compute_content_hash(self.content),
             "created_at": datetime.now().isoformat(),
             **self.metadata
         }
@@ -141,12 +144,15 @@ class RelationChunk:
     
     def to_vector_payload(self) -> Dict[str, Any]:
         """Convert relation chunk to vector storage payload."""
+        from ..storage.qdrant import ContentHashMixin
+        
         payload: Dict[str, Any] = {
             "chunk_type": "relation",
             "entity_name": self.from_entity,  # Primary entity for search
             "relation_target": self.to_entity,
             "relation_type": self.relation_type.value,
             "content": self.content,
+            "content_hash": ContentHashMixin.compute_content_hash(self.content),
             "created_at": datetime.now().isoformat(),
             "type": "chunk"
         }

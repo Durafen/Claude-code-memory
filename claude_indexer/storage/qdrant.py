@@ -2,6 +2,7 @@
 
 import time
 import warnings
+import hashlib
 from typing import List, Dict, Any, Optional, Union
 from .base import VectorStore, StorageResult, VectorPoint, ManagedVectorStore
 from ..indexer_logging import get_logger
@@ -45,7 +46,31 @@ except ImportError:
         pass
 
 
-class QdrantStore(ManagedVectorStore):
+class ContentHashMixin:
+    """Mixin for content-addressable storage functionality"""
+    
+    @staticmethod
+    def compute_content_hash(content: str) -> str:
+        """Generate SHA256 hash of content"""
+        return hashlib.sha256(content.encode()).hexdigest()
+    
+    def check_content_exists(self, collection_name: str, content_hash: str) -> bool:
+        """Check if content hash already exists in storage"""
+        try:
+            results = self.client.scroll(
+                collection_name=collection_name,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="content_hash", match=MatchValue(value=content_hash))]
+                ),
+                limit=1
+            )
+            return len(results[0]) > 0
+        except Exception as e:
+            logger.debug(f"Error checking content hash existence: {e}")
+            return False
+
+
+class QdrantStore(ManagedVectorStore, ContentHashMixin):
     """Qdrant vector database implementation."""
     
     DISTANCE_METRICS = {

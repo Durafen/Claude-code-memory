@@ -57,6 +57,11 @@ class ContentHashMixin:
     def check_content_exists(self, collection_name: str, content_hash: str) -> bool:
         """Check if content hash already exists in storage"""
         try:
+            # Check if collection exists first
+            if not self.collection_exists(collection_name):
+                logger.debug(f"Collection {collection_name} doesn't exist, hash check returns False")
+                return False
+                
             results = self.client.scroll(
                 collection_name=collection_name,
                 scroll_filter=Filter(
@@ -67,6 +72,7 @@ class ContentHashMixin:
             return len(results[0]) > 0
         except Exception as e:
             logger.debug(f"Error checking content hash existence: {e}")
+            # On connection errors, fall back to processing (safer than skipping)
             return False
 
 

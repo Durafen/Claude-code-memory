@@ -22,7 +22,7 @@
         "*.css",
         "*.md",
         "*.txt",
-        "*,json"
+        "*.json"
       ],
       "exclude": [
         "*.pyc",
@@ -42,7 +42,8 @@
         "*.egg-info",
         "settings.txt",
         ".claude-indexer",
-        "docs/archive/"
+        "docs/archive/",
+        "debug/"
       ]
     },
     "max_file_size": 1048576,

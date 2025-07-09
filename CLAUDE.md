@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Testing and Debug Environment
+
+**⚠️ CRITICAL: Use `debug/` folder for ALL test scripts and test databases**
+
+- Create test scripts in `debug/` folder only (never in project root)
+- Use `debug/test_collections/` for test database collections
+- Test files in `debug/` are automatically ignored by git and indexer
+- Never contaminate production collections with test data
+- Examples: `debug/test_parser.py`, `debug/test_relations.py`, `debug/test_collections/parser-test`
+
 # Claude Code Memory Solution
 
 ## Architecture Overview

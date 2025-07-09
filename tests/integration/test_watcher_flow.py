@@ -407,7 +407,7 @@ class TestWatcherConfiguration:
             embedder_type="dummy",
             storage_type="qdrant",
             include_patterns=["*.py"],
-            exclude_patterns=["*test*", "*temp*"],
+            exclude_patterns=["*temp*"],
             watch_debounce=0.1
         )
         

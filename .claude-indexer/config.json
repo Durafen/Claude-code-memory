@@ -41,7 +41,8 @@
         "chat_reports",
         "*.egg-info",
         "settings.txt",
-        ".claude-indexer"
+        ".claude-indexer",
+        "docs/archive/"
       ]
     },
     "max_file_size": 1048576,

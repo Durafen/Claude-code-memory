@@ -59,7 +59,7 @@ class ContentHashMixin:
         try:
             # Check if collection exists first
             if not self.collection_exists(collection_name):
-                logger.debug(f"Collection {collection_name} doesn't exist, hash check returns False")
+                logger.debug(f"Collection {collection_name} doesn't exist, content hash check returns False")
                 return False
                 
             results = self.client.scroll(

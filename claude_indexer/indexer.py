@@ -980,7 +980,7 @@ class CoreIndexer:
                         chunks_to_embed.append(metadata_chunk)
                         changed_entity_ids.add(entity_id)
                         if logger:
-                            logger.debug(f"🔄 Processing changed entity: {entity.name}")
+                            pass  # logger.debug(f"🔄 Processing changed entity: {entity.name}")
                 
                 # Log efficiency gains
                 if chunks_to_skip:
@@ -1002,12 +1002,20 @@ class CoreIndexer:
                     total_cost += cost_data['cost']
                     total_requests += cost_data['requests']
                     
+                    failed_entities = 0
                     for chunk, embedding_result in zip(chunks_to_embed, embedding_results):
                         if embedding_result.success:
                             point = self.vector_store.create_chunk_point(
                                 chunk, embedding_result.embedding, collection_name
                             )
                             all_points.append(point)
+                        else:
+                            failed_entities += 1
+                            if logger:
+                                logger.warning(f"❌ Entity embedding failed: {chunk.entity_name} - {getattr(embedding_result, 'error', 'Unknown error')}")
+                    
+                    if failed_entities > 0 and logger:
+                        logger.warning(f"⚠️ {failed_entities} entity embeddings failed and were skipped")
             
             # Phase 3: Smart Relations Processing (Git+Meta approach)
             if relations:
@@ -1080,6 +1088,7 @@ class CoreIndexer:
                     total_cost += cost_data['cost']
                     total_requests += cost_data['requests']
                     
+                    failed_relations = 0
                     for relation, embedding_result in zip(unique_relations, embedding_results):
                         if embedding_result.success:
                             # Convert relation to chunk for v2.4 pure architecture
@@ -1088,6 +1097,13 @@ class CoreIndexer:
                                 relation_chunk, embedding_result.embedding, collection_name
                             )
                             all_points.append(point)
+                        else:
+                            failed_relations += 1
+                            if logger:
+                                logger.warning(f"❌ Relation embedding failed: {relation.from_entity} -> {relation.to_entity} - {getattr(embedding_result, 'error', 'Unknown error')}")
+                    
+                    if failed_relations > 0 and logger:
+                        logger.warning(f"⚠️ {failed_relations} relation embeddings failed and were skipped")
             
             # Phase 4: Implementation chunks with Git+Meta deduplication
             if implementation_chunks:
@@ -1108,7 +1124,7 @@ class CoreIndexer:
                     else:
                         impl_chunks_to_embed.append(impl_chunk)
                         if logger:
-                            logger.debug(f"🔄 Processing changed implementation: {impl_chunk.entity_name}")
+                            pass  # logger.debug(f"🔄 Processing changed implementation: {impl_chunk.entity_name}")
                 
                 # Log efficiency gains
                 if impl_chunks_to_skip:
@@ -1130,12 +1146,20 @@ class CoreIndexer:
                     total_cost += cost_data['cost']
                     total_requests += cost_data['requests']
                     
+                    failed_implementations = 0
                     for chunk, embedding_result in zip(impl_chunks_to_embed, embedding_results):
                         if embedding_result.success:
                             point = self.vector_store.create_chunk_point(
                                 chunk, embedding_result.embedding, collection_name
                             )
                             all_points.append(point)
+                        else:
+                            failed_implementations += 1
+                            if logger:
+                                logger.warning(f"❌ Implementation embedding failed: {chunk.entity_name} - {getattr(embedding_result, 'error', 'Unknown error')}")
+                    
+                    if failed_implementations > 0 and logger:
+                        logger.warning(f"⚠️ {failed_implementations} implementation embeddings failed and were skipped")
             
             # Store cost tracking data for result reporting
             if not hasattr(self, '_session_cost_data'):

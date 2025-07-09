@@ -1117,68 +1117,8 @@ class MarkdownParser(CodeParser):
                         )
                         entities.append(entity)
             
-            # Extract links with regex pattern [text](url)
-            link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
-            for match in re.finditer(link_pattern, content):
-                text = match.group(1)
-                url = match.group(2)
-                
-                # Find line number
-                line_num = content[:match.start()].count('\n') + 1
-                
-                entity = Entity(
-                    name=f"Link: {text}",
-                    entity_type=EntityType.DOCUMENTATION,
-                    observations=[
-                        f"Link text: {text}",
-                        f"URL: {url}",
-                        f"Line {line_num} in {file_path.name}"
-                    ],
-                    file_path=file_path,
-                    line_number=line_num,
-                    metadata={"type": "link", "url": url, "text": text}
-                )
-                entities.append(entity)
-            
-            # Extract code blocks with language detection
-            code_block_pattern = r'```(\w+)?\n(.*?)\n```'
-            for match in re.finditer(code_block_pattern, content, re.DOTALL):
-                code = match.group(2)
-                
-                # Detect natural language queries vs actual code
-                if match.group(1):
-                    language = match.group(1)
-                elif '"' in code and not any(c in code for c in [';', '{', 'def ', 'function', 'class ', 'import']):
-                    language = "natural_language_query"
-                else:
-                    language = "unknown"
-                
-                # Find line number
-                line_num = content[:match.start()].count('\n') + 1
-                
-                # Truncate long code blocks
-                display_code = code[:100] + "..." if len(code) > 100 else code
-                
-                # Set descriptive name based on content type
-                if language == "natural_language_query":
-                    entity_name = "Natural Language Query Examples"
-                else:
-                    entity_name = f"Code Block ({language})"
-                
-                entity = Entity(
-                    name=entity_name,
-                    entity_type=EntityType.DOCUMENTATION,
-                    observations=[
-                        f"Language: {language}",
-                        f"Code: {display_code}",
-                        f"Line {line_num} in {file_path.name}",
-                        f"Full code length: {len(code)} characters"
-                    ],
-                    file_path=file_path,
-                    line_number=line_num,
-                    metadata={"type": "code_block", "language": language, "code": code}
-                )
-                entities.append(entity)
+            # Links and code blocks filtered out to reduce relation bloat
+            # Content still accessible via get_implementation for full markdown sections
         
         except Exception:
             pass  # Ignore errors, return what we could extract

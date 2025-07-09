@@ -107,33 +107,69 @@ class IndexingEventHandler(FileSystemEventHandler):
         )
     
     def _process_file_change(self, path: Path, event_type: str):
-        """Process a file change or creation."""
+        """Process a file change or creation with Git+Meta deduplication."""
         try:
             relative_path = path.relative_to(self.project_path)
             logger = get_logger()
             logger.info(f"🔄 Auto-indexing ({event_type}): {relative_path}")
             
-            # Import here to avoid circular imports
-            from ..main import run_indexing_with_specific_files
+            # Use Git+Meta optimized single-file indexing instead of batch processing
+            # This provides content deduplication and skips unchanged files
+            if not hasattr(self, '_indexer'):
+                self._indexer = self._create_indexer()
             
-            # Run indexing for specific file only (performance optimization)
-            success = run_indexing_with_specific_files(
-                project_path=str(self.project_path),
-                collection_name=self.collection_name,
-                file_paths=[path],  # Only process the changed file
-                quiet=not self.verbose,
-                verbose=self.verbose
-            )
+            # Use the same optimized path as CLI single-file indexing
+            result = self._indexer.index_single_file(path, self.collection_name)
             
-            if success:
+            if result.success:
                 self.processed_files.add(str(path))
-                logger.info(f"✅ Indexed: {relative_path}")
+                
+                # Log Git+Meta efficiency information
+                if result.embedding_requests == 0:
+                    logger.info(f"⚡ Git+Meta: Skipped {relative_path} (unchanged content)")
+                else:
+                    logger.info(f"✅ Indexed: {relative_path} ({result.entities_created} entities, {result.embedding_requests} requests)")
                 logger.info("-----------------------------------------")
             else:
-                logger.error(f"❌ Failed to index: {relative_path}")
+                logger.error(f"❌ Failed to index: {relative_path} - {result.errors}")
         
         except Exception as e:
             logger.error(f"❌ Error processing file change {path}: {e}")
+    
+    def _create_indexer(self):
+        """Create a CoreIndexer instance for Git+Meta optimized processing."""
+        from ..config.config_loader import ConfigLoader
+        from ..indexer import CoreIndexer
+        from ..embeddings.voyage import VoyageEmbedder
+        from ..embeddings.openai import OpenAIEmbedder
+        from ..storage.qdrant import QdrantStore
+        from ..storage.base import CachingVectorStore
+        
+        # Load configuration
+        config = ConfigLoader().load()
+        
+        # Create embedder based on provider
+        provider = config.embedding_provider
+        if provider == "voyage":
+            embedder = VoyageEmbedder(
+                api_key=config.voyage_api_key,
+                model=config.voyage_model
+            )
+        else:
+            embedder = OpenAIEmbedder(
+                api_key=config.openai_api_key,
+                model="text-embedding-3-small"
+            )
+        
+        # Create vector store with caching
+        vector_store = QdrantStore(
+            url=config.qdrant_url,
+            api_key=config.qdrant_api_key
+        )
+        cached_store = CachingVectorStore(vector_store)
+        
+        # Create indexer
+        return CoreIndexer(config, embedder, cached_store, self.project_path)
     
     def _process_file_deletion(self, path: Path):
         """Process a file deletion using shared deletion logic."""

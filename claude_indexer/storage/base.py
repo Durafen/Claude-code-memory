@@ -303,40 +303,13 @@ class CachingVectorStore(VectorStore):
         """Delegate find entities for file to backend"""
         if hasattr(self.backend, 'find_entities_for_file'):
             return self.backend.find_entities_for_file(collection_name, file_path)
+    
+    def check_content_exists(self, collection_name: str, content_hash: str) -> bool:
+        """Delegate content hash checking to backend for Git+Meta deduplication."""
+        if hasattr(self.backend, 'check_content_exists'):
+            return self.backend.check_content_exists(collection_name, content_hash)
         else:
-            # Fallback implementation using search_similar
-            dummy_vector = [0.1] * 1536
-            results = []
-            
-            # Search for entities with file_path matching
-            filter_path = {"file_path": file_path}
-            search_result = self.search_similar(
-                collection_name=collection_name,
-                query_vector=dummy_vector,
-                limit=1000,
-                score_threshold=0.0,
-                filter_conditions=filter_path
-            )
-            if search_result.success:
-                results.extend(search_result.results)
-            
-            # Search for File entities where name = file_path
-            filter_name = {"name": file_path}
-            search_result = self.search_similar(
-                collection_name=collection_name,
-                query_vector=dummy_vector,
-                limit=1000,
-                score_threshold=0.0,
-                filter_conditions=filter_name
-            )
-            if search_result.success:
-                # Only add if not already in results (deduplication)
-                existing_ids = {r["id"] for r in results}
-                for result in search_result.results:
-                    if result["id"] not in existing_ids:
-                        results.append(result)
-            
-            return results
+            raise AttributeError(f"Backend {type(self.backend)} does not support check_content_exists")
     
     def _cleanup_orphaned_relations(self, collection_name: str, verbose: bool = False):
         """Delegate orphaned relation cleanup to backend"""
@@ -344,3 +317,11 @@ class CachingVectorStore(VectorStore):
             return self.backend._cleanup_orphaned_relations(collection_name, verbose)
         else:
             raise AttributeError(f"Backend {type(self.backend)} does not support _cleanup_orphaned_relations")
+    
+    @property
+    def client(self):
+        """Delegate client access to backend for Git+Meta orphan cleanup compatibility."""
+        if hasattr(self.backend, 'client'):
+            return self.backend.client
+        else:
+            raise AttributeError(f"Backend {type(self.backend)} does not have client attribute")

@@ -348,43 +348,12 @@ class CoreIndexer:
         return result
     
     def index_single_file(self, file_path: Path, collection_name: str) -> IndexingResult:
-        """Index a single file."""
+        """Index a single file with Git+Meta deduplication."""
         start_time = time.time()
         result = IndexingResult(success=True, operation="single_file")
         
         try:
-            # Clean up existing entities for this file BEFORE processing (prevents duplicates)
-            # This ensures single file indexing gets same cleanup treatment as batch processing
-            try:
-                relative_path = str(file_path.relative_to(self.project_path))
-                logger.info(f"🧹 DEBUG: Single file cleanup starting for: {relative_path}")
-                
-                # Check if collection exists first
-                collection_exists = self.vector_store.collection_exists(collection_name)
-                logger.info(f"🧹 DEBUG: Collection '{collection_name}' exists: {collection_exists}")
-                
-                if collection_exists:
-                    # Try to find entities before deletion
-                    full_path = str(file_path)
-                    logger.info(f"🧹 DEBUG: Searching for entities with path: {full_path}")
-                    found_entities = self.vector_store.find_entities_for_file(collection_name, full_path)
-                    logger.info(f"🧹 DEBUG: Found {len(found_entities)} entities before cleanup")
-                    
-                    # Run cleanup
-                    self._handle_deleted_files(collection_name, relative_path, verbose=True)
-                    
-                    # Check after cleanup
-                    found_entities_after = self.vector_store.find_entities_for_file(collection_name, full_path)
-                    logger.info(f"🧹 DEBUG: Found {len(found_entities_after)} entities after cleanup")
-                else:
-                    logger.info(f"🧹 DEBUG: Collection doesn't exist, skipping cleanup")
-                    
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to clean existing entities for {file_path}: {e}")
-                import traceback
-                logger.warning(f"⚠️ Traceback: {traceback.format_exc()}")
-            
-            # Parse file with batch processing for large JSON files
+            # Parse file first to get entities for Git+Meta deduplication check
             batch_callback = None
             if self._should_use_batch_processing(file_path):
                 batch_callback = self._create_batch_callback(collection_name)
@@ -403,6 +372,66 @@ class CoreIndexer:
                 result.files_failed = 1
                 result.errors.extend(parse_result.errors)
                 return result
+            
+            # Git+Meta: Check if file content has changed by comparing entity hashes
+            # Only proceed with cleanup if content actually changed
+            should_cleanup = True
+            if parse_result.entities and self.vector_store.collection_exists(collection_name):
+                # Check if all entities have unchanged content
+                unchanged_entities = 0
+                for entity in parse_result.entities:
+                    metadata_chunk = EntityChunk.create_metadata_chunk(entity, False)
+                    content_hash = metadata_chunk.to_vector_payload()["content_hash"]
+                    if self.vector_store.check_content_exists(collection_name, content_hash):
+                        unchanged_entities += 1
+                
+                # If all entities are unchanged, skip cleanup and storage
+                if unchanged_entities == len(parse_result.entities):
+                    should_cleanup = False
+                    logger.info(f"⚡ Git+Meta: All {unchanged_entities} entities unchanged, skipping cleanup and storage")
+                    
+                    # Return success with zero operations
+                    result.files_processed = 1
+                    result.entities_created = 0
+                    result.relations_created = 0
+                    result.implementation_chunks_created = 0
+                    result.processed_files = [str(file_path)]
+                    result.total_tokens = 0
+                    result.total_cost_estimate = 0.0
+                    result.embedding_requests = 0
+                    result.processing_time = time.time() - start_time
+                    return result
+            
+            # Clean up existing entities for this file only if content changed
+            if should_cleanup:
+                try:
+                    relative_path = str(file_path.relative_to(self.project_path))
+                    logger.info(f"🧹 DEBUG: Single file cleanup starting for: {relative_path}")
+                    
+                    # Check if collection exists first
+                    collection_exists = self.vector_store.collection_exists(collection_name)
+                    logger.info(f"🧹 DEBUG: Collection '{collection_name}' exists: {collection_exists}")
+                    
+                    if collection_exists:
+                        # Try to find entities before deletion
+                        full_path = str(file_path)
+                        logger.info(f"🧹 DEBUG: Searching for entities with path: {full_path}")
+                        found_entities = self.vector_store.find_entities_for_file(collection_name, full_path)
+                        logger.info(f"🧹 DEBUG: Found {len(found_entities)} entities before cleanup")
+                        
+                        # Run cleanup
+                        self._handle_deleted_files(collection_name, relative_path, verbose=True)
+                        
+                        # Check after cleanup
+                        found_entities_after = self.vector_store.find_entities_for_file(collection_name, full_path)
+                        logger.info(f"🧹 DEBUG: Found {len(found_entities_after)} entities after cleanup")
+                    else:
+                        logger.info(f"🧹 DEBUG: Collection doesn't exist, skipping cleanup")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to clean existing entities for {file_path}: {e}")
+                    import traceback
+                    logger.warning(f"⚠️ Traceback: {traceback.format_exc()}")
             
             # Handle storage based on whether batch processing was used
             if batch_callback:

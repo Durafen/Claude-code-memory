@@ -956,9 +956,9 @@ class CoreIndexer:
             chunks_to_skip = []
             
             # Create implementation chunk lookup for has_implementation flags
-            implementation_file_paths = set()
+            implementation_entity_names = set()
             if implementation_chunks:
-                implementation_file_paths = {chunk.metadata.get('file_path') for chunk in implementation_chunks if chunk.metadata.get('file_path')}
+                implementation_entity_names = {chunk.entity_name for chunk in implementation_chunks}
             
             # Check which entities need embedding (Git+Meta deduplication)
             if entities:
@@ -966,7 +966,7 @@ class CoreIndexer:
                     logger.debug(f"🧠 Processing entities with Git+Meta deduplication: {len(entities)} items")
                 
                 for entity in entities:
-                    has_implementation = str(entity.file_path) in implementation_file_paths
+                    has_implementation = entity.name in implementation_entity_names
                     metadata_chunk = EntityChunk.create_metadata_chunk(entity, has_implementation)
                     content_hash = metadata_chunk.to_vector_payload()["content_hash"]
                     entity_id = f"{entity.file_path}::{entity.name}" if entity.file_path else entity.name

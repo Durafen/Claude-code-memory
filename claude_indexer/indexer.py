@@ -1014,308 +1014,33 @@ class CoreIndexer:
             logger.debug(f"📊 Git+Meta changed entity IDs: {len(changed_entity_ids)} entities flagged as changed")
         
         try:
-            all_points = []
-            total_tokens = 0
-            total_cost = 0.0
-            total_requests = 0
+            # Create unified processor (NEW)
+            from .processing import UnifiedContentProcessor
+            processor = UnifiedContentProcessor(self.vector_store, self.embedder, logger)
             
-            # Phase 1: Content hash analysis for entities (Git+Meta approach)
-            entity_hashes = {}
-            chunks_to_embed = []
-            chunks_to_skip = []
+            # Single call replacing ~200 lines of duplicated logic (NEW)
+            result = processor.process_all_content(
+                collection_name, entities, relations, implementation_chunks, changed_entity_ids
+            )
             
-            # Create implementation chunk lookup for has_implementation flags
-            implementation_entity_names = set()
-            if implementation_chunks:
-                implementation_entity_names = {chunk.entity_name for chunk in implementation_chunks}
-            
-            # Check which entities need embedding (Git+Meta deduplication)
-            if entities:
+            if not result.success:
                 if logger:
-                    logger.debug(f"🧠 Processing entities with Git+Meta deduplication: {len(entities)} items")
-                
-                for entity in entities:
-                    has_implementation = entity.name in implementation_entity_names
-                    metadata_chunk = EntityChunk.create_metadata_chunk(entity, has_implementation)
-                    content_hash = metadata_chunk.to_vector_payload()["content_hash"]
-                    entity_id = f"{entity.file_path}::{entity.name}" if entity.file_path else entity.name
-                    entity_hashes[entity_id] = content_hash
-                    
-                    if self.vector_store.check_content_exists(collection_name, content_hash):
-                        chunks_to_skip.append((metadata_chunk, "exists"))
-                        if logger:
-                            logger.debug(f"⚡ Skipping unchanged entity: {entity.name}")
-                    else:
-                        chunks_to_embed.append(metadata_chunk)
-                        changed_entity_ids.add(entity_id)
-                        if logger:
-                            pass  # logger.debug(f"🔄 Processing changed entity: {entity.name}")
-                
-                # Log efficiency gains
-                if chunks_to_skip:
-                    logger.info(f"⚡ Git+Meta Efficiency: Skipped {len(chunks_to_skip)} unchanged entities (saved {len(chunks_to_skip)} embeddings)")
-                
-                # Phase 2: Embed only new/changed content
-                if chunks_to_embed:
-                    metadata_texts = [chunk.content for chunk in chunks_to_embed]
-                    if logger:
-                        logger.debug(f"🔤 Generating embeddings for {len(metadata_texts)} new/changed entity texts")
-                    
-                    embedding_results = self.embedder.embed_batch(metadata_texts)
-                    if logger:
-                        logger.debug(f"✅ Entity embeddings completed: {sum(1 for r in embedding_results if r.success)}/{len(embedding_results)} successful")
-                    
-                    # Process embedding results for new/changed entities only
-                    cost_data = self._collect_embedding_cost_data(embedding_results)
-                    total_tokens += cost_data['tokens']
-                    total_cost += cost_data['cost']
-                    total_requests += cost_data['requests']
-                    
-                    failed_entities = 0
-                    entity_points_created = 0
-                    for chunk, embedding_result in zip(chunks_to_embed, embedding_results):
-                        if embedding_result.success:
-                            point = self.vector_store.create_chunk_point(
-                                chunk, embedding_result.embedding, collection_name
-                            )
-                            all_points.append(point)
-                            entity_points_created += 1
-                        else:
-                            failed_entities += 1
-                            if logger:
-                                logger.warning(f"❌ Entity embedding failed: {chunk.entity_name} - {getattr(embedding_result, 'error', 'Unknown error')}")
-                    
-                    if logger:
-                        logger.debug(f"🧠 Created {entity_points_created} entity points from {len(chunks_to_embed)} embedded chunks")
-                    
-                    if failed_entities > 0 and logger:
-                        logger.warning(f"⚠️ {failed_entities} entity embeddings failed and were skipped")
+                    logger.error(f"❌ Unified processing failed: {result.error}")
+                return False
             
-            # Phase 3: Smart Relations Processing (Git+Meta approach)
-            if relations:
-                if logger:
-                    logger.debug(f"🔗 Processing relations with Git+Meta smart filtering: {len(relations)} items")
-                
-                # Import SmartRelationsProcessor
-                from .storage.diff_layers import SmartRelationsProcessor
-                relations_processor = SmartRelationsProcessor()
-                
-                # Split relations based on entity involvement
-                if changed_entity_ids:
-                    relations_to_embed, relations_unchanged = relations_processor.filter_relations_for_changes(
-                        relations, changed_entity_ids
-                    )
-                    
-                    if logger:
-                        logger.debug(f"🔗 Smart Relations filtering: {len(relations_to_embed)} to embed, {len(relations_unchanged)} unchanged")
-                    
-                    if relations_unchanged:
-                        logger.info(f"⚡ Smart Relations: Skipped {len(relations_unchanged)} unchanged relations (saved {len(relations_unchanged)} embeddings)")
-                    
-                    relations_to_process = relations_to_embed
-                else:
-                    # Fallback: process all relations (initial indexing)
-                    relations_to_process = relations
-                    if logger:
-                        logger.debug(f"🔗 Initial indexing: Processing all {len(relations_to_process)} relations")
-                
-                if relations_to_process:
-                    # Deduplicate relations BEFORE embedding to save API costs
-                    seen_relation_keys = set()
-                    unique_relations = []
-                    duplicate_count = 0
-                    duplicate_details = {}
-                    
-                    logger.debug(f"🔍 === RELATION DEDUPLICATION ===")
-                    logger.debug(f"   Total relations to process: {len(relations_to_process)}")
-                    
-                    for relation in relations_to_process:
-                        # Generate the same key that will be used for storage
-                        relation_chunk = RelationChunk.from_relation(relation)
-                        relation_key = relation_chunk.id
-                        import_type = relation.metadata.get('import_type', 'none') if relation.metadata else 'none'
-                        
-                        if relation_key not in seen_relation_keys:
-                            seen_relation_keys.add(relation_key)
-                            unique_relations.append(relation)
-                            if logger and len(unique_relations) <= 5:
-                                logger.debug(f"   ✅ Unique: {relation_key} [import_type: {import_type}]")
-                        else:
-                            duplicate_count += 1
-                            if import_type not in duplicate_details:
-                                duplicate_details[import_type] = 0
-                            duplicate_details[import_type] += 1
-                            if logger and duplicate_count <= 5:
-                                logger.debug(f"   ❌ Duplicate: {relation_key} [import_type: {import_type}]")
-                    
-                    logger.debug(f"   Unique relations: {len(unique_relations)}")
-                    logger.debug(f"   Duplicates removed: {duplicate_count}")
-                    if duplicate_details:
-                        logger.debug(f"   Duplicates by type: {duplicate_details}")
-                        
-                    relation_texts = [self._relation_to_text(relation) for relation in unique_relations]
-                    if logger:
-                        logger.debug(f"🔤 Generating embeddings for {len(relation_texts)} unique relation texts")
-                        
-                    embedding_results = self.embedder.embed_batch(relation_texts)
-                    if logger:
-                        logger.debug(f"✅ Relation embeddings completed: {sum(1 for r in embedding_results if r.success)}/{len(embedding_results)} successful")
-                    
-                    # Process embedding results for relations
-                    cost_data = self._collect_embedding_cost_data(embedding_results)
-                    total_tokens += cost_data['tokens']
-                    total_cost += cost_data['cost']
-                    total_requests += cost_data['requests']
-                    
-                    failed_relations = 0
-                    relation_points_created = 0
-                    for relation, embedding_result in zip(unique_relations, embedding_results):
-                        if embedding_result.success:
-                            # Convert relation to chunk for v2.4 pure architecture
-                            relation_chunk = RelationChunk.from_relation(relation)
-                            point = self.vector_store.create_relation_chunk_point(
-                                relation_chunk, embedding_result.embedding, collection_name
-                            )
-                            all_points.append(point)
-                            relation_points_created += 1
-                        else:
-                            failed_relations += 1
-                            if logger:
-                                logger.warning(f"❌ Relation embedding failed: {relation.from_entity} -> {relation.to_entity} - {getattr(embedding_result, 'error', 'Unknown error')}")
-                    
-                    if logger:
-                        logger.debug(f"🔗 Created {relation_points_created} relation points from {len(unique_relations)} unique relations")
-                    
-                    if failed_relations > 0 and logger:
-                        logger.warning(f"⚠️ {failed_relations} relation embeddings failed and were skipped")
-            
-            # Phase 4: Implementation chunks with Git+Meta deduplication
-            if implementation_chunks:
-                if logger:
-                    logger.debug(f"💻 Processing implementation chunks with Git+Meta deduplication: {len(implementation_chunks)} items")
-                
-                # Check which implementation chunks need embedding
-                impl_chunks_to_embed = []
-                impl_chunks_to_skip = []
-                
-                for impl_chunk in implementation_chunks:
-                    content_hash = impl_chunk.to_vector_payload()["content_hash"]
-                    
-                    if self.vector_store.check_content_exists(collection_name, content_hash):
-                        impl_chunks_to_skip.append(impl_chunk)
-                        if logger:
-                            logger.debug(f"⚡ Skipping unchanged implementation: {impl_chunk.entity_name}")
-                    else:
-                        impl_chunks_to_embed.append(impl_chunk)
-                        if logger:
-                            pass  # logger.debug(f"🔄 Processing changed implementation: {impl_chunk.entity_name}")
-                
-                # Log efficiency gains
-                if impl_chunks_to_skip:
-                    logger.info(f"⚡ Git+Meta Implementation: Skipped {len(impl_chunks_to_skip)} unchanged implementations (saved {len(impl_chunks_to_skip)} embeddings)")
-                
-                # Embed only new/changed implementation chunks
-                if impl_chunks_to_embed:
-                    implementation_texts = [chunk.content for chunk in impl_chunks_to_embed]
-                    if logger:
-                        logger.debug(f"🔤 Generating embeddings for {len(implementation_texts)} new/changed implementation texts")
-                        
-                    embedding_results = self.embedder.embed_batch(implementation_texts)
-                    if logger:
-                        logger.debug(f"✅ Implementation embeddings completed: {sum(1 for r in embedding_results if r.success)}/{len(embedding_results)} successful")
-                    
-                    # Process embedding results for implementation chunks
-                    cost_data = self._collect_embedding_cost_data(embedding_results)
-                    total_tokens += cost_data['tokens']
-                    total_cost += cost_data['cost']
-                    total_requests += cost_data['requests']
-                    
-                    failed_implementations = 0
-                    impl_points_created = 0
-                    for chunk, embedding_result in zip(impl_chunks_to_embed, embedding_results):
-                        if embedding_result.success:
-                            point = self.vector_store.create_chunk_point(
-                                chunk, embedding_result.embedding, collection_name
-                            )
-                            all_points.append(point)
-                            impl_points_created += 1
-                        else:
-                            failed_implementations += 1
-                            if logger:
-                                logger.warning(f"❌ Implementation embedding failed: {chunk.entity_name} - {getattr(embedding_result, 'error', 'Unknown error')}")
-                    
-                    if logger:
-                        logger.debug(f"💻 Created {impl_points_created} implementation points from {len(impl_chunks_to_embed)} embedded chunks")
-                    
-                    if failed_implementations > 0 and logger:
-                        logger.warning(f"⚠️ {failed_implementations} implementation embeddings failed and were skipped")
-            
-            # Store cost tracking data for result reporting
+            # Store session cost data (PRESERVED)
             if not hasattr(self, '_session_cost_data'):
                 self._session_cost_data = {'tokens': 0, 'cost': 0.0, 'requests': 0}
             
-            self._session_cost_data['tokens'] += total_tokens
-            self._session_cost_data['cost'] += total_cost
-            self._session_cost_data['requests'] += total_requests
+            self._session_cost_data['tokens'] += result.total_tokens
+            self._session_cost_data['cost'] += result.total_cost
+            self._session_cost_data['requests'] += result.total_requests
             
-            # Batch store all points
-            if all_points:
-                if logger:
-                    logger.debug(f"💾 === FINAL STORAGE SUMMARY ===")
-                    logger.debug(f"   Collection: {collection_name}")
-                    logger.debug(f"   Total points to store: {len(all_points)}")
-                    
-                    # Count different types of points
-                    entity_points = sum(1 for p in all_points if p.payload.get('chunk_type') == 'metadata' and p.payload.get('entity_type') != 'relation')
-                    relation_points = sum(1 for p in all_points if p.payload.get('chunk_type') == 'relation')
-                    impl_points = sum(1 for p in all_points if p.payload.get('chunk_type') == 'implementation')
-                    
-                    logger.debug(f"   - Entity metadata: {entity_points}")
-                    logger.debug(f"   - Relations: {relation_points}")
-                    logger.debug(f"   - Implementations: {impl_points}")
-                    logger.debug(f"   API calls made: {total_requests}")
-                    logger.debug(f"   Tokens used: {total_tokens:,}")
-                    
-                    # Show original input vs final output for debugging
-                    logger.debug(f"📊 === DEDUPLICATION IMPACT ===")
-                    logger.debug(f"   Original: {len(entities)} entities, {len(relations)} relations, {len(implementation_chunks)} implementations")
-                    logger.debug(f"   Final points: {entity_points} entity metadata, {relation_points} relations, {impl_points} implementations")
-                    logger.debug(f"   Points reduction: {(len(entities) + len(relations) + len(implementation_chunks)) - len(all_points)} points saved by Git+Meta deduplication")
-                
-                result = self.vector_store.batch_upsert(collection_name, all_points)
-                
-                if logger:
-                    if result.success:
-                        logger.debug(f"✅ Successfully stored {result.items_processed} points (attempted: {len(all_points)})")
-                        if result.items_processed < len(all_points):
-                            logger.warning(f"⚠️ Storage discrepancy: {len(all_points) - result.items_processed} points not stored")
-                    else:
-                        logger.error(f"❌ Failed to store points: {getattr(result, 'errors', 'Unknown error')}")
-                
-                # Enhanced orphan cleanup after successful storage
-                if result.success:
-                    try:
-                        if logger:
-                            logger.debug(f"🔍 DEBUG: Starting EnhancedOrphanCleanup after successful storage")
-                        from .storage.diff_layers import EnhancedOrphanCleanup
-                        cleanup = EnhancedOrphanCleanup(self.vector_store.client)
-                        orphaned_count = cleanup.cleanup_hash_orphaned_relations(collection_name)
-                        if logger:
-                            logger.debug(f"🔍 DEBUG: EnhancedOrphanCleanup returned count: {orphaned_count}")
-                        if orphaned_count > 0 and logger:
-                            logger.info(f"🧹 Cleaned {orphaned_count} orphaned relations after hash changes")
-                    except Exception as cleanup_error:
-                        if logger:
-                            logger.warning(f"⚠️ Orphan cleanup failed but storage succeeded: {cleanup_error}")
-                
-                return result.success
-            else:
-                if logger:
-                    logger.debug("ℹ️ No points to store")
-                return True
+            return True
             
         except Exception as e:
-            logger.error(f"Error in _store_vectors: {e}")
+            if logger:
+                logger.error(f"Error in _store_vectors: {e}")
             return False
     
     def _entity_to_text(self, entity: Entity) -> str:

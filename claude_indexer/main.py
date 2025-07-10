@@ -11,29 +11,52 @@ from .storage.registry import create_store_from_config
 from .indexer_logging import setup_logging
 
 
-def run_indexing_with_shared_deletion(project_path: str, collection_name: str,
-                                    deleted_file_path: str, quiet: bool = False, 
-                                    verbose: bool = False, config_file: Optional[str] = None) -> bool:
-    """Run deletion handling with shared deletion logic for a single file."""
+def _create_indexer_components(project_path: str, collection_name: str, 
+                              quiet: bool = False, verbose: bool = False, 
+                              config_file: Optional[str] = None, 
+                              enable_debug_logging: bool = False):
+    """Create common indexer components (project, logger, config, embedder, vector_store, indexer).
+    
+    Args:
+        project_path: Path to the project root
+        collection_name: Name of the vector collection
+        quiet: Suppress non-error output
+        verbose: Enable verbose output
+        config_file: Optional configuration file path
+        enable_debug_logging: Enable additional debug logging for config
+    
+    Returns:
+        tuple: (project, logger, config, embedder, vector_store, indexer) or (None, None, None, None, None, None) on error
+    """
     try:
         # Validate project path first
         project = Path(project_path).resolve()
         if not project.exists():
             print(f"❌ Project path does not exist: {project}")
-            return False
+            return None, None, None, None, None, None
         
         # Setup logging with project-specific file logging
         logger = setup_logging(quiet=quiet, verbose=verbose, collection_name=collection_name, project_path=project)
         
-        # Load configuration
-        config_path = Path(config_file) if config_file else None
-        config = load_config(config_path)
+        # Load configuration with full hierarchy
+        if config_file:
+            config_path = Path(config_file)
+            config = load_config(config_path)
+        else:
+            # Use project path to load project-specific configuration
+            config = load_config(project)
         
         # Create components using direct Qdrant integration
         # Get the appropriate API key based on provider
         provider = config.embedding_provider
         api_key = getattr(config, f'{provider}_api_key', None)
         model = config.voyage_model if provider == "voyage" else "text-embedding-3-small"
+        
+        # Optional debug logging for config details
+        if enable_debug_logging and verbose:
+            logger.debug(f"🔧 Config debug: provider='{provider}', model='{model}'")
+            logger.debug(f"🔑 API key present: {api_key is not None}")
+            logger.debug(f"⚙️  Voyage model: {getattr(config, 'voyage_model', 'NOT_SET')}")
         
         embedder = create_embedder_from_config({
             "provider": provider,
@@ -49,8 +72,33 @@ def run_indexing_with_shared_deletion(project_path: str, collection_name: str,
             "enable_caching": True
         })
         
+        # Optional debug logging for provider info
+        if enable_debug_logging and not quiet and verbose:
+            provider_name = provider.title() if provider else "OpenAI"
+            logger.debug(f"⚡ Using Qdrant + {provider_name} (direct mode)")
+        
         # Create indexer
         indexer = CoreIndexer(config, embedder, vector_store, project)
+        
+        return project, logger, config, embedder, vector_store, indexer
+        
+    except Exception as e:
+        if not quiet:
+            print(f"❌ Error creating indexer components: {e}")
+        return None, None, None, None, None, None
+
+
+def run_indexing_with_shared_deletion(project_path: str, collection_name: str,
+                                    deleted_file_path: str, quiet: bool = False, 
+                                    verbose: bool = False, config_file: Optional[str] = None) -> bool:
+    """Run deletion handling with shared deletion logic for a single file."""
+    try:
+        # Create common indexer components
+        project, logger, config, embedder, vector_store, indexer = _create_indexer_components(
+            project_path, collection_name, quiet, verbose, config_file
+        )
+        if indexer is None:
+            return False
         
         # Convert absolute path to relative path for state consistency
         deleted_path = Path(deleted_file_path)
@@ -175,50 +223,12 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
         bool: True if successful, False otherwise
     """
     try:
-        # Validate project path first
-        project = Path(project_path).resolve()
-        if not project.exists():
-            print(f"❌ Project path does not exist: {project}")
+        # Create common indexer components with debug logging enabled
+        project, logger, config, embedder, vector_store, indexer = _create_indexer_components(
+            project_path, collection_name, quiet, verbose, config_file, enable_debug_logging=True
+        )
+        if indexer is None:
             return False
-        
-        # Setup logging with project-specific file logging
-        logger = setup_logging(quiet=quiet, verbose=verbose, collection_name=collection_name, project_path=project)
-        
-        # Load configuration
-        config_path = Path(config_file) if config_file else None
-        config = load_config(config_path)
-        
-        # Create components using direct Qdrant integration
-        # Get the appropriate API key based on provider
-        provider = config.embedding_provider
-        api_key = getattr(config, f'{provider}_api_key', None)
-        model = config.voyage_model if provider == "voyage" else "text-embedding-3-small"
-        
-        if verbose:
-            logger.debug(f"🔧 Config debug: provider='{provider}', model='{model}'")
-            logger.debug(f"🔑 API key present: {api_key is not None}")
-            logger.debug(f"⚙️  Voyage model: {getattr(config, 'voyage_model', 'NOT_SET')}")
-        
-        embedder = create_embedder_from_config({
-            "provider": provider,
-            "api_key": api_key,
-            "model": model,
-            "enable_caching": True
-        })
-        
-        vector_store = create_store_from_config({
-            "backend": "qdrant",
-            "url": config.qdrant_url,
-            "api_key": config.qdrant_api_key,
-            "enable_caching": True
-        })
-        
-        if not quiet and verbose:
-            provider_name = provider.title() if provider else "OpenAI"
-            logger.debug(f"⚡ Using Qdrant + {provider_name} (direct mode)")
-        
-        # Create indexer
-        indexer = CoreIndexer(config, embedder, vector_store, project)
         
         # Convert file_paths to Path objects if needed
         paths_to_process = []
@@ -484,46 +494,12 @@ def run_indexing(project_path: str, collection_name: str,
     """
     
     try:
-        # Validate project path first
-        project = Path(project_path).resolve()
-        if not project.exists():
-            print(f"❌ Project path does not exist: {project}")
+        # Create common indexer components for file discovery
+        project, logger, config, embedder, vector_store, indexer = _create_indexer_components(
+            project_path, collection_name, quiet, verbose, config_file
+        )
+        if indexer is None:
             return False
-        
-        # Setup logging with project-specific file logging
-        logger = setup_logging(quiet=quiet, verbose=verbose, collection_name=collection_name, project_path=project)
-        
-        # Load configuration to create indexer for file discovery
-        # Use project path for project-specific configuration, fall back to explicit config file
-        if config_file:
-            config_path = Path(config_file)
-            config = load_config(config_path)
-        else:
-            # Use project path to load project-specific configuration
-            config = load_config(project)
-        
-        # Create components for file discovery
-        # Get the appropriate API key based on provider
-        provider = config.embedding_provider
-        api_key = getattr(config, f'{provider}_api_key', None)
-        model = config.voyage_model if provider == "voyage" else "text-embedding-3-small"
-        
-        embedder = create_embedder_from_config({
-            "provider": provider,
-            "api_key": api_key,
-            "model": model,
-            "enable_caching": True
-        })
-        
-        vector_store = create_store_from_config({
-            "backend": "qdrant",
-            "url": config.qdrant_url,
-            "api_key": config.qdrant_api_key,
-            "enable_caching": True
-        })
-        
-        # Create indexer for file discovery
-        indexer = CoreIndexer(config, embedder, vector_store, project)
         
         # Auto-detect incremental mode
         state_file = indexer._get_state_file(collection_name)

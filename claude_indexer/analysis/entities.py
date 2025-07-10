@@ -86,7 +86,7 @@ class EntityChunk:
         content = " | ".join(content_parts)
         
         return cls(
-            id=f"{str(entity.file_path)}::{entity.name}::metadata",
+            id=f"{str(entity.file_path)}::{entity.entity_type.value}::{entity.name}::metadata",
             entity_name=entity.name,
             chunk_type="metadata",
             content=content,
@@ -124,7 +124,19 @@ class RelationChunk:
     @classmethod
     def from_relation(cls, relation: 'Relation') -> 'RelationChunk':
         """Create a RelationChunk from a Relation."""
-        chunk_id = f"{relation.from_entity}::{relation.relation_type.value}::{relation.to_entity}"
+        # Include import_type and context to prevent ID collisions
+        import_type = relation.metadata.get('import_type', '') if relation.metadata else ''
+        context_suffix = f"::{relation.context}" if relation.context else ""
+        import_suffix = f"::{import_type}" if import_type else ""
+        
+        # Add unique identifier when no metadata distinguishes relations
+        if not import_suffix and not context_suffix:
+            import hashlib
+            unique_content = f"{relation.from_entity}::{relation.relation_type.value}::{relation.to_entity}::{id(relation)}"
+            unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
+            chunk_id = f"{relation.from_entity}::{relation.relation_type.value}::{relation.to_entity}::{unique_hash}"
+        else:
+            chunk_id = f"{relation.from_entity}::{relation.relation_type.value}::{relation.to_entity}{import_suffix}{context_suffix}"
         
         # Build human-readable content
         content = f"{relation.from_entity} {relation.relation_type.value} {relation.to_entity}"

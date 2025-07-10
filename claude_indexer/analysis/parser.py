@@ -85,6 +85,14 @@ class CodeParser(ABC):
     def get_supported_extensions(self) -> List[str]:
         """Get list of supported file extensions."""
         pass
+    
+    def _create_chunk_id(self, file_path: Path, entity_name: str, chunk_type: str, entity_type: str = None) -> str:
+        """Create deterministic chunk ID following existing pattern."""
+        # Pattern: {file_path}::{entity_type}::{entity_name}::{chunk_type} (if entity_type provided)
+        # Pattern: {file_path}::{entity_name}::{chunk_type} (backward compatibility)
+        if entity_type:
+            return f"{str(file_path)}::{entity_type}::{entity_name}::{chunk_type}"
+        return f"{str(file_path)}::{entity_name}::{chunk_type}"
 
 
 class PythonParser(CodeParser):
@@ -209,7 +217,13 @@ class PythonParser(CodeParser):
         try:
             with open(file_path, 'rb') as f:
                 return hashlib.sha256(f.read()).hexdigest()
-        except Exception:
+        except (OSError, IOError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to read file for hashing {file_path}: {e}")
+            return ""
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error hashing file {file_path}: {e}")
             return ""
     
     def _parse_with_tree_sitter(self, file_path: Path) -> Optional['tree_sitter.Tree']:
@@ -329,8 +343,12 @@ class PythonParser(CodeParser):
                 if self._project:
                     try:
                         jedi_script = jedi.Script(source_code, path=str(file_path), project=self._project)
-                    except Exception:
-                        pass
+                    except ImportError as e:
+                        logger = get_logger()
+                        logger.warning(f"Jedi import error for file {file_path}: {e}")
+                    except Exception as e:
+                        logger = get_logger()
+                        logger.warning(f"Failed to create Jedi script for file {file_path}: {e}")
                 
                 # Extract observations based on entity type
                 if entity_type == EntityType.FUNCTION:
@@ -530,7 +548,14 @@ class PythonParser(CodeParser):
                 # Single module name already checked above
                 return True
                 
-        except Exception:
+        except (OSError, ValueError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to determine if module is local: {e}")
+            # If we can't determine, assume it's external to avoid orphans
+            return False
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error determining if module is local: {e}")
             # If we can't determine, assume it's external to avoid orphans
             return False
             
@@ -645,26 +670,45 @@ class PythonParser(CodeParser):
             with open(file_path, 'r', encoding='utf-8') as f:
                 source_code = f.read()
             
+            # Debug logging
+            from ..indexer_logging import get_logger
+            logger = get_logger()
+            logger.debug(f"🔧 Starting implementation chunk extraction for {file_path.name}")
+            
             # Create Jedi script for semantic analysis
             script = jedi.Script(source_code, path=str(file_path), project=self._project)
             source_lines = source_code.split('\n')
+            logger.debug(f"🔧 Jedi script created, source has {len(source_lines)} lines")
             
             # Extract function and class implementations
+            functions_found = 0
             def traverse_for_implementations(node):
+                nonlocal functions_found
                 if node.type in ['function_definition', 'class_definition']:
+                    functions_found += 1
+                    logger.debug(f"🔧 Found {node.type}: attempting chunk extraction")
                     chunk = self._extract_implementation_chunk(node, source_lines, script, file_path)
                     if chunk:
                         chunks.append(chunk)
+                        logger.debug(f"🔧 ✅ Created chunk for {chunk.entity_name}")
+                    else:
+                        logger.debug(f"🔧 ❌ Failed to create chunk for {node.type}")
                 
                 # Recursively traverse children
                 for child in node.children:
                     traverse_for_implementations(child)
             
             traverse_for_implementations(tree.root_node)
+            logger.debug(f"🔧 Traversal complete: found {functions_found} functions/classes, created {len(chunks)} chunks")
             
         except Exception as e:
-            # Graceful fallback - implementation chunks are optional
-            pass
+            # Log implementation chunk creation failures for debugging
+            from ..indexer_logging import get_logger
+            logger = get_logger()
+            logger.debug(f"Implementation chunk extraction failed for {file_path}: {e}")
+            logger.debug(f"Exception type: {type(e).__name__}")
+            logger.debug(f"Exception details: {str(e)}")
+            # Continue gracefully - implementation chunks are optional
         
         return chunks
     
@@ -672,6 +716,11 @@ class PythonParser(CodeParser):
                                     script: 'jedi.Script', file_path: Path) -> Optional['EntityChunk']:
         """Extract implementation chunk for function or class with semantic metadata."""
         try:
+            # Debug logging
+            from ..indexer_logging import get_logger
+            logger = get_logger()
+            logger.debug(f"🔧   Extracting chunk for {node.type} at line {node.start_point[0]}")
+            
             # Get entity name
             entity_name = None
             for child in node.children:
@@ -679,7 +728,10 @@ class PythonParser(CodeParser):
                     entity_name = child.text.decode('utf-8')
                     break
             
+            logger.debug(f"🔧   Entity name: {entity_name}")
+            
             if not entity_name:
+                logger.debug(f"🔧   ❌ No entity name found")
                 return None
             
             # Extract source code lines
@@ -718,13 +770,25 @@ class PythonParser(CodeParser):
                     "complexity": implementation.count('\n') + 1  # Simple line count
                 }
             
+            # Create collision-resistant ID using MD5 hash suffix
+            entity_type = "function" if node.type == 'function_definition' else "class"
+            base_id = self._create_chunk_id(file_path, entity_name, "implementation", entity_type)
+            
+            # Add unique hash suffix for collision prevention
+            import hashlib
+            unique_content = f"{str(file_path)}::{entity_name}::{entity_type}::{start_line}::{end_line}"
+            unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
+            collision_resistant_id = f"{base_id}::{unique_hash}"
+            
+            logger.debug(f"🔧   ✅ Creating EntityChunk for {entity_name} ({len(implementation)} chars)")
+            
             return EntityChunk(
-                id=f"{str(file_path)}::{entity_name}::implementation",
+                id=collision_resistant_id,
                 entity_name=entity_name,
                 chunk_type="implementation",
                 content=implementation,
                 metadata={
-                    "entity_type": "function" if node.type == 'function_definition' else "class",
+                    "entity_type": entity_type,
                     "file_path": str(file_path),
                     "start_line": start_line + 1,
                     "end_line": end_line + 1,
@@ -733,6 +797,9 @@ class PythonParser(CodeParser):
             )
             
         except Exception as e:
+            from ..indexer_logging import get_logger
+            logger = get_logger()
+            logger.debug(f"🔧   ❌ Individual chunk extraction failed: {e}")
             return None
     
     def _get_type_hints(self, definition) -> Dict[str, str]:
@@ -1081,7 +1148,13 @@ class MarkdownParser(CodeParser):
         try:
             with open(file_path, 'rb') as f:
                 return hashlib.sha256(f.read()).hexdigest()
-        except Exception:
+        except (OSError, IOError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to read file for hashing {file_path}: {e}")
+            return ""
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error hashing file {file_path}: {e}")
             return ""
     
     def _extract_headers(self, file_path: Path) -> List['Entity']:
@@ -1160,9 +1233,16 @@ class MarkdownParser(CodeParser):
                 
                 # Only create chunks for sections with meaningful content
                 if section_content and len(section_content.strip()) > 5:
+                    # Create collision-resistant implementation chunk ID
+                    import hashlib
+                    unique_content = f"{str(file_path)}::{header['text']}::documentation::{start_line}::{end_line}"
+                    unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
+                    impl_base_id = self._create_chunk_id(file_path, header['text'], "implementation", "documentation")
+                    collision_resistant_impl_id = f"{impl_base_id}::{unique_hash}"
+                    
                     # Create implementation chunk using existing patterns
                     impl_chunk = EntityChunk(
-                        id=f"{str(file_path)}::{header['text']}::implementation",
+                        id=collision_resistant_impl_id,
                         entity_name=header['text'],
                         chunk_type="implementation",
                         content=section_content,
@@ -1187,8 +1267,14 @@ class MarkdownParser(CodeParser):
                     
                     metadata_content = f"Section: {header['text']} | Preview: {preview} | Lines: {line_count} | Words: {word_count}"
                     
+                    # Create collision-resistant metadata chunk ID
+                    metadata_unique_content = f"{str(file_path)}::{header['text']}::documentation::metadata::{header['line_num']}"
+                    metadata_unique_hash = hashlib.md5(metadata_unique_content.encode()).hexdigest()[:8]
+                    metadata_base_id = self._create_chunk_id(file_path, header['text'], "metadata", "documentation")
+                    collision_resistant_metadata_id = f"{metadata_base_id}::{metadata_unique_hash}"
+                    
                     metadata_chunk = EntityChunk(
-                        id=f"{str(file_path)}::{header['text']}::metadata",
+                        id=collision_resistant_metadata_id,
                         entity_name=header['text'],
                         chunk_type="metadata",
                         content=metadata_content,

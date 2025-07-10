@@ -1273,11 +1273,12 @@ class MarkdownParser(CodeParser):
                     metadata_base_id = self._create_chunk_id(file_path, header['text'], "metadata", "documentation")
                     collision_resistant_metadata_id = f"{metadata_base_id}::{metadata_unique_hash}"
                     
-                    metadata_chunk = EntityChunk(
+                    # FIX: Create implementation chunk since this contains full section content
+                    implementation_chunk = EntityChunk(
                         id=collision_resistant_metadata_id,
                         entity_name=header['text'],
-                        chunk_type="metadata",
-                        content=metadata_content,
+                        chunk_type="implementation",  # FIXED: Was "metadata", now "implementation"
+                        content=section_content,  # Use full section content
                         metadata={
                             "entity_type": "documentation",
                             "file_path": str(file_path),
@@ -1289,7 +1290,7 @@ class MarkdownParser(CodeParser):
                             "line_count": line_count
                         }
                     )
-                    chunks.append(metadata_chunk)
+                    chunks.append(implementation_chunk)
         
         except Exception as e:
             # Graceful fallback - implementation chunks are optional

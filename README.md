@@ -998,8 +998,10 @@ python utils/backup_manual_entries.py backup -c memory-project
 # Generate MCP restore commands for manual entries
 python utils/backup_manual_entries.py restore -f manual_entries_backup_memory-project.json
 
-# Execute restore automatically via MCP (no manual steps)
-python utils/backup_manual_entries.py restore -f manual_entries_backup_memory-project.json --execute
+# Execute restore directly to Qdrant with vectorization (uses original collection from backup)
+python utils/backup_manual_entries.py restore -f manual_entries_backup_memory-project.json
+# Or specify different target collection  
+python utils/backup_manual_entries.py restore -f manual_entries_backup_memory-project.json -c target-collection
 
 # Dry run to see what would be restored
 python utils/backup_manual_entries.py restore -f backup.json --dry-run

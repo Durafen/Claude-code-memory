@@ -149,8 +149,8 @@ class OpenAIEmbedder(RetryableEmbedder):
         if not texts:
             return []
         
-        # For batch requests, we can send up to 2048 texts at once
-        batch_size = min(500, len(texts))  # Increased batch size for better performance
+        # For batch requests, we can send up to 2048 texts at once (16 for Azure OpenAI)
+        batch_size = min(2048, len(texts))  # OpenAI standard API limit
         results = []
         
         for i in range(0, len(texts), batch_size):

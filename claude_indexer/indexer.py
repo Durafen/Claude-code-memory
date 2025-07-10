@@ -943,6 +943,7 @@ class CoreIndexer:
         logger = self.logger if hasattr(self, 'logger') else None
         if logger:
             logger.debug(f"🔄 Starting Git+Meta storage: {len(entities)} entities, {len(relations)} relations, {len(implementation_chunks)} chunks")
+            logger.debug(f"📊 Git+Meta changed entity IDs: {len(changed_entity_ids)} entities flagged as changed")
         
         try:
             all_points = []
@@ -1003,16 +1004,21 @@ class CoreIndexer:
                     total_requests += cost_data['requests']
                     
                     failed_entities = 0
+                    entity_points_created = 0
                     for chunk, embedding_result in zip(chunks_to_embed, embedding_results):
                         if embedding_result.success:
                             point = self.vector_store.create_chunk_point(
                                 chunk, embedding_result.embedding, collection_name
                             )
                             all_points.append(point)
+                            entity_points_created += 1
                         else:
                             failed_entities += 1
                             if logger:
                                 logger.warning(f"❌ Entity embedding failed: {chunk.entity_name} - {getattr(embedding_result, 'error', 'Unknown error')}")
+                    
+                    if logger:
+                        logger.debug(f"🧠 Created {entity_points_created} entity points from {len(chunks_to_embed)} embedded chunks")
                     
                     if failed_entities > 0 and logger:
                         logger.warning(f"⚠️ {failed_entities} entity embeddings failed and were skipped")
@@ -1032,6 +1038,9 @@ class CoreIndexer:
                         relations, changed_entity_ids
                     )
                     
+                    if logger:
+                        logger.debug(f"🔗 Smart Relations filtering: {len(relations_to_embed)} to embed, {len(relations_unchanged)} unchanged")
+                    
                     if relations_unchanged:
                         logger.info(f"⚡ Smart Relations: Skipped {len(relations_unchanged)} unchanged relations (saved {len(relations_unchanged)} embeddings)")
                     
@@ -1039,6 +1048,8 @@ class CoreIndexer:
                 else:
                     # Fallback: process all relations (initial indexing)
                     relations_to_process = relations
+                    if logger:
+                        logger.debug(f"🔗 Initial indexing: Processing all {len(relations_to_process)} relations")
                 
                 if relations_to_process:
                     # Deduplicate relations BEFORE embedding to save API costs
@@ -1089,6 +1100,7 @@ class CoreIndexer:
                     total_requests += cost_data['requests']
                     
                     failed_relations = 0
+                    relation_points_created = 0
                     for relation, embedding_result in zip(unique_relations, embedding_results):
                         if embedding_result.success:
                             # Convert relation to chunk for v2.4 pure architecture
@@ -1097,10 +1109,14 @@ class CoreIndexer:
                                 relation_chunk, embedding_result.embedding, collection_name
                             )
                             all_points.append(point)
+                            relation_points_created += 1
                         else:
                             failed_relations += 1
                             if logger:
                                 logger.warning(f"❌ Relation embedding failed: {relation.from_entity} -> {relation.to_entity} - {getattr(embedding_result, 'error', 'Unknown error')}")
+                    
+                    if logger:
+                        logger.debug(f"🔗 Created {relation_points_created} relation points from {len(unique_relations)} unique relations")
                     
                     if failed_relations > 0 and logger:
                         logger.warning(f"⚠️ {failed_relations} relation embeddings failed and were skipped")
@@ -1147,16 +1163,21 @@ class CoreIndexer:
                     total_requests += cost_data['requests']
                     
                     failed_implementations = 0
+                    impl_points_created = 0
                     for chunk, embedding_result in zip(impl_chunks_to_embed, embedding_results):
                         if embedding_result.success:
                             point = self.vector_store.create_chunk_point(
                                 chunk, embedding_result.embedding, collection_name
                             )
                             all_points.append(point)
+                            impl_points_created += 1
                         else:
                             failed_implementations += 1
                             if logger:
                                 logger.warning(f"❌ Implementation embedding failed: {chunk.entity_name} - {getattr(embedding_result, 'error', 'Unknown error')}")
+                    
+                    if logger:
+                        logger.debug(f"💻 Created {impl_points_created} implementation points from {len(impl_chunks_to_embed)} embedded chunks")
                     
                     if failed_implementations > 0 and logger:
                         logger.warning(f"⚠️ {failed_implementations} implementation embeddings failed and were skipped")
@@ -1186,21 +1207,33 @@ class CoreIndexer:
                     logger.debug(f"   - Implementations: {impl_points}")
                     logger.debug(f"   API calls made: {total_requests}")
                     logger.debug(f"   Tokens used: {total_tokens:,}")
+                    
+                    # Show original input vs final output for debugging
+                    logger.debug(f"📊 === DEDUPLICATION IMPACT ===")
+                    logger.debug(f"   Original: {len(entities)} entities, {len(relations)} relations, {len(implementation_chunks)} implementations")
+                    logger.debug(f"   Final points: {entity_points} entity metadata, {relation_points} relations, {impl_points} implementations")
+                    logger.debug(f"   Points reduction: {(len(entities) + len(relations) + len(implementation_chunks)) - len(all_points)} points saved by Git+Meta deduplication")
                 
                 result = self.vector_store.batch_upsert(collection_name, all_points)
                 
                 if logger:
                     if result.success:
-                        logger.debug(f"✅ Successfully stored all {len(all_points)} points")
+                        logger.debug(f"✅ Successfully stored {result.items_processed} points (attempted: {len(all_points)})")
+                        if result.items_processed < len(all_points):
+                            logger.warning(f"⚠️ Storage discrepancy: {len(all_points) - result.items_processed} points not stored")
                     else:
                         logger.error(f"❌ Failed to store points: {getattr(result, 'errors', 'Unknown error')}")
                 
                 # Enhanced orphan cleanup after successful storage
                 if result.success:
                     try:
+                        if logger:
+                            logger.debug(f"🔍 DEBUG: Starting EnhancedOrphanCleanup after successful storage")
                         from .storage.diff_layers import EnhancedOrphanCleanup
                         cleanup = EnhancedOrphanCleanup(self.vector_store.client)
                         orphaned_count = cleanup.cleanup_hash_orphaned_relations(collection_name)
+                        if logger:
+                            logger.debug(f"🔍 DEBUG: EnhancedOrphanCleanup returned count: {orphaned_count}")
                         if orphaned_count > 0 and logger:
                             logger.info(f"🧹 Cleaned {orphaned_count} orphaned relations after hash changes")
                     except Exception as cleanup_error:

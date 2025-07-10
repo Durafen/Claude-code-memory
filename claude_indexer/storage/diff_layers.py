@@ -178,14 +178,18 @@ class EnhancedOrphanCleanup:
             
             # Batch delete orphaned relations
             if orphaned_points:
+                print(f"🔍 DEBUG: EnhancedOrphanCleanup about to delete {len(orphaned_points)} orphaned points")
+                print(f"🔍 DEBUG: First 5 orphaned point IDs: {orphaned_points[:5]}")
                 self.client.delete(
                     collection_name=collection_name,
                     points_selector=PointIdsList(points=orphaned_points)
                 )
                 orphaned_count = len(orphaned_points)
+                print(f"🔍 DEBUG: EnhancedOrphanCleanup deleted {orphaned_count} orphaned points")
                 
         except Exception as e:
             # Log error but don't fail
+            print(f"🔍 DEBUG: EnhancedOrphanCleanup exception: {e}")
             pass
             
         return orphaned_count

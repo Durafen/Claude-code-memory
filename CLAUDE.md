@@ -220,8 +220,10 @@ python utils/manual_memory_backup.py backup -c collection-name
 # Generate MCP restore commands for manual entries
 python utils/manual_memory_backup.py restore -f manual_entries_backup_collection-name.json
 
-# Execute restore automatically via MCP (no manual steps)
-python utils/manual_memory_backup.py restore -f manual_entries_backup_collection-name.json --execute
+# Execute restore directly to Qdrant with vectorization (uses original collection from backup)
+python utils/manual_memory_backup.py restore -f manual_entries_backup_collection-name.json
+# Or specify different target collection
+python utils/manual_memory_backup.py restore -f manual_entries_backup_collection-name.json -c target-collection
 
 # Dry run to see what would be restored
 python utils/manual_memory_backup.py restore -f backup.json --dry-run
@@ -260,7 +262,7 @@ read_graph(entity="DatabaseManager", mode="raw")
 search_similar("error pattern", entityTypes=["metadata"])
 
 # 🔍 Find similar debugging patterns from past solutions
-search_similar("authentication error", entityTypes=["debugging_pattern", "function"])
+search_similar("authentication error", entityTypes=["function", "debugging_pattern"])
 
 # 🧩 Mixed search for comprehensive context
 search_similar("validation error", entityTypes=["function", "metadata", "implementation"])

@@ -34,6 +34,7 @@ test_*.py
 debug_*.py
 cleanup_*.py
 test_*/
+debug/
 
 # Chat reports
 chat_reports/

@@ -90,8 +90,10 @@ class ConfigLoader:
                 if hasattr(config, key):
                     try:
                         setattr(config, key, value)
-                    except:
-                        logger.warning(f"Ignoring invalid setting {key}={value}")
+                    except (ValueError, TypeError, AttributeError) as e:
+                        logger.warning(f"Ignoring invalid setting {key}={value}: {e}")
+                    except Exception as e:
+                        logger.error(f"Unexpected error setting {key}={value}: {e}")
             return config
     
     def _extract_overrides(self, project_config) -> Dict[str, Any]:
@@ -122,8 +124,12 @@ class ConfigLoader:
         if self.project_manager.exists:
             try:
                 return self.project_manager.get_parser_config(parser_name)
-            except:
-                pass
+            except (FileNotFoundError, KeyError) as e:
+                logger = get_logger()
+                logger.warning(f"Parser config not found for {parser_name}: {e}")
+            except Exception as e:
+                logger = get_logger()
+                logger.error(f"Unexpected error getting parser config for {parser_name}: {e}")
         return {}
 
 

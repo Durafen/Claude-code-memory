@@ -76,7 +76,7 @@ class TextParser(CodeParser):
                     
                     # Create implementation chunk with full text content
                     impl_chunk = EntityChunk(
-                        id=f"{str(file_path)}::{chunk_name}::implementation",
+                        id=self._create_chunk_id(file_path, chunk_name, "implementation", "text_chunk"),
                         entity_name=chunk_name,
                         chunk_type="implementation",
                         content=chunk_content,

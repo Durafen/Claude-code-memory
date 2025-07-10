@@ -145,7 +145,7 @@ When categorizing memories:
 
 **Single parameter supports both entity types and chunk types with OR logic:**
 
-**Entity Types**: `class`, `function`, `documentation`, `text_chunk`
+**Entity Types**: `class`, `function`, `documentation`, `text_chunk`, `relation`
 **Chunk Types**: `metadata`, `implementation`
 
 **Usage Examples:**
@@ -156,6 +156,9 @@ search_similar("pattern", entityTypes=["function", "class"])
 # Filter by chunk types only  
 search_similar("pattern", entityTypes=["metadata"])        # Fast search
 search_similar("pattern", entityTypes=["implementation"])  # Detailed code
+
+# Filter relations for code architecture analysis
+search_similar("import patterns", entityTypes=["relation"])  # Find code dependencies
 
 # Mixed filtering (OR logic)
 search_similar("pattern", entityTypes=["function", "metadata", "implementation"])

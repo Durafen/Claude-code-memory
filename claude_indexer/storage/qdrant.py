@@ -157,7 +157,13 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         try:
             collections = self.client.get_collections()
             return any(col.name == collection_name for col in collections.collections)
-        except Exception:
+        except (ConnectionError, TimeoutError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to check if collection {collection_name} exists: {e}")
+            return False
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error checking collection {collection_name}: {e}")
             return False
     
     def delete_collection(self, collection_name: str) -> StorageResult:
@@ -239,8 +245,32 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         unique_ids = set(point_ids)
         if len(unique_ids) != len(point_ids):
             id_collision_count = len(point_ids) - len(unique_ids)
+            collision_percentage = (id_collision_count / len(point_ids)) * 100
+            
+            # Enhanced logging with collision details
             logger.warning(f"⚠️ ID collision detected: {id_collision_count} duplicate IDs found")
             logger.warning(f"   Total points: {len(point_ids)}, Unique IDs: {len(unique_ids)}")
+            logger.warning(f"   Collision rate: {collision_percentage:.1f}%")
+            
+            # Log specific colliding IDs and their details
+            from collections import Counter
+            id_counts = Counter(point_ids)
+            colliding_ids = {id_val: count for id_val, count in id_counts.items() if count > 1}
+            
+            logger.warning(f"   Colliding chunk IDs ({len(colliding_ids)} unique IDs):")
+            for chunk_id, count in sorted(colliding_ids.items(), key=lambda x: x[1], reverse=True):
+                logger.warning(f"     • {chunk_id}: {count} duplicates")
+                
+                # Show entity details for this colliding ID
+                colliding_points = [p for p in qdrant_points if p.id == chunk_id]
+                for i, point in enumerate(colliding_points[:3]):  # Limit to first 3 examples
+                    entity_name = point.payload.get('entity_name', 'unknown')
+                    entity_type = point.payload.get('entity_type', 'unknown')
+                    chunk_type = point.payload.get('chunk_type', 'unknown')
+                    file_path = point.payload.get('file_path', 'unknown')
+                    logger.warning(f"       - {chunk_type} {entity_type}: {entity_name} ({file_path})")
+                if len(colliding_points) > 3:
+                    logger.warning(f"       - ... and {len(colliding_points) - 3} more")
         
         # Process each batch with retry logic
         total_processed = 0
@@ -539,7 +569,13 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         try:
             collection_info = self.client.get_collection(collection_name)
             return collection_info.points_count
-        except Exception:
+        except (ConnectionError, TimeoutError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to count points in collection {collection_name}: {e}")
+            return 0
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error counting points in collection {collection_name}: {e}")
             return 0
     
     def search(self, collection_name: str, query_vector, top_k: int = 10):
@@ -576,7 +612,13 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         try:
             collections = self.client.get_collections()
             return [col.name for col in collections.collections]
-        except Exception:
+        except (ConnectionError, TimeoutError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to list collections: {e}")
+            return []
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error listing collections: {e}")
             return []
     
     def _scroll_collection(

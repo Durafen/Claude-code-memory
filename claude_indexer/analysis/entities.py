@@ -85,8 +85,15 @@ class EntityChunk:
         content_parts.extend(entity.observations)
         content = " | ".join(content_parts)
         
+        # Create collision-resistant metadata chunk ID
+        import hashlib
+        unique_content = f"{str(entity.file_path)}::{entity.entity_type.value}::{entity.name}::metadata::{entity.line_number}"
+        unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
+        base_id = f"{str(entity.file_path)}::{entity.entity_type.value}::{entity.name}::metadata"
+        collision_resistant_id = f"{base_id}::{unique_hash}"
+        
         return cls(
-            id=f"{str(entity.file_path)}::{entity.entity_type.value}::{entity.name}::metadata",
+            id=collision_resistant_id,
             entity_name=entity.name,
             chunk_type="metadata",
             content=content,
@@ -166,7 +173,8 @@ class RelationChunk:
             "content": self.content,
             "content_hash": ContentHashMixin.compute_content_hash(self.content),
             "created_at": datetime.now().isoformat(),
-            "type": "chunk"
+            "type": "chunk",
+            "entity_type": "relation"
         }
         
         if self.context:

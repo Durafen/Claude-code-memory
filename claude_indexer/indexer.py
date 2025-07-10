@@ -1288,7 +1288,13 @@ class CoreIndexer:
                     "size": file_path.stat().st_size,
                     "mtime": file_path.stat().st_mtime
                 }
-            except Exception:
+            except (OSError, ValueError) as e:
+                logger = get_logger()
+                logger.warning(f"Failed to get state for file {file_path}: {e}")
+                continue
+            except Exception as e:
+                logger = get_logger()
+                logger.error(f"Unexpected error getting state for file {file_path}: {e}")
                 continue
         
         return state
@@ -1298,7 +1304,13 @@ class CoreIndexer:
         try:
             with open(file_path, 'rb') as f:
                 return hashlib.sha256(f.read()).hexdigest()
-        except Exception:
+        except (OSError, IOError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to read file for hashing {file_path}: {e}")
+            return ""
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error hashing file {file_path}: {e}")
             return ""
     
     def _load_state(self, collection_name: str) -> Dict[str, Dict[str, Any]]:
@@ -1308,8 +1320,12 @@ class CoreIndexer:
             if state_file.exists():
                 with open(state_file) as f:
                     return json.load(f)
-        except Exception:
-            pass
+        except (OSError, IOError, json.JSONDecodeError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to load state for collection {collection_name}: {e}")
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error loading state for collection {collection_name}: {e}")
         return {}
     
     def _load_previous_statistics(self, collection_name: str) -> Dict[str, int]:
@@ -1460,8 +1476,12 @@ class CoreIndexer:
         if temp_file and temp_file.exists():
             try:
                 temp_file.unlink()
-            except Exception:
-                pass  # Ignore cleanup errors
+            except (OSError, IOError) as e:
+                logger = get_logger()
+                logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
+            except Exception as e:
+                logger = get_logger()
+                logger.error(f"Unexpected error cleaning up temp file {temp_file}: {e}")
     
     def _handle_deleted_files(self, collection_name: str, deleted_files: Union[str, List[str]], verbose: bool = False):
         """Handle deleted files by removing their entities and orphaned relations."""

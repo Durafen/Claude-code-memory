@@ -50,12 +50,10 @@ class ObservationExtractor:
                     docstring = jedi_docstring
             
             if docstring:
-                # First sentence is primary purpose
-                sentences = docstring.split('.')
-                if sentences:
-                    purpose = sentences[0].strip()
-                    if purpose:
-                        observations.append(f"Purpose: {purpose}")
+                # Extract clean purpose (without JSDoc clutter)
+                clean_purpose = self._extract_clean_purpose(docstring)
+                if clean_purpose:
+                    observations.append(f"Purpose: {clean_purpose}")
                 
                 # Look for specific patterns in docstring
                 patterns = self._extract_docstring_patterns(docstring)
@@ -97,6 +95,18 @@ class ObservationExtractor:
             complexity = self._calculate_complexity(node, source_code)
             if complexity > 5:  # Only note if significantly complex
                 observations.append(f"Complexity: {complexity} (high)")
+            elif complexity >= 2:  # Include moderate complexity
+                observations.append(f"Complexity: {complexity} (moderate)")
+            
+            # 9. Extract framework patterns
+            frameworks = self._extract_framework_patterns(node, source_code)
+            if frameworks:
+                observations.append(f"Framework: {', '.join(frameworks)}")
+            
+            # 10. Extract async patterns
+            async_patterns = self._extract_async_patterns(node, source_code)
+            if async_patterns:
+                observations.append(f"Async: {', '.join(async_patterns)}")
             
         except Exception as e:
             logger.debug(f"Error extracting function observations: {e}")
@@ -731,3 +741,127 @@ class ObservationExtractor:
             logger.debug(f"Error extracting Jedi type info: {e}")
         
         return type_observations
+    
+    def _extract_framework_patterns(self, node: 'tree_sitter.Node', source_code: str) -> List[str]:
+        """Extract framework and library usage patterns."""
+        frameworks = []
+        
+        try:
+            # Convert to string for pattern matching
+            code_text = source_code[node.start_byte:node.end_byte].lower()
+            
+            # Node.js/Backend patterns
+            if any(pattern in code_text for pattern in ['require(', 'import ', 'express', 'app.', 'req.', 'res.']):
+                if 'express' in code_text or 'app.' in code_text:
+                    frameworks.append('Express.js')
+                elif 'require(' in code_text or 'import ' in code_text:
+                    frameworks.append('Node.js')
+            
+            # Frontend patterns
+            if any(pattern in code_text for pattern in ['react', 'usestate', 'useeffect', 'component']):
+                frameworks.append('React')
+            elif any(pattern in code_text for pattern in ['vue', '$', 'this.$']):
+                frameworks.append('Vue.js')
+            elif any(pattern in code_text for pattern in ['angular', '@component', '@injectable']):
+                frameworks.append('Angular')
+            
+            # Database patterns
+            if any(pattern in code_text for pattern in ['mongoose', 'schema', 'findone', 'findbyid']):
+                frameworks.append('Mongoose')
+            elif any(pattern in code_text for pattern in ['sequelize', 'model.', 'findall']):
+                frameworks.append('Sequelize')
+            
+            # Testing patterns
+            if any(pattern in code_text for pattern in ['jest', 'describe(', 'it(', 'test(', 'expect(']):
+                frameworks.append('Jest')
+            elif any(pattern in code_text for pattern in ['mocha', 'chai', 'should', 'assert']):
+                frameworks.append('Mocha/Chai')
+            
+            # Authentication patterns
+            if any(pattern in code_text for pattern in ['jwt', 'jsonwebtoken', 'passport']):
+                frameworks.append('JWT/Auth')
+            
+        except Exception as e:
+            logger.debug(f"Error extracting framework patterns: {e}")
+        
+        return frameworks
+    
+    def _extract_async_patterns(self, node: 'tree_sitter.Node', source_code: str) -> List[str]:
+        """Extract asynchronous programming patterns."""
+        async_patterns = []
+        
+        try:
+            # Convert to string for pattern matching
+            code_text = source_code[node.start_byte:node.end_byte]
+            
+            # Check function signature for async
+            if code_text.strip().startswith('async '):
+                async_patterns.append('async function')
+            
+            # Check for await usage
+            if 'await ' in code_text:
+                async_patterns.append('uses await')
+            
+            # Check for Promise patterns
+            if any(pattern in code_text for pattern in ['.then(', '.catch(', '.finally(', 'new Promise']):
+                async_patterns.append('Promise chains')
+            
+            # Check for callback patterns
+            if any(pattern in code_text for pattern in ['callback(', 'cb(', ', function(', '=>']):
+                async_patterns.append('callbacks')
+            
+            # Check for async/await with try/catch
+            if 'await ' in code_text and ('try {' in code_text or 'catch(' in code_text):
+                async_patterns.append('async error handling')
+            
+        except Exception as e:
+            logger.debug(f"Error extracting async patterns: {e}")
+        
+        return async_patterns
+    
+    def _extract_clean_purpose(self, docstring: str) -> str:
+        """Extract clean purpose from JSDoc/docstring without parameter clutter."""
+        try:
+            # Split into lines and find the main description
+            lines = docstring.strip().split('\n')
+            purpose_lines = []
+            
+            for line in lines:
+                line = line.strip()
+                # Skip JSDoc tags and empty lines
+                if (line.startswith('@') or 
+                    line.startswith('*') and line[1:].strip().startswith('@') or
+                    not line or
+                    line == '*' or
+                    line == '/**' or
+                    line == '*/'):
+                    continue
+                
+                # Remove leading * from JSDoc comments
+                if line.startswith('* '):
+                    line = line[2:]
+                elif line.startswith('*'):
+                    line = line[1:]
+                
+                # Stop at first @tag
+                if line.startswith('@'):
+                    break
+                    
+                if line.strip():
+                    purpose_lines.append(line.strip())
+            
+            # Join and clean up
+            purpose = ' '.join(purpose_lines)
+            
+            # Remove any remaining JSDoc artifacts
+            purpose = purpose.replace('/**', '').replace('*/', '').strip()
+            
+            # Take first sentence as primary purpose
+            if '.' in purpose:
+                purpose = purpose.split('.')[0] + '.'
+            
+            return purpose if purpose else docstring[:100]  # Fallback
+            
+        except Exception as e:
+            logger.debug(f"Error extracting clean purpose: {e}")
+            return docstring[:100]  # Fallback to first 100 chars

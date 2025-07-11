@@ -254,7 +254,7 @@ class PythonParser(CodeParser):
         
         entities = []
         
-        def traverse_node(node, depth=0):
+        def traverse_node(node, depth=0, parent_context=None):
             entity_mapping = {
                 'function_definition': EntityType.FUNCTION,
                 'class_definition': EntityType.CLASS,
@@ -263,14 +263,29 @@ class PythonParser(CodeParser):
                 'import_from_statement': EntityType.IMPORT
             }
             
-            if node.type in entity_mapping:
-                entity = self._extract_named_entity(node, entity_mapping[node.type], file_path)
-                if entity:
-                    entities.append(entity)
+            # Track current context for scope-aware filtering
+            current_context = parent_context
+            if node.type in ['function_definition', 'class_definition']:
+                current_context = node.type
             
-            # Recursively traverse children
+            if node.type in entity_mapping:
+                # Apply scope-aware filtering for variables
+                if node.type == 'assignment':
+                    # Skip function-local variables
+                    if current_context == 'function_definition':
+                        logger.debug(f"Skipping function-local variable at line {node.start_point[0] + 1}")
+                    else:
+                        entity = self._extract_named_entity(node, entity_mapping[node.type], file_path)
+                        if entity:
+                            entities.append(entity)
+                else:
+                    entity = self._extract_named_entity(node, entity_mapping[node.type], file_path)
+                    if entity:
+                        entities.append(entity)
+            
+            # Recursively traverse children with context
             for child in node.children:
-                traverse_node(child, depth + 1)
+                traverse_node(child, depth + 1, current_context)
         
         traverse_node(tree.root_node)
         return entities
@@ -304,9 +319,16 @@ class PythonParser(CodeParser):
         entity_name = None
         
         if node.type == 'assignment':
-            # For assignment: assignment -> identifier (left side)
-            if node.children and node.children[0].type == 'identifier':
-                entity_name = node.children[0].text.decode('utf-8')
+            # Use proven pattern from find_attributes() for assignment node traversal
+            for child in node.children:
+                if child.type == 'identifier':
+                    # Check if this is a type-only annotation (name: str) vs real assignment (name = value)
+                    node_text = node.text.decode('utf-8')
+                    if ':' in node_text and '=' not in node_text:
+                        # Skip type-only annotations
+                        return None
+                    entity_name = child.text.decode('utf-8')
+                    break
         elif node.type in ['import_statement', 'import_from_statement']:
             # For imports: find the imported module name
             for child in node.children:

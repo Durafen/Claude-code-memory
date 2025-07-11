@@ -275,13 +275,32 @@ class PythonParser(CodeParser):
                     if current_context == 'function_definition':
                         logger.debug(f"Skipping function-local variable at line {node.start_point[0] + 1}")
                     else:
-                        entity = self._extract_named_entity(node, entity_mapping[node.type], file_path)
-                        if entity:
-                            entities.append(entity)
+                        # Use enhanced assignment extraction for complex patterns
+                        assignment_variables = self._extract_variables_from_assignment(node, file_path)
+                        entities.extend(assignment_variables)
                 else:
                     entity = self._extract_named_entity(node, entity_mapping[node.type], file_path)
                     if entity:
                         entities.append(entity)
+            
+            # Enhanced variable extraction for new patterns
+            elif node.type == 'with_statement':
+                # Extract context manager variables
+                if current_context != 'function_definition':
+                    context_variables = self._extract_variables_from_context_manager(node, file_path)
+                    entities.extend(context_variables)
+            
+            elif node.type == 'except_clause':
+                # Extract exception handler variables
+                if current_context != 'function_definition':
+                    exception_variables = self._extract_variables_from_exception_handler(node, file_path)
+                    entities.extend(exception_variables)
+            
+            elif node.type == 'named_expression':
+                # Extract walrus operator variables
+                if current_context != 'function_definition':
+                    walrus_variables = self._extract_variables_from_walrus(node, file_path)
+                    entities.extend(walrus_variables)
             
             # Recursively traverse children with context
             for child in node.children:
@@ -431,6 +450,167 @@ class PythonParser(CodeParser):
             )
         
         return None
+    
+    def _extract_variables_from_assignment(self, node: 'tree_sitter.Node', file_path: Path) -> List['Entity']:
+        """Extract multiple variables from complex assignment patterns (tuple unpacking, etc.)."""
+        variables = []
+        
+        def extract_identifiers_from_pattern(pattern_node, line_number):
+            """Recursively extract identifiers from pattern nodes."""
+            extracted_names = []
+            
+            if pattern_node.type == 'identifier':
+                name = pattern_node.text.decode('utf-8')
+                extracted_names.append(name)
+            elif pattern_node.type == 'pattern_list':
+                # Tuple unpacking: a, b, c = values
+                for child in pattern_node.children:
+                    if child.type != ',':
+                        extracted_names.extend(extract_identifiers_from_pattern(child, line_number))
+            elif pattern_node.type == 'list_pattern':
+                # List unpacking: [a, b, c] = values
+                for child in pattern_node.children:
+                    if child.type not in ['[', ']', ',']:
+                        extracted_names.extend(extract_identifiers_from_pattern(child, line_number))
+            elif pattern_node.type == 'list_splat_pattern':
+                # Starred unpacking: *rest
+                for child in pattern_node.children:
+                    if child.type == 'identifier':
+                        name = child.text.decode('utf-8')
+                        extracted_names.append(name)
+            elif pattern_node.type == 'parenthesized_expression':
+                # Nested patterns: (a, b), (c, d) = values
+                for child in pattern_node.children:
+                    if child.type not in ['(', ')', ',']:
+                        extracted_names.extend(extract_identifiers_from_pattern(child, line_number))
+            elif pattern_node.type == 'tuple_pattern':
+                # Explicit tuple patterns
+                for child in pattern_node.children:
+                    if child.type not in ['(', ')', ',']:
+                        extracted_names.extend(extract_identifiers_from_pattern(child, line_number))
+            
+            return extracted_names
+        
+        # Check if this is a type annotation without assignment
+        node_text = node.text.decode('utf-8')
+        if ':' in node_text and '=' not in node_text:
+            return variables
+        
+        line_number = node.start_point[0] + 1
+        end_line = node.end_point[0] + 1
+        
+        # Find the left side of assignment (target patterns)
+        for child in node.children:
+            if child.type in ['identifier', 'pattern_list', 'list_pattern', 'list_splat_pattern', 'parenthesized_expression', 'tuple_pattern']:
+                variable_names = extract_identifiers_from_pattern(child, line_number)
+                
+                for var_name in variable_names:
+                    entity = Entity(
+                        name=var_name,
+                        entity_type=EntityType.VARIABLE,
+                        observations=[
+                            f"Variable: {var_name}",
+                            f"Defined in: {file_path}",
+                            f"Line: {line_number}"
+                        ],
+                        file_path=file_path,
+                        line_number=line_number,
+                        end_line_number=end_line
+                    )
+                    variables.append(entity)
+                break
+        
+        return variables
+    
+    def _extract_variables_from_context_manager(self, node: 'tree_sitter.Node', file_path: Path) -> List['Entity']:
+        """Extract variables from with statements (context managers)."""
+        variables = []
+        line_number = node.start_point[0] + 1
+        end_line = node.end_point[0] + 1
+        
+        def traverse_for_as_pattern_targets(current_node):
+            if current_node.type == 'as_pattern_target':
+                for child in current_node.children:
+                    if child.type == 'identifier':
+                        var_name = child.text.decode('utf-8')
+                        entity = Entity(
+                            name=var_name,
+                            entity_type=EntityType.VARIABLE,
+                            observations=[
+                                f"Variable: {var_name}",
+                                f"Context manager variable in: {file_path}",
+                                f"Line: {line_number}"
+                            ],
+                            file_path=file_path,
+                            line_number=line_number,
+                            end_line_number=end_line
+                        )
+                        variables.append(entity)
+                        break
+            
+            for child in current_node.children:
+                traverse_for_as_pattern_targets(child)
+        
+        traverse_for_as_pattern_targets(node)
+        return variables
+    
+    def _extract_variables_from_exception_handler(self, node: 'tree_sitter.Node', file_path: Path) -> List['Entity']:
+        """Extract variables from except clauses."""
+        variables = []
+        line_number = node.start_point[0] + 1
+        end_line = node.end_point[0] + 1
+        
+        def traverse_for_exception_vars(current_node):
+            if current_node.type == 'as_pattern_target':
+                for child in current_node.children:
+                    if child.type == 'identifier':
+                        var_name = child.text.decode('utf-8')
+                        entity = Entity(
+                            name=var_name,
+                            entity_type=EntityType.VARIABLE,
+                            observations=[
+                                f"Variable: {var_name}",
+                                f"Exception handler variable in: {file_path}",
+                                f"Line: {line_number}"
+                            ],
+                            file_path=file_path,
+                            line_number=line_number,
+                            end_line_number=end_line
+                        )
+                        variables.append(entity)
+                        break
+            
+            for child in current_node.children:
+                traverse_for_exception_vars(child)
+        
+        traverse_for_exception_vars(node)
+        return variables
+    
+    def _extract_variables_from_walrus(self, node: 'tree_sitter.Node', file_path: Path) -> List['Entity']:
+        """Extract variables from walrus operator (:=) expressions."""
+        variables = []
+        line_number = node.start_point[0] + 1
+        end_line = node.end_point[0] + 1
+        
+        for child in node.children:
+            if child.type == 'identifier':
+                var_name = child.text.decode('utf-8')
+                entity = Entity(
+                    name=var_name,
+                    entity_type=EntityType.VARIABLE,
+                    observations=[
+                        f"Variable: {var_name}",
+                        f"Walrus operator assignment in: {file_path}",
+                        f"Line: {line_number}"
+                    ],
+                    file_path=file_path,
+                    line_number=line_number,
+                    end_line_number=end_line
+                )
+                variables.append(entity)
+                break
+        
+        return variables
     
     def _extract_inheritance_relations(self, class_node: 'tree_sitter.Node', file_path: Path) -> List['Relation']:
         """Extract inheritance relations from a class definition node."""

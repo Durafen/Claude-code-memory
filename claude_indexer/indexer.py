@@ -647,9 +647,9 @@ class CoreIndexer:
             if any(relative_path.match(pattern) for pattern in exclude_patterns):
                 continue
             
-            # Skip files in excluded directories
-            path_str = str(relative_path)
-            if any(excluded in path_str for excluded in exclude_patterns):
+            # Skip files in excluded directories (check directory paths only, not filenames)
+            path_parts = relative_path.parts
+            if any(excluded in path_parts for excluded in exclude_patterns):
                 continue
             
             # Check file size

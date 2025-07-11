@@ -163,13 +163,28 @@ class JavaScriptParser(TreeSitterParser):
         if not name:
             return None, []
         
+        # Extract enhanced observations if extractor is available
+        enhanced_observations = None
+        if hasattr(self, '_observation_extractor') and self._observation_extractor:
+            try:
+                # Extract observations for JavaScript functions
+                enhanced_observations = self._observation_extractor.extract_function_observations(
+                    node, content, None  # No Jedi equivalent for JavaScript yet
+                )
+            except Exception as e:
+                # Import logger locally to avoid circular imports
+                from ..indexer_logging import get_logger
+                logger = get_logger()
+                logger.debug(f"Failed to extract enhanced observations for {name}: {e}")
+        
         # Create entity
         entity = EntityFactory.create_function_entity(
             name=name,
             file_path=file_path,
             line_number=node.start_point[0] + 1,
+            end_line=node.end_point[0] + 1,
+            observations=enhanced_observations,
             metadata={
-                "end_line": node.end_point[0] + 1,
                 "source": "tree-sitter",
                 "node_type": node.type
             }

@@ -150,7 +150,18 @@ class ObservationExtractor:
         return observations
     
     def _extract_docstring(self, node: 'tree_sitter.Node', source_code: str) -> Optional[str]:
-        """Extract docstring from function or class node with deep AST traversal."""
+        """Extract docstring/JSDoc from function or class node with deep AST traversal."""
+        
+        # Detect language based on node type
+        is_javascript = node.type in ['function_declaration', 'arrow_function', 'function_expression', 'method_definition']
+        
+        if is_javascript:
+            return self._extract_jsdoc_comment(node, source_code)
+        else:
+            return self._extract_python_docstring(node, source_code)
+    
+    def _extract_python_docstring(self, node: 'tree_sitter.Node', source_code: str) -> Optional[str]:
+        """Extract Python docstring from function or class node."""
         def find_first_string_literal(n, depth=0):
             """Recursively find the first string literal in function/class body."""
             if depth > 3:  # Prevent infinite recursion
@@ -161,9 +172,10 @@ class ObservationExtractor:
                 return n.text.decode('utf-8')
             
             # For function/class definitions, look in the body
-            if n.type in ['function_definition', 'class_definition']:
+            if n.type in ['function_definition', 'class_definition', 'function_declaration', 'method_definition']:
                 for child in n.children:
-                    if child.type == 'block':
+                    # Python uses 'block', JavaScript uses 'statement_block'
+                    if child.type in ['block', 'statement_block']:
                         # Look for first statement that's a string
                         for stmt in child.children:
                             if stmt.type == 'expression_statement':
@@ -184,6 +196,55 @@ class ObservationExtractor:
                     if result:
                         return result
             
+            return None
+    
+    def _extract_jsdoc_comment(self, node: 'tree_sitter.Node', source_code: str) -> Optional[str]:
+        """Extract JSDoc comment from JavaScript function node."""
+        try:
+            # Get the source lines
+            lines = source_code.split('\n')
+            
+            # Look for comment before the function
+            func_start_line = node.start_point[0]
+            
+            # Search backwards for JSDoc comment (/** */)
+            jsdoc_lines = []
+            in_jsdoc = False
+            
+            for i in range(func_start_line - 1, max(0, func_start_line - 10), -1):
+                line = lines[i].strip()
+                
+                if line.endswith('*/'):
+                    in_jsdoc = True
+                    # Remove the */ and add the line
+                    clean_line = line[:-2].strip()
+                    if clean_line.startswith('*'):
+                        clean_line = clean_line[1:].strip()
+                    if clean_line:
+                        jsdoc_lines.insert(0, clean_line)
+                elif in_jsdoc and (line.startswith('*') or line.startswith('/**')):
+                    # Remove the * or /** and add the line
+                    clean_line = line.lstrip('/*').strip()
+                    if clean_line.startswith('*'):
+                        clean_line = clean_line[1:].strip()
+                    if clean_line:
+                        jsdoc_lines.insert(0, clean_line)
+                elif in_jsdoc and line.startswith('/**'):
+                    # Found the start of JSDoc
+                    break
+                elif in_jsdoc:
+                    # End of JSDoc block
+                    break
+                elif line and not line.startswith('//'):
+                    # Hit non-comment code, stop searching
+                    break
+            
+            if jsdoc_lines:
+                return ' '.join(jsdoc_lines)
+            
+            return None
+        except Exception as e:
+            logger.debug(f"Error extracting JSDoc comment: {e}")
             return None
         
         try:
@@ -268,23 +329,50 @@ class ObservationExtractor:
         """Extract meaningful function calls using AST structural heuristics."""
         calls = set()
         
+        # Detect language for different AST structures
+        is_javascript = node.type in ['function_declaration', 'arrow_function', 'function_expression', 'method_definition']
+        
         def find_calls(n):
-            if n.type == 'call':
-                func_node = n.child_by_field_name('function')
-                if func_node:
-                    func_text = func_node.text.decode('utf-8')
-                    
-                    # Handle method calls (obj.method)
-                    if '.' in func_text:
-                        parts = func_text.split('.')
-                        if len(parts) >= 2:
-                            obj, method = parts[-2], parts[-1]
-                            # Include meaningful obj.method patterns
-                            if self._is_meaningful_by_structure(method):
-                                calls.add(f"{obj}.{method}" if len(obj) < 10 else method)
-                        func_name = parts[-1]
-                    else:
-                        func_name = func_text
+            # Python uses 'call', JavaScript uses 'call_expression'
+            if n.type in ['call', 'call_expression']:
+                if is_javascript:
+                    # JavaScript function calls
+                    func_node = n.children[0] if n.children else None
+                    if func_node:
+                        func_text = func_node.text.decode('utf-8')
+                        
+                        # Handle method calls (obj.method)
+                        if '.' in func_text:
+                            parts = func_text.split('.')
+                            if len(parts) >= 2:
+                                obj, method = parts[-2], parts[-1]
+                                # Include meaningful obj.method patterns
+                                if self._is_meaningful_by_structure(method):
+                                    calls.add(f"{obj}.{method}" if len(obj) < 10 else method)
+                            func_name = parts[-1]
+                        else:
+                            func_name = func_text
+                            
+                        # Filter meaningful function names
+                        if self._is_meaningful_by_structure(func_name):
+                            calls.add(func_name)
+                else:
+                    # Python function calls
+                    func_node = n.child_by_field_name('function')
+                    if func_node:
+                        func_text = func_node.text.decode('utf-8')
+                        
+                        # Handle method calls (obj.method)
+                        if '.' in func_text:
+                            parts = func_text.split('.')
+                            if len(parts) >= 2:
+                                obj, method = parts[-2], parts[-1]
+                                # Include meaningful obj.method patterns
+                                if self._is_meaningful_by_structure(method):
+                                    calls.add(f"{obj}.{method}" if len(obj) < 10 else method)
+                            func_name = parts[-1]
+                        else:
+                            func_name = func_text
                     
                     # Use existing builtin filter + structural heuristics
                     if not self._is_builtin_or_common(func_name) and self._is_meaningful_by_structure(func_name):

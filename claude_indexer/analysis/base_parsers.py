@@ -27,6 +27,13 @@ class TreeSitterParser(CodeParser):
         else:
             # For direct language objects
             self.parser = Parser(language_module)
+        
+        # Initialize observation extractor for semantic analysis
+        try:
+            from .observation_extractor import ObservationExtractor
+            self._observation_extractor = ObservationExtractor(self.config.get('project_path', Path.cwd()))
+        except Exception:
+            self._observation_extractor = None
     
     def can_parse(self, file_path: Path) -> bool:
         """Check if this parser can handle the file."""

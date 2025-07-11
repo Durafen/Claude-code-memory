@@ -908,9 +908,11 @@ class JavaScriptParser(TreeSitterParser):
         if var_name in ['i', 'j', 'k', 'index', 'item', 'key', 'value', 'temp', 'tmp']:
             return False
         
-        # Skip very short variable names that are likely temporary
+        # Skip very short variable names that are likely temporary, but allow common mathematical variables
         if len(var_name) <= 1:
-            return False
+            # Allow common mathematical/coordinate variables
+            if var_name not in ['x', 'y', 'z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'n', 'm', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w']:
+                return False
         
         return True
     
@@ -937,8 +939,8 @@ class JavaScriptParser(TreeSitterParser):
         seen_variables = set()
         
         for field_node in self._find_nodes_by_type(root, ['field_definition']):
-            name_node = field_node.child_by_field_name('name')
-            if name_node and name_node.type == 'identifier':
+            name_node = field_node.child_by_field_name('property')
+            if name_node and name_node.type == 'property_identifier':
                 field_name = self.extract_node_text(name_node, content)
                 
                 if field_name and field_name not in seen_variables:

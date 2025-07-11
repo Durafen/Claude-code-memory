@@ -1096,13 +1096,13 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         if force:
             return True
             
-        # Load cleanup interval from config (default 60 minutes)
+        # Load cleanup interval from config (default 1 minute)
         try:
             from ..config.config_loader import ConfigLoader
             config = ConfigLoader().load()
-            interval_minutes = getattr(config, 'cleanup_interval_minutes', 60)
+            interval_minutes = getattr(config, 'cleanup_interval_minutes', 1)
         except Exception:
-            interval_minutes = 60  # Fallback default
+            interval_minutes = 1  # Fallback default
             
         # 0 means disabled timer (always run - original behavior)
         if interval_minutes == 0:
@@ -1248,49 +1248,103 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             valid_relations = 0
             file_ref_relations = 0
             
-            # Module resolution helper - convert module names to possible file paths
+            # Build multiple indices for O(1) lookups
+            # Index 1: Direct entity names
+            entity_set = set(entity_names)
+            
+            # Index 2: File paths by basename (for module resolution)
+            basename_to_paths = {}
+            
+            # Index 3: Directory paths (for package imports)
+            directory_components = set()
+            
+            # Index 4: Full path components for complex module paths
+            module_path_index = {}
+            
+            # Build indices from entity names
+            for name in entity_names:
+                if name.endswith('.py'):
+                    # Extract basename without extension
+                    import os
+                    basename = os.path.basename(name)[:-3]  # Remove .py
+                    if basename not in basename_to_paths:
+                        basename_to_paths[basename] = []
+                    basename_to_paths[basename].append(name)
+                    
+                    # Extract all directory components
+                    path_parts = name.replace('\\', '/').split('/')
+                    directory_components.update(path_parts[:-1])  # All parts except filename
+                    
+                    # Build module path index
+                    if len(path_parts) >= 2:
+                        module_parts = [p for p in path_parts[:-1] if p]
+                        if module_parts:
+                            for i in range(len(module_parts)):
+                                module_key = '.'.join(module_parts[i:]) + '.' + basename
+                                if module_key not in module_path_index:
+                                    module_path_index[module_key] = []
+                                module_path_index[module_key].append(name)
+            
+            if verbose:
+                logger.debug(f"   📊 Built indices: {len(basename_to_paths)} basenames, {len(directory_components)} directories")
+            
+            # Cache for module resolution results
+            resolution_cache = {}
+            resolve_call_count = 0
+            
             def resolve_module_name(module_name: str) -> bool:
-                """Check if module name resolves to any existing entity."""
-                if module_name in entity_names:
-                    return True
+                """Optimized O(1) module resolution using pre-built indices."""
+                nonlocal resolve_call_count
+                resolve_call_count += 1
+                
+                # Check cache first
+                if module_name in resolution_cache:
+                    return resolution_cache[module_name]
+                
+                result = False
+                
+                # Direct entity name match
+                if module_name in entity_set:
+                    result = True
                 
                 # Handle relative imports (.chat.parser, ..config, etc.)
-                if module_name.startswith('.'):
+                elif module_name.startswith('.'):
                     clean_name = module_name.lstrip('.')
-                    for entity_name in entity_names:
-                        # Direct pattern match first
-                        if entity_name.endswith(f"/{clean_name}.py") or entity_name.endswith(f"\\{clean_name}.py"):
-                            return True
+                    
+                    # Check direct basename match
+                    if clean_name in basename_to_paths:
+                        result = True
+                    elif '.' in clean_name:
                         # Handle dot notation (chat.parser -> chat/parser.py)
-                        if '.' in clean_name:
-                            path_version = clean_name.replace('.', '/')
-                            if entity_name.endswith(f"/{path_version}.py") or entity_name.endswith(f"\\{path_version}.py"):
-                                return True
-                        # Fallback: contains check
-                        if clean_name in entity_name and entity_name.endswith('.py'):
-                            return True
+                        last_part = clean_name.split('.')[-1]
+                        if last_part in basename_to_paths:
+                            # Check if any matching file has the expected path structure
+                            path_pattern = clean_name.replace('.', '/')
+                            for path in basename_to_paths[last_part]:
+                                if path_pattern in path:
+                                    result = True
+                                    break
                 
                 # Handle absolute module paths (claude_indexer.analysis.entities)
                 elif '.' in module_name:
-                    path_parts = module_name.split('.')
-                    for entity_name in entity_names:
-                        # Check if entity path contains module structure and ends with .py
-                        if (all(part in entity_name for part in path_parts) and 
-                            entity_name.endswith('.py') and path_parts[-1] in entity_name):
-                            return True
+                    # Check module path index
+                    if module_name in module_path_index:
+                        result = True
+                    else:
+                        # Fallback: check if last part exists as a file
+                        last_part = module_name.split('.')[-1]
+                        if last_part in basename_to_paths:
+                            result = True
                 
                 # Handle package-level imports (claude_indexer -> any /path/claude_indexer/* files)
                 else:
                     # Single package name without dots
-                    for entity_name in entity_names:
-                        # Check if entity path contains the package name as a directory
-                        if f"/{module_name}/" in entity_name or f"\\{module_name}\\" in entity_name:
-                            return True
-                        # Also check if entity path ends with the package name as a directory
-                        if entity_name.endswith(f"/{module_name}") or entity_name.endswith(f"\\{module_name}"):
-                            return True
+                    if module_name in directory_components:
+                        result = True
                 
-                return False
+                # Cache the result
+                resolution_cache[module_name] = result
+                return result
             
             # Debug: Log first few relations to understand the data
             if verbose and len(relations) > 0:
@@ -1303,7 +1357,12 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             
             logger.debug(f"🔍 DEBUG: Checking {len(relations)} relations against {len(entity_names)} entities")
             
-            for relation in relations:
+            # Progress tracking
+            import time
+            start_time = time.time()
+            last_log_time = start_time
+            
+            for idx, relation in enumerate(relations):
                 # v2.4 relation format only
                 from_entity = relation.payload.get('entity_name', '')
                 to_entity = relation.payload.get('relation_target', '')
@@ -1344,6 +1403,19 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                         if verbose and file_ref_relations <= 5:  # Log first few file refs
                             imp_type = relation.payload.get('import_type', 'none')
                             logger.debug(f"   ✅ VALID file ref: {from_entity} -> {to_entity} [import_type: {imp_type}]")
+                
+                # Log progress every 5 seconds or every 1000 relations
+                current_time = time.time()
+                if idx > 0 and (idx % 1000 == 0 or current_time - last_log_time > 5):
+                    elapsed = current_time - start_time
+                    rate = idx / elapsed if elapsed > 0 else 0
+                    eta = (len(relations) - idx) / rate if rate > 0 else 0
+                    logger.info(f"   ⏳ Progress: {idx}/{len(relations)} relations ({idx/len(relations)*100:.1f}%) - "
+                               f"{rate:.0f} relations/sec - ETA: {eta:.0f}s - resolve_calls: {resolve_call_count}")
+                    last_log_time = current_time
+            
+            # Final timing stats
+            total_time = time.time() - start_time
             
             if verbose:
                 logger.debug(f"   🧹 Orphan cleanup summary:")
@@ -1351,6 +1423,10 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 logger.debug(f"      Valid relations: {valid_relations}")
                 logger.debug(f"      File references: {file_ref_relations}")
                 logger.debug(f"      Orphans found: {len(orphaned_relations)}")
+                logger.debug(f"      Total time: {total_time:.2f}s")
+                logger.debug(f"      Relations/sec: {len(relations)/total_time:.0f}")
+                logger.debug(f"      resolve_module_name calls: {resolve_call_count}")
+                logger.debug(f"      Cache hit rate: {(len(resolution_cache) - resolve_call_count)/resolve_call_count*100:.1f}%" if resolve_call_count > 0 else "N/A")
             
             # Batch delete orphaned relations if found
             if orphaned_relations:

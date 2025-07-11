@@ -118,15 +118,26 @@ class UnifiedContentProcessor:
         return result.success
     
     def _cleanup_orphaned_relations(self, collection_name: str):
-        """Clean up orphaned relations after successful storage."""
+        """Clean up orphaned relations after successful storage with timer control."""
+        # Check timer using QdrantStore logic
+        backend = getattr(self.vector_store, 'backend', self.vector_store)
+        if hasattr(backend, '_should_run_cleanup') and not backend._should_run_cleanup(collection_name):
+            if self.logger:
+                self.logger.debug("⏱️ Skipping orphan cleanup - timer interval not elapsed")
+            return
+        
         if self.logger:
             self.logger.debug(f"🔍 DEBUG: Starting EnhancedOrphanCleanup after successful storage")
         
         from ..storage.diff_layers import EnhancedOrphanCleanup
-        cleanup = EnhancedOrphanCleanup(self.vector_store.client)
+        cleanup = EnhancedOrphanCleanup(backend.client)
         orphaned_count = cleanup.cleanup_hash_orphaned_relations(collection_name)
         
         if self.logger:
             self.logger.debug(f"🔍 DEBUG: EnhancedOrphanCleanup returned count: {orphaned_count}")
             if orphaned_count > 0:
                 self.logger.info(f"🧹 Cleaned {orphaned_count} orphaned relations after hash changes")
+        
+        # Update timestamp after successful cleanup
+        if hasattr(backend, '_update_cleanup_timestamp') and orphaned_count >= 0:
+            backend._update_cleanup_timestamp(collection_name)

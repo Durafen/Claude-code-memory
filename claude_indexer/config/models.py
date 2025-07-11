@@ -49,7 +49,7 @@ class IndexerConfig(BaseModel):
     # Performance Settings
     batch_size: int = Field(default=50, ge=1, le=1000)
     max_concurrent_files: int = Field(default=10, ge=1, le=100)
-    cleanup_interval_minutes: int = Field(default=60, ge=0, le=10080)  # 0=disabled, max=1 week
+    cleanup_interval_minutes: int = Field(default=1, ge=0, le=10080)  # 0=disabled, max=1 week
     
     # State Management
     state_directory: Optional[Path] = Field(default=None)

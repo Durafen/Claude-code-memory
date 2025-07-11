@@ -47,7 +47,7 @@ include_tests=false
 max_file_size=1048576
 
 # Performance Settings
-cleanup_interval_minutes=60
+cleanup_interval_minutes=1
 
 # Service Configuration
 service_config_path=~/.claude-indexer/config.json

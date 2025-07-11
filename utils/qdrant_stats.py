@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 import argparse
 from datetime import datetime
+import logging
 
 # Add claude_indexer to path  
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -63,8 +64,10 @@ class QdrantStatsCollector:
             collection_info = self.storage.client.get_collection(collection_name)
             if hasattr(collection_info, 'config'):
                 raw_config = collection_info.config
-        except:
-            pass
+        except (ConnectionError, TimeoutError) as e:
+            logging.error(f"Failed to get collection config for {collection_name}: {e}")
+        except Exception as e:
+            logging.error(f"Unexpected error getting collection config for {collection_name}: {e}")
         
         stats.update({
             "file_types": file_types,

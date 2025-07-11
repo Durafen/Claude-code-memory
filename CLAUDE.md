@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Testing and Debug Environment
+
+**⚠️ CRITICAL: Use `debug/` folder for ALL test scripts and test databases**
+
+- Create test scripts in `debug/` folder only (never in project root)
+- Use `debug/test_collections/` for test database collections
+- Test files in `debug/` are automatically ignored by git and indexer
+- Never contaminate production collections with test data
+- Examples: `debug/test_parser.py`, `debug/test_relations.py`, `debug/test_collections/parser-test`
+
 # Claude Code Memory Solution
 
 ## Architecture Overview
@@ -135,7 +145,7 @@ When categorizing memories:
 
 **Single parameter supports both entity types and chunk types with OR logic:**
 
-**Entity Types**: `class`, `function`, `documentation`, `text_chunk`
+**Entity Types**: `class`, `function`, `documentation`, `text_chunk`, `relation`
 **Chunk Types**: `metadata`, `implementation`
 
 **Usage Examples:**
@@ -146,6 +156,9 @@ search_similar("pattern", entityTypes=["function", "class"])
 # Filter by chunk types only  
 search_similar("pattern", entityTypes=["metadata"])        # Fast search
 search_similar("pattern", entityTypes=["implementation"])  # Detailed code
+
+# Filter relations for code architecture analysis
+search_similar("import patterns", entityTypes=["relation"])  # Find code dependencies
 
 # Mixed filtering (OR logic)
 search_similar("pattern", entityTypes=["function", "metadata", "implementation"])
@@ -210,8 +223,10 @@ python utils/manual_memory_backup.py backup -c collection-name
 # Generate MCP restore commands for manual entries
 python utils/manual_memory_backup.py restore -f manual_entries_backup_collection-name.json
 
-# Execute restore automatically via MCP (no manual steps)
-python utils/manual_memory_backup.py restore -f manual_entries_backup_collection-name.json --execute
+# Execute restore directly to Qdrant with vectorization (uses original collection from backup)
+python utils/manual_memory_backup.py restore -f manual_entries_backup_collection-name.json
+# Or specify different target collection
+python utils/manual_memory_backup.py restore -f manual_entries_backup_collection-name.json -c target-collection
 
 # Dry run to see what would be restored
 python utils/manual_memory_backup.py restore -f backup.json --dry-run
@@ -250,7 +265,7 @@ read_graph(entity="DatabaseManager", mode="raw")
 search_similar("error pattern", entityTypes=["metadata"])
 
 # 🔍 Find similar debugging patterns from past solutions
-search_similar("authentication error", entityTypes=["debugging_pattern", "function"])
+search_similar("authentication error", entityTypes=["function", "debugging_pattern"])
 
 # 🧩 Mixed search for comprehensive context
 search_similar("validation error", entityTypes=["function", "metadata", "implementation"])

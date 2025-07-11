@@ -85,6 +85,14 @@ class CodeParser(ABC):
     def get_supported_extensions(self) -> List[str]:
         """Get list of supported file extensions."""
         pass
+    
+    def _create_chunk_id(self, file_path: Path, entity_name: str, chunk_type: str, entity_type: str = None) -> str:
+        """Create deterministic chunk ID following existing pattern."""
+        # Pattern: {file_path}::{entity_type}::{entity_name}::{chunk_type} (if entity_type provided)
+        # Pattern: {file_path}::{entity_name}::{chunk_type} (backward compatibility)
+        if entity_type:
+            return f"{str(file_path)}::{entity_type}::{entity_name}::{chunk_type}"
+        return f"{str(file_path)}::{entity_name}::{chunk_type}"
 
 
 class PythonParser(CodeParser):
@@ -209,7 +217,13 @@ class PythonParser(CodeParser):
         try:
             with open(file_path, 'rb') as f:
                 return hashlib.sha256(f.read()).hexdigest()
-        except Exception:
+        except (OSError, IOError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to read file for hashing {file_path}: {e}")
+            return ""
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error hashing file {file_path}: {e}")
             return ""
     
     def _parse_with_tree_sitter(self, file_path: Path) -> Optional['tree_sitter.Tree']:
@@ -240,7 +254,7 @@ class PythonParser(CodeParser):
         
         entities = []
         
-        def traverse_node(node, depth=0):
+        def traverse_node(node, depth=0, parent_context=None):
             entity_mapping = {
                 'function_definition': EntityType.FUNCTION,
                 'class_definition': EntityType.CLASS,
@@ -249,14 +263,48 @@ class PythonParser(CodeParser):
                 'import_from_statement': EntityType.IMPORT
             }
             
-            if node.type in entity_mapping:
-                entity = self._extract_named_entity(node, entity_mapping[node.type], file_path)
-                if entity:
-                    entities.append(entity)
+            # Track current context for scope-aware filtering
+            current_context = parent_context
+            if node.type in ['function_definition', 'class_definition']:
+                current_context = node.type
             
-            # Recursively traverse children
+            if node.type in entity_mapping:
+                # Apply scope-aware filtering for variables
+                if node.type == 'assignment':
+                    # Skip function-local variables
+                    if current_context == 'function_definition':
+                        logger.debug(f"Skipping function-local variable at line {node.start_point[0] + 1}")
+                    else:
+                        # Use enhanced assignment extraction for complex patterns
+                        assignment_variables = self._extract_variables_from_assignment(node, file_path)
+                        entities.extend(assignment_variables)
+                else:
+                    entity = self._extract_named_entity(node, entity_mapping[node.type], file_path)
+                    if entity:
+                        entities.append(entity)
+            
+            # Enhanced variable extraction for new patterns
+            elif node.type == 'with_statement':
+                # Extract context manager variables
+                if current_context != 'function_definition':
+                    context_variables = self._extract_variables_from_context_manager(node, file_path)
+                    entities.extend(context_variables)
+            
+            elif node.type == 'except_clause':
+                # Extract exception handler variables
+                if current_context != 'function_definition':
+                    exception_variables = self._extract_variables_from_exception_handler(node, file_path)
+                    entities.extend(exception_variables)
+            
+            elif node.type == 'named_expression':
+                # Extract walrus operator variables
+                if current_context != 'function_definition':
+                    walrus_variables = self._extract_variables_from_walrus(node, file_path)
+                    entities.extend(walrus_variables)
+            
+            # Recursively traverse children with context
             for child in node.children:
-                traverse_node(child, depth + 1)
+                traverse_node(child, depth + 1, current_context)
         
         traverse_node(tree.root_node)
         return entities
@@ -290,9 +338,16 @@ class PythonParser(CodeParser):
         entity_name = None
         
         if node.type == 'assignment':
-            # For assignment: assignment -> identifier (left side)
-            if node.children and node.children[0].type == 'identifier':
-                entity_name = node.children[0].text.decode('utf-8')
+            # Use proven pattern from find_attributes() for assignment node traversal
+            for child in node.children:
+                if child.type == 'identifier':
+                    # Check if this is a type-only annotation (name: str) vs real assignment (name = value)
+                    node_text = node.text.decode('utf-8')
+                    if ':' in node_text and '=' not in node_text:
+                        # Skip type-only annotations
+                        return None
+                    entity_name = child.text.decode('utf-8')
+                    break
         elif node.type in ['import_statement', 'import_from_statement']:
             # For imports: find the imported module name
             for child in node.children:
@@ -329,8 +384,12 @@ class PythonParser(CodeParser):
                 if self._project:
                     try:
                         jedi_script = jedi.Script(source_code, path=str(file_path), project=self._project)
-                    except Exception:
-                        pass
+                    except ImportError as e:
+                        logger = get_logger()
+                        logger.warning(f"Jedi import error for file {file_path}: {e}")
+                    except Exception as e:
+                        logger = get_logger()
+                        logger.warning(f"Failed to create Jedi script for file {file_path}: {e}")
                 
                 # Extract observations based on entity type
                 if entity_type == EntityType.FUNCTION:
@@ -391,6 +450,167 @@ class PythonParser(CodeParser):
             )
         
         return None
+    
+    def _extract_variables_from_assignment(self, node: 'tree_sitter.Node', file_path: Path) -> List['Entity']:
+        """Extract multiple variables from complex assignment patterns (tuple unpacking, etc.)."""
+        variables = []
+        
+        def extract_identifiers_from_pattern(pattern_node, line_number):
+            """Recursively extract identifiers from pattern nodes."""
+            extracted_names = []
+            
+            if pattern_node.type == 'identifier':
+                name = pattern_node.text.decode('utf-8')
+                extracted_names.append(name)
+            elif pattern_node.type == 'pattern_list':
+                # Tuple unpacking: a, b, c = values
+                for child in pattern_node.children:
+                    if child.type != ',':
+                        extracted_names.extend(extract_identifiers_from_pattern(child, line_number))
+            elif pattern_node.type == 'list_pattern':
+                # List unpacking: [a, b, c] = values
+                for child in pattern_node.children:
+                    if child.type not in ['[', ']', ',']:
+                        extracted_names.extend(extract_identifiers_from_pattern(child, line_number))
+            elif pattern_node.type == 'list_splat_pattern':
+                # Starred unpacking: *rest
+                for child in pattern_node.children:
+                    if child.type == 'identifier':
+                        name = child.text.decode('utf-8')
+                        extracted_names.append(name)
+            elif pattern_node.type == 'parenthesized_expression':
+                # Nested patterns: (a, b), (c, d) = values
+                for child in pattern_node.children:
+                    if child.type not in ['(', ')', ',']:
+                        extracted_names.extend(extract_identifiers_from_pattern(child, line_number))
+            elif pattern_node.type == 'tuple_pattern':
+                # Explicit tuple patterns
+                for child in pattern_node.children:
+                    if child.type not in ['(', ')', ',']:
+                        extracted_names.extend(extract_identifiers_from_pattern(child, line_number))
+            
+            return extracted_names
+        
+        # Check if this is a type annotation without assignment
+        node_text = node.text.decode('utf-8')
+        if ':' in node_text and '=' not in node_text:
+            return variables
+        
+        line_number = node.start_point[0] + 1
+        end_line = node.end_point[0] + 1
+        
+        # Find the left side of assignment (target patterns)
+        for child in node.children:
+            if child.type in ['identifier', 'pattern_list', 'list_pattern', 'list_splat_pattern', 'parenthesized_expression', 'tuple_pattern']:
+                variable_names = extract_identifiers_from_pattern(child, line_number)
+                
+                for var_name in variable_names:
+                    entity = Entity(
+                        name=var_name,
+                        entity_type=EntityType.VARIABLE,
+                        observations=[
+                            f"Variable: {var_name}",
+                            f"Defined in: {file_path}",
+                            f"Line: {line_number}"
+                        ],
+                        file_path=file_path,
+                        line_number=line_number,
+                        end_line_number=end_line
+                    )
+                    variables.append(entity)
+                break
+        
+        return variables
+    
+    def _extract_variables_from_context_manager(self, node: 'tree_sitter.Node', file_path: Path) -> List['Entity']:
+        """Extract variables from with statements (context managers)."""
+        variables = []
+        line_number = node.start_point[0] + 1
+        end_line = node.end_point[0] + 1
+        
+        def traverse_for_as_pattern_targets(current_node):
+            if current_node.type == 'as_pattern_target':
+                for child in current_node.children:
+                    if child.type == 'identifier':
+                        var_name = child.text.decode('utf-8')
+                        entity = Entity(
+                            name=var_name,
+                            entity_type=EntityType.VARIABLE,
+                            observations=[
+                                f"Variable: {var_name}",
+                                f"Context manager variable in: {file_path}",
+                                f"Line: {line_number}"
+                            ],
+                            file_path=file_path,
+                            line_number=line_number,
+                            end_line_number=end_line
+                        )
+                        variables.append(entity)
+                        break
+            
+            for child in current_node.children:
+                traverse_for_as_pattern_targets(child)
+        
+        traverse_for_as_pattern_targets(node)
+        return variables
+    
+    def _extract_variables_from_exception_handler(self, node: 'tree_sitter.Node', file_path: Path) -> List['Entity']:
+        """Extract variables from except clauses."""
+        variables = []
+        line_number = node.start_point[0] + 1
+        end_line = node.end_point[0] + 1
+        
+        def traverse_for_exception_vars(current_node):
+            if current_node.type == 'as_pattern_target':
+                for child in current_node.children:
+                    if child.type == 'identifier':
+                        var_name = child.text.decode('utf-8')
+                        entity = Entity(
+                            name=var_name,
+                            entity_type=EntityType.VARIABLE,
+                            observations=[
+                                f"Variable: {var_name}",
+                                f"Exception handler variable in: {file_path}",
+                                f"Line: {line_number}"
+                            ],
+                            file_path=file_path,
+                            line_number=line_number,
+                            end_line_number=end_line
+                        )
+                        variables.append(entity)
+                        break
+            
+            for child in current_node.children:
+                traverse_for_exception_vars(child)
+        
+        traverse_for_exception_vars(node)
+        return variables
+    
+    def _extract_variables_from_walrus(self, node: 'tree_sitter.Node', file_path: Path) -> List['Entity']:
+        """Extract variables from walrus operator (:=) expressions."""
+        variables = []
+        line_number = node.start_point[0] + 1
+        end_line = node.end_point[0] + 1
+        
+        for child in node.children:
+            if child.type == 'identifier':
+                var_name = child.text.decode('utf-8')
+                entity = Entity(
+                    name=var_name,
+                    entity_type=EntityType.VARIABLE,
+                    observations=[
+                        f"Variable: {var_name}",
+                        f"Walrus operator assignment in: {file_path}",
+                        f"Line: {line_number}"
+                    ],
+                    file_path=file_path,
+                    line_number=line_number,
+                    end_line_number=end_line
+                )
+                variables.append(entity)
+                break
+        
+        return variables
     
     def _extract_inheritance_relations(self, class_node: 'tree_sitter.Node', file_path: Path) -> List['Relation']:
         """Extract inheritance relations from a class definition node."""
@@ -530,7 +750,14 @@ class PythonParser(CodeParser):
                 # Single module name already checked above
                 return True
                 
-        except Exception:
+        except (OSError, ValueError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to determine if module is local: {e}")
+            # If we can't determine, assume it's external to avoid orphans
+            return False
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error determining if module is local: {e}")
             # If we can't determine, assume it's external to avoid orphans
             return False
             
@@ -645,26 +872,45 @@ class PythonParser(CodeParser):
             with open(file_path, 'r', encoding='utf-8') as f:
                 source_code = f.read()
             
+            # Debug logging
+            from ..indexer_logging import get_logger
+            logger = get_logger()
+            logger.debug(f"🔧 Starting implementation chunk extraction for {file_path.name}")
+            
             # Create Jedi script for semantic analysis
             script = jedi.Script(source_code, path=str(file_path), project=self._project)
             source_lines = source_code.split('\n')
+            logger.debug(f"🔧 Jedi script created, source has {len(source_lines)} lines")
             
             # Extract function and class implementations
+            functions_found = 0
             def traverse_for_implementations(node):
+                nonlocal functions_found
                 if node.type in ['function_definition', 'class_definition']:
+                    functions_found += 1
+                    logger.debug(f"🔧 Found {node.type}: attempting chunk extraction")
                     chunk = self._extract_implementation_chunk(node, source_lines, script, file_path)
                     if chunk:
                         chunks.append(chunk)
+                        logger.debug(f"🔧 ✅ Created chunk for {chunk.entity_name}")
+                    else:
+                        logger.debug(f"🔧 ❌ Failed to create chunk for {node.type}")
                 
                 # Recursively traverse children
                 for child in node.children:
                     traverse_for_implementations(child)
             
             traverse_for_implementations(tree.root_node)
+            logger.debug(f"🔧 Traversal complete: found {functions_found} functions/classes, created {len(chunks)} chunks")
             
         except Exception as e:
-            # Graceful fallback - implementation chunks are optional
-            pass
+            # Log implementation chunk creation failures for debugging
+            from ..indexer_logging import get_logger
+            logger = get_logger()
+            logger.debug(f"Implementation chunk extraction failed for {file_path}: {e}")
+            logger.debug(f"Exception type: {type(e).__name__}")
+            logger.debug(f"Exception details: {str(e)}")
+            # Continue gracefully - implementation chunks are optional
         
         return chunks
     
@@ -672,6 +918,11 @@ class PythonParser(CodeParser):
                                     script: 'jedi.Script', file_path: Path) -> Optional['EntityChunk']:
         """Extract implementation chunk for function or class with semantic metadata."""
         try:
+            # Debug logging
+            from ..indexer_logging import get_logger
+            logger = get_logger()
+            logger.debug(f"🔧   Extracting chunk for {node.type} at line {node.start_point[0]}")
+            
             # Get entity name
             entity_name = None
             for child in node.children:
@@ -679,7 +930,10 @@ class PythonParser(CodeParser):
                     entity_name = child.text.decode('utf-8')
                     break
             
+            logger.debug(f"🔧   Entity name: {entity_name}")
+            
             if not entity_name:
+                logger.debug(f"🔧   ❌ No entity name found")
                 return None
             
             # Extract source code lines
@@ -718,13 +972,25 @@ class PythonParser(CodeParser):
                     "complexity": implementation.count('\n') + 1  # Simple line count
                 }
             
+            # Create collision-resistant ID using MD5 hash suffix
+            entity_type = "function" if node.type == 'function_definition' else "class"
+            base_id = self._create_chunk_id(file_path, entity_name, "implementation", entity_type)
+            
+            # Add unique hash suffix for collision prevention
+            import hashlib
+            unique_content = f"{str(file_path)}::{entity_name}::{entity_type}::{start_line}::{end_line}"
+            unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
+            collision_resistant_id = f"{base_id}::{unique_hash}"
+            
+            logger.debug(f"🔧   ✅ Creating EntityChunk for {entity_name} ({len(implementation)} chars)")
+            
             return EntityChunk(
-                id=f"{str(file_path)}::{entity_name}::implementation",
+                id=collision_resistant_id,
                 entity_name=entity_name,
                 chunk_type="implementation",
                 content=implementation,
                 metadata={
-                    "entity_type": "function" if node.type == 'function_definition' else "class",
+                    "entity_type": entity_type,
                     "file_path": str(file_path),
                     "start_line": start_line + 1,
                     "end_line": end_line + 1,
@@ -733,6 +999,9 @@ class PythonParser(CodeParser):
             )
             
         except Exception as e:
+            from ..indexer_logging import get_logger
+            logger = get_logger()
+            logger.debug(f"🔧   ❌ Individual chunk extraction failed: {e}")
             return None
     
     def _get_type_hints(self, definition) -> Dict[str, str]:
@@ -1081,7 +1350,13 @@ class MarkdownParser(CodeParser):
         try:
             with open(file_path, 'rb') as f:
                 return hashlib.sha256(f.read()).hexdigest()
-        except Exception:
+        except (OSError, IOError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to read file for hashing {file_path}: {e}")
+            return ""
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error hashing file {file_path}: {e}")
             return ""
     
     def _extract_headers(self, file_path: Path) -> List['Entity']:
@@ -1117,68 +1392,8 @@ class MarkdownParser(CodeParser):
                         )
                         entities.append(entity)
             
-            # Extract links with regex pattern [text](url)
-            link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
-            for match in re.finditer(link_pattern, content):
-                text = match.group(1)
-                url = match.group(2)
-                
-                # Find line number
-                line_num = content[:match.start()].count('\n') + 1
-                
-                entity = Entity(
-                    name=f"Link: {text}",
-                    entity_type=EntityType.DOCUMENTATION,
-                    observations=[
-                        f"Link text: {text}",
-                        f"URL: {url}",
-                        f"Line {line_num} in {file_path.name}"
-                    ],
-                    file_path=file_path,
-                    line_number=line_num,
-                    metadata={"type": "link", "url": url, "text": text}
-                )
-                entities.append(entity)
-            
-            # Extract code blocks with language detection
-            code_block_pattern = r'```(\w+)?\n(.*?)\n```'
-            for match in re.finditer(code_block_pattern, content, re.DOTALL):
-                code = match.group(2)
-                
-                # Detect natural language queries vs actual code
-                if match.group(1):
-                    language = match.group(1)
-                elif '"' in code and not any(c in code for c in [';', '{', 'def ', 'function', 'class ', 'import']):
-                    language = "natural_language_query"
-                else:
-                    language = "unknown"
-                
-                # Find line number
-                line_num = content[:match.start()].count('\n') + 1
-                
-                # Truncate long code blocks
-                display_code = code[:100] + "..." if len(code) > 100 else code
-                
-                # Set descriptive name based on content type
-                if language == "natural_language_query":
-                    entity_name = "Natural Language Query Examples"
-                else:
-                    entity_name = f"Code Block ({language})"
-                
-                entity = Entity(
-                    name=entity_name,
-                    entity_type=EntityType.DOCUMENTATION,
-                    observations=[
-                        f"Language: {language}",
-                        f"Code: {display_code}",
-                        f"Line {line_num} in {file_path.name}",
-                        f"Full code length: {len(code)} characters"
-                    ],
-                    file_path=file_path,
-                    line_number=line_num,
-                    metadata={"type": "code_block", "language": language, "code": code}
-                )
-                entities.append(entity)
+            # Links and code blocks filtered out to reduce relation bloat
+            # Content still accessible via get_implementation for full markdown sections
         
         except Exception:
             pass  # Ignore errors, return what we could extract
@@ -1220,9 +1435,16 @@ class MarkdownParser(CodeParser):
                 
                 # Only create chunks for sections with meaningful content
                 if section_content and len(section_content.strip()) > 5:
+                    # Create collision-resistant implementation chunk ID
+                    import hashlib
+                    unique_content = f"{str(file_path)}::{header['text']}::documentation::{start_line}::{end_line}"
+                    unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
+                    impl_base_id = self._create_chunk_id(file_path, header['text'], "implementation", "documentation")
+                    collision_resistant_impl_id = f"{impl_base_id}::{unique_hash}"
+                    
                     # Create implementation chunk using existing patterns
                     impl_chunk = EntityChunk(
-                        id=f"{str(file_path)}::{header['text']}::implementation",
+                        id=collision_resistant_impl_id,
                         entity_name=header['text'],
                         chunk_type="implementation",
                         content=section_content,
@@ -1247,11 +1469,18 @@ class MarkdownParser(CodeParser):
                     
                     metadata_content = f"Section: {header['text']} | Preview: {preview} | Lines: {line_count} | Words: {word_count}"
                     
-                    metadata_chunk = EntityChunk(
-                        id=f"{str(file_path)}::{header['text']}::metadata",
+                    # Create collision-resistant metadata chunk ID
+                    metadata_unique_content = f"{str(file_path)}::{header['text']}::documentation::metadata::{header['line_num']}"
+                    metadata_unique_hash = hashlib.md5(metadata_unique_content.encode()).hexdigest()[:8]
+                    metadata_base_id = self._create_chunk_id(file_path, header['text'], "metadata", "documentation")
+                    collision_resistant_metadata_id = f"{metadata_base_id}::{metadata_unique_hash}"
+                    
+                    # FIX: Create implementation chunk since this contains full section content
+                    implementation_chunk = EntityChunk(
+                        id=collision_resistant_metadata_id,
                         entity_name=header['text'],
-                        chunk_type="metadata",
-                        content=metadata_content,
+                        chunk_type="implementation",  # FIXED: Was "metadata", now "implementation"
+                        content=section_content,  # Use full section content
                         metadata={
                             "entity_type": "documentation",
                             "file_path": str(file_path),
@@ -1263,7 +1492,7 @@ class MarkdownParser(CodeParser):
                             "line_count": line_count
                         }
                     )
-                    chunks.append(metadata_chunk)
+                    chunks.append(implementation_chunk)
         
         except Exception as e:
             # Graceful fallback - implementation chunks are optional

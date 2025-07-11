@@ -2,6 +2,7 @@
 
 import time
 import warnings
+import hashlib
 from typing import List, Dict, Any, Optional, Union
 from .base import VectorStore, StorageResult, VectorPoint, ManagedVectorStore
 from ..indexer_logging import get_logger
@@ -45,7 +46,37 @@ except ImportError:
         pass
 
 
-class QdrantStore(ManagedVectorStore):
+class ContentHashMixin:
+    """Mixin for content-addressable storage functionality"""
+    
+    @staticmethod
+    def compute_content_hash(content: str) -> str:
+        """Generate SHA256 hash of content"""
+        return hashlib.sha256(content.encode()).hexdigest()
+    
+    def check_content_exists(self, collection_name: str, content_hash: str) -> bool:
+        """Check if content hash already exists in storage"""
+        try:
+            # Check if collection exists first
+            if not self.collection_exists(collection_name):
+                logger.debug(f"Collection {collection_name} doesn't exist, content hash check returns False")
+                return False
+                
+            results = self.client.scroll(
+                collection_name=collection_name,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="content_hash", match=MatchValue(value=content_hash))]
+                ),
+                limit=1
+            )
+            return len(results[0]) > 0
+        except Exception as e:
+            logger.debug(f"Error checking content hash existence: {e}")
+            # On connection errors, fall back to processing (safer than skipping)
+            return False
+
+
+class QdrantStore(ManagedVectorStore, ContentHashMixin):
     """Qdrant vector database implementation."""
     
     DISTANCE_METRICS = {
@@ -126,7 +157,13 @@ class QdrantStore(ManagedVectorStore):
         try:
             collections = self.client.get_collections()
             return any(col.name == collection_name for col in collections.collections)
-        except Exception:
+        except (ConnectionError, TimeoutError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to check if collection {collection_name} exists: {e}")
+            return False
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error checking collection {collection_name}: {e}")
             return False
     
     def delete_collection(self, collection_name: str) -> StorageResult:
@@ -152,7 +189,7 @@ class QdrantStore(ManagedVectorStore):
             )
     
     def upsert_points(self, collection_name: str, points: List[VectorPoint]) -> StorageResult:
-        """Insert or update points in the collection."""
+        """Insert or update points in the collection with improved reliability."""
         start_time = time.time()
         
         if not points:
@@ -163,47 +200,249 @@ class QdrantStore(ManagedVectorStore):
                 processing_time=time.time() - start_time
             )
         
-        try:
-            # Ensure collection exists
-            if not self.ensure_collection(collection_name, len(points[0].vector)):
-                return StorageResult(
-                    success=False,
-                    operation="upsert",
-                    processing_time=time.time() - start_time,
-                    errors=[f"Collection {collection_name} does not exist"]
-                )
-            
-            # Convert to Qdrant points
-            qdrant_points = []
-            for point in points:
-                qdrant_point = PointStruct(
-                    id=point.id,
-                    vector=point.vector,
-                    payload=point.payload
-                )
-                qdrant_points.append(qdrant_point)
-            
-            # Upsert to Qdrant
-            self.client.upsert(
-                collection_name=collection_name,
-                points=qdrant_points
-            )
-            
-            return StorageResult(
-                success=True,
-                operation="upsert",
-                items_processed=len(points),
-                processing_time=time.time() - start_time
-            )
-            
-        except Exception as e:
+        # Ensure collection exists
+        if not self.ensure_collection(collection_name, len(points[0].vector)):
             return StorageResult(
                 success=False,
                 operation="upsert",
-                items_failed=len(points),
                 processing_time=time.time() - start_time,
-                errors=[f"Failed to upsert points: {e}"]
+                errors=[f"Collection {collection_name} does not exist"]
             )
+        
+        # Convert to Qdrant points
+        qdrant_points = []
+        for point in points:
+            qdrant_point = PointStruct(
+                id=point.id,
+                vector=point.vector,
+                payload=point.payload
+            )
+            qdrant_points.append(qdrant_point)
+        
+        # Use improved batch upsert for reliability
+        return self._reliable_batch_upsert(
+            collection_name=collection_name,
+            qdrant_points=qdrant_points,
+            start_time=start_time,
+            max_batch_size=1000,  # Configurable batch size
+            max_retries=3
+        )
+    
+    def _reliable_batch_upsert(self, collection_name: str, qdrant_points: List[PointStruct], 
+                              start_time: float, max_batch_size: int = 1000, 
+                              max_retries: int = 3) -> StorageResult:
+        """Reliable batch upsert with splitting, timeout handling, and retry logic."""
+        from qdrant_client.http.exceptions import ResponseHandlingException
+        
+        # Split into batches
+        batches = self._split_into_batches(qdrant_points, max_batch_size)
+        
+        if len(batches) > 1:
+            logger.debug(f"🔄 Splitting {len(qdrant_points)} points into {len(batches)} batches")
+        
+        # Check for ID collisions before processing
+        point_ids = [point.id for point in qdrant_points]
+        unique_ids = set(point_ids)
+        if len(unique_ids) != len(point_ids):
+            id_collision_count = len(point_ids) - len(unique_ids)
+            collision_percentage = (id_collision_count / len(point_ids)) * 100
+            
+            # Enhanced logging with collision details
+            logger.warning(f"⚠️ ID collision detected: {id_collision_count} duplicate IDs found")
+            logger.warning(f"   Total points: {len(point_ids)}, Unique IDs: {len(unique_ids)}")
+            logger.warning(f"   Collision rate: {collision_percentage:.1f}%")
+            
+            # Log specific colliding IDs and their details
+            from collections import Counter
+            id_counts = Counter(point_ids)
+            colliding_ids = {id_val: count for id_val, count in id_counts.items() if count > 1}
+            
+            logger.warning(f"   Colliding chunk IDs ({len(colliding_ids)} unique IDs):")
+            for chunk_id, count in sorted(colliding_ids.items(), key=lambda x: x[1], reverse=True):
+                logger.warning(f"     • {chunk_id}: {count} duplicates")
+                
+                # Show entity details for this colliding ID
+                colliding_points = [p for p in qdrant_points if p.id == chunk_id]
+                for i, point in enumerate(colliding_points[:3]):  # Limit to first 3 examples
+                    entity_name = point.payload.get('entity_name', 'unknown')
+                    entity_type = point.payload.get('entity_type', 'unknown')
+                    chunk_type = point.payload.get('chunk_type', 'unknown')
+                    file_path = point.payload.get('file_path', 'unknown')
+                    logger.warning(f"       - {chunk_type} {entity_type}: {entity_name} ({file_path})")
+                if len(colliding_points) > 3:
+                    logger.warning(f"       - ... and {len(colliding_points) - 3} more")
+        
+        # Process each batch with retry logic
+        total_processed = 0
+        total_failed = 0
+        all_errors = []
+        
+        for i, batch in enumerate(batches):
+            if len(batches) > 1:
+                logger.debug(f"📦 Processing batch {i+1}/{len(batches)} ({len(batch)} points)")
+            
+            batch_result = self._upsert_batch_with_retry(
+                collection_name, batch, batch_num=i+1, max_retries=max_retries
+            )
+            
+            if batch_result.success:
+                total_processed += batch_result.items_processed
+                if len(batches) > 1:
+                    logger.debug(f"✅ Batch {i+1} succeeded: {batch_result.items_processed} points")
+                    # Check for batch-level discrepancies
+                    if batch_result.items_processed != len(batch):
+                        batch_discrepancy = len(batch) - batch_result.items_processed
+                        logger.warning(f"⚠️ Batch {i+1} discrepancy: {batch_discrepancy} points missing")
+            else:
+                total_failed += len(batch)
+                all_errors.extend(batch_result.errors)
+                logger.error(f"❌ Batch {i+1} failed: {batch_result.errors}")
+        
+        # Verify storage count
+        verification_result = self._verify_storage_count(
+            collection_name, total_processed, len(qdrant_points)
+        )
+        
+        processing_time = time.time() - start_time
+        
+        # Determine overall success
+        overall_success = total_failed == 0 and verification_result['success']
+        
+        if not verification_result['success']:
+            all_errors.append(verification_result['error'])
+        
+        return StorageResult(
+            success=overall_success,
+            operation="upsert",
+            items_processed=total_processed,
+            items_failed=total_failed,
+            processing_time=processing_time,
+            errors=all_errors if all_errors else None
+        )
+    
+    def _split_into_batches(self, points: List[PointStruct], batch_size: int) -> List[List[PointStruct]]:
+        """Split points into batches of specified size."""
+        batches = []
+        for i in range(0, len(points), batch_size):
+            batch = points[i:i + batch_size]
+            batches.append(batch)
+        return batches
+    
+    def _upsert_batch_with_retry(self, collection_name: str, batch: List[PointStruct], 
+                                batch_num: int, max_retries: int) -> StorageResult:
+        """Upsert a single batch with retry logic."""
+        from qdrant_client.http.exceptions import ResponseHandlingException
+        start_time = time.time()
+        
+        for attempt in range(max_retries):
+            try:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message="Api key is used with an insecure connection")
+                    self.client.upsert(
+                        collection_name=collection_name,
+                        points=batch
+                    )
+                
+                # Success!
+                return StorageResult(
+                    success=True,
+                    operation="upsert_batch",
+                    items_processed=len(batch),
+                    processing_time=time.time() - start_time
+                )
+                
+            except ResponseHandlingException as e:
+                error_msg = str(e)
+                if "timed out" in error_msg.lower():
+                    logger.warning(f"⚠️ Batch {batch_num} attempt {attempt+1} timed out")
+                    
+                    if attempt < max_retries - 1:
+                        # Wait before retry (exponential backoff)
+                        wait_time = 2 ** attempt
+                        logger.debug(f"🔄 Retrying batch {batch_num} in {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        # Final timeout - return failure
+                        return StorageResult(
+                            success=False,
+                            operation="upsert_batch",
+                            items_failed=len(batch),
+                            processing_time=time.time() - start_time,
+                            errors=[f"Batch {batch_num} timed out after {max_retries} attempts"]
+                        )
+                else:
+                    # Non-timeout ResponseHandlingException - fail immediately
+                    return StorageResult(
+                        success=False,
+                        operation="upsert_batch",
+                        items_failed=len(batch),
+                        processing_time=time.time() - start_time,
+                        errors=[f"Batch {batch_num} failed: {error_msg}"]
+                    )
+                    
+            except Exception as e:
+                # Other unexpected errors - fail immediately
+                return StorageResult(
+                    success=False,
+                    operation="upsert_batch",
+                    items_failed=len(batch),
+                    processing_time=time.time() - start_time,
+                    errors=[f"Batch {batch_num} failed with unexpected error: {str(e)}"]
+                )
+        
+        # Should not reach here
+        return StorageResult(
+            success=False,
+            operation="upsert_batch",
+            items_failed=len(batch),
+            processing_time=time.time() - start_time,
+            errors=[f"Batch {batch_num} exhausted all retry attempts"]
+        )
+    
+    def _verify_storage_count(self, collection_name: str, expected_new: int, 
+                            total_attempted: int) -> dict:
+        """Verify that storage count matches expectations."""
+        try:
+            # Get current count
+            current_count = self.client.count(collection_name=collection_name).count
+            
+            # Enhanced verification: check exact count matches
+            if expected_new > 0:
+                logger.debug(f"✅ Storage verification: {current_count} total points in collection")
+                
+                # Check for storage discrepancy
+                if expected_new != total_attempted:
+                    discrepancy = total_attempted - expected_new
+                    logger.warning(f"⚠️ Storage discrepancy detected: {discrepancy} points missing")
+                    logger.warning(f"   Expected to store: {total_attempted}")
+                    logger.warning(f"   Actually stored: {expected_new}")
+                    logger.warning(f"   Possible causes: ID collisions, content deduplication, or silent Qdrant filtering")
+                
+                success = True
+                error = None
+            else:
+                success = False
+                error = f"No points were successfully stored out of {total_attempted} attempted"
+                logger.error(f"❌ Storage verification failed: {error}")
+            
+            return {
+                'success': success,
+                'current_count': current_count,
+                'expected_new': expected_new,
+                'total_attempted': total_attempted,
+                'error': error
+            }
+            
+        except Exception as e:
+            error = f"Storage verification failed: {str(e)}"
+            logger.error(f"❌ {error}")
+            return {
+                'success': False,
+                'current_count': 0,
+                'expected_new': expected_new,
+                'total_attempted': total_attempted,
+                'error': error
+            }
     
     def delete_points(self, collection_name: str, point_ids: List[Union[str, int]]) -> StorageResult:
         """Delete points by their IDs."""
@@ -330,7 +569,13 @@ class QdrantStore(ManagedVectorStore):
         try:
             collection_info = self.client.get_collection(collection_name)
             return collection_info.points_count
-        except Exception:
+        except (ConnectionError, TimeoutError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to count points in collection {collection_name}: {e}")
+            return 0
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error counting points in collection {collection_name}: {e}")
             return 0
     
     def search(self, collection_name: str, query_vector, top_k: int = 10):
@@ -367,7 +612,13 @@ class QdrantStore(ManagedVectorStore):
         try:
             collections = self.client.get_collections()
             return [col.name for col in collections.collections]
-        except Exception:
+        except (ConnectionError, TimeoutError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to list collections: {e}")
+            return []
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error listing collections: {e}")
             return []
     
     def _scroll_collection(
@@ -567,7 +818,7 @@ class QdrantStore(ManagedVectorStore):
     def generate_deterministic_id(self, content: str) -> int:
         """Generate deterministic ID from content (same as base.py)."""
         import hashlib
-        hash_hex = hashlib.sha256(content.encode()).hexdigest()[:8]
+        hash_hex = hashlib.sha256(content.encode()).hexdigest()[:16]  # 16 chars = 64 bits
         return int(hash_hex, 16)
     
     def create_chunk_point(self, chunk: 'EntityChunk', embedding: List[float], 

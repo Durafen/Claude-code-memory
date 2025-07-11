@@ -61,10 +61,13 @@ class EntityChunk:
     
     def to_vector_payload(self) -> Dict[str, Any]:
         """Convert to Qdrant payload format with progressive disclosure support."""
+        from ..storage.qdrant import ContentHashMixin
+        
         payload = {
             "entity_name": self.entity_name,
             "chunk_type": self.chunk_type,
             "content": self.content,
+            "content_hash": ContentHashMixin.compute_content_hash(self.content),
             "created_at": datetime.now().isoformat(),
             **self.metadata
         }
@@ -82,8 +85,15 @@ class EntityChunk:
         content_parts.extend(entity.observations)
         content = " | ".join(content_parts)
         
+        # Create collision-resistant metadata chunk ID
+        import hashlib
+        unique_content = f"{str(entity.file_path)}::{entity.entity_type.value}::{entity.name}::metadata::{entity.line_number}"
+        unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
+        base_id = f"{str(entity.file_path)}::{entity.entity_type.value}::{entity.name}::metadata"
+        collision_resistant_id = f"{base_id}::{unique_hash}"
+        
         return cls(
-            id=f"{str(entity.file_path)}::{entity.name}::metadata",
+            id=collision_resistant_id,
             entity_name=entity.name,
             chunk_type="metadata",
             content=content,
@@ -121,7 +131,19 @@ class RelationChunk:
     @classmethod
     def from_relation(cls, relation: 'Relation') -> 'RelationChunk':
         """Create a RelationChunk from a Relation."""
-        chunk_id = f"{relation.from_entity}::{relation.relation_type.value}::{relation.to_entity}"
+        # Include import_type and context to prevent ID collisions
+        import_type = relation.metadata.get('import_type', '') if relation.metadata else ''
+        context_suffix = f"::{relation.context}" if relation.context else ""
+        import_suffix = f"::{import_type}" if import_type else ""
+        
+        # Add unique identifier when no metadata distinguishes relations
+        if not import_suffix and not context_suffix:
+            import hashlib
+            unique_content = f"{relation.from_entity}::{relation.relation_type.value}::{relation.to_entity}::{id(relation)}"
+            unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
+            chunk_id = f"{relation.from_entity}::{relation.relation_type.value}::{relation.to_entity}::{unique_hash}"
+        else:
+            chunk_id = f"{relation.from_entity}::{relation.relation_type.value}::{relation.to_entity}{import_suffix}{context_suffix}"
         
         # Build human-readable content
         content = f"{relation.from_entity} {relation.relation_type.value} {relation.to_entity}"
@@ -141,14 +163,18 @@ class RelationChunk:
     
     def to_vector_payload(self) -> Dict[str, Any]:
         """Convert relation chunk to vector storage payload."""
+        from ..storage.qdrant import ContentHashMixin
+        
         payload: Dict[str, Any] = {
             "chunk_type": "relation",
             "entity_name": self.from_entity,  # Primary entity for search
             "relation_target": self.to_entity,
             "relation_type": self.relation_type.value,
             "content": self.content,
+            "content_hash": ContentHashMixin.compute_content_hash(self.content),
             "created_at": datetime.now().isoformat(),
-            "type": "chunk"
+            "type": "chunk",
+            "entity_type": "relation"
         }
         
         if self.context:

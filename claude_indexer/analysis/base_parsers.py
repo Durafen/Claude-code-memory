@@ -71,11 +71,6 @@ class TreeSitterParser(CodeParser):
         walk(root)
         return nodes
     
-    def _create_chunk_id(self, file_path: Path, entity_name: str, chunk_type: str) -> str:
-        """Create deterministic chunk ID following existing pattern."""
-        # Pattern: {file_path}::{entity_name}::{chunk_type}
-        return f"{str(file_path)}::{entity_name}::{chunk_type}"
-    
     def _has_syntax_errors(self, tree) -> bool:
         """Check if the parse tree contains syntax errors."""
         def check_node_for_errors(node):

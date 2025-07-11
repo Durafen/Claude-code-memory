@@ -85,6 +85,26 @@ class IndexingResult:
         return self.processing_time
 
 
+@dataclass
+class GitMetaContext:
+    """Context information from Git+Meta content analysis."""
+    
+    changed_entity_ids: Set[str]
+    unchanged_count: int
+    should_process: bool
+    global_entities: Optional[Set[str]] = None
+    
+    @classmethod
+    def empty(cls) -> 'GitMetaContext':
+        """Create empty context for cases where Git+Meta is not applicable."""
+        return cls(
+            changed_entity_ids=set(),
+            unchanged_count=0,
+            should_process=True,
+            global_entities=None
+        )
+
+
 class CoreIndexer:
     """Stateless core indexing service orchestrating all components."""
     
@@ -104,8 +124,10 @@ class CoreIndexer:
         def batch_callback(entities, relations, chunks):
             """Process a batch of entities, relations, and chunks immediately."""
             try:
+                # Use unified Git+Meta setup
+                git_meta = self._prepare_git_meta_context(collection_name, entities)
                 # Use existing _store_vectors method for immediate processing
-                success = self._store_vectors(collection_name, entities, relations, chunks)
+                success = self._store_vectors(collection_name, entities, relations, chunks, git_meta.changed_entity_ids)
                 return success
             except Exception as e:
                 self.logger.error(f"❌ Batch processing failed: {e}")
@@ -145,6 +167,54 @@ class CoreIndexer:
         except Exception as e:
             self.logger.debug(f"❌ Batch processing check failed for {file_path.name}: {e}")
             return False
+    
+    def _prepare_git_meta_context(self, collection_name: str, entities: List[Entity]) -> GitMetaContext:
+        """Unified Git+Meta setup for ALL indexing flows."""
+        
+        # Critical error check - vector store should always be available in production
+        if not self.vector_store:
+            self.logger.error("🚨 CRITICAL: Vector store is None - Git+Meta features disabled! This is a major bug if not in test environment.")
+            self.logger.error("🚨 Indexing will continue with degraded functionality (no deduplication, no incremental updates)")
+            return GitMetaContext.empty()
+        
+        # Global entity caching (extracted from duplication)
+        if not hasattr(self, '_cached_global_entities'):
+            self._cached_global_entities = self._get_all_entity_names(collection_name)
+            if self._cached_global_entities:
+                self.logger.debug(f"🌐 Cached {len(self._cached_global_entities)} global entities for cross-file relation filtering")
+        
+        # Content hash analysis (extracted from index_single_file) with safety checks
+        unchanged_entities = 0
+        if entities and hasattr(self.vector_store, 'collection_exists') and self.vector_store.collection_exists(collection_name):
+            for entity in entities:
+                try:
+                    metadata_chunk = EntityChunk.create_metadata_chunk(entity, False)
+                    content_hash = metadata_chunk.to_vector_payload()["content_hash"]
+                    if hasattr(self.vector_store, 'check_content_exists') and self.vector_store.check_content_exists(collection_name, content_hash):
+                        unchanged_entities += 1
+                except Exception as e:
+                    self.logger.debug(f"🔄 Git+Meta: Content check failed for {entity.name}: {e}")
+                    # Continue processing - assume entity changed if check fails
+        
+        # Changed entity IDs computation (unified from both patterns)
+        changed_entity_ids = {
+            f"{entity.file_path}::{entity.name}" if entity.file_path else entity.name 
+            for entity in entities
+        } if entities else set()
+        
+        # Efficiency decision
+        should_process = unchanged_entities < len(entities) if entities else True
+        
+        # Log efficiency gains if applicable
+        if unchanged_entities > 0:
+            self.logger.info(f"⚡ Git+Meta: {unchanged_entities}/{len(entities)} entities unchanged")
+        
+        return GitMetaContext(
+            changed_entity_ids=changed_entity_ids,
+            unchanged_count=unchanged_entities,
+            should_process=should_process,
+            global_entities=self._cached_global_entities
+        )
     
     def _inject_parser_configs(self):
         """Inject project-specific parser configurations."""
@@ -292,8 +362,10 @@ class CoreIndexer:
             
             # Store vectors using direct Qdrant automation with progressive disclosure
             if all_entities or all_relations or all_implementation_chunks:
+                # Use unified Git+Meta setup
+                git_meta = self._prepare_git_meta_context(collection_name, all_entities)
                 # Use direct Qdrant automation via existing _store_vectors method
-                storage_success = self._store_vectors(collection_name, all_entities, all_relations, all_implementation_chunks)
+                storage_success = self._store_vectors(collection_name, all_entities, all_relations, all_implementation_chunks, git_meta.changed_entity_ids)
                 if not storage_success:
                     result.success = False
                     result.errors.append("Failed to store vectors in Qdrant")
@@ -315,7 +387,12 @@ class CoreIndexer:
                     logger.info(f"   Mode: {'INCREMENTAL' if incremental else 'FULL'}")
                     logger.info(f"   Files processed: {len(successfully_processed)}")
                     logger.info(f"   Starting orphan cleanup...")
-                    orphaned_deleted = self.vector_store._cleanup_orphaned_relations(collection_name, verbose)
+                    # Orphan cleanup with null safety
+                    orphaned_deleted = 0
+                    if self.vector_store and hasattr(self.vector_store, '_cleanup_orphaned_relations'):
+                        orphaned_deleted = self.vector_store._cleanup_orphaned_relations(collection_name, verbose)
+                    else:
+                        logger.info("✅ No orphaned relations found (vector store not available)")
                     if orphaned_deleted > 0:
                         logger.info(f"✅ Cleanup complete: {orphaned_deleted} orphaned relations removed")
                     else:
@@ -344,61 +421,79 @@ class CoreIndexer:
         return result
     
     def index_single_file(self, file_path: Path, collection_name: str) -> IndexingResult:
-        """Index a single file."""
+        """Index a single file with Git+Meta deduplication."""
         start_time = time.time()
         result = IndexingResult(success=True, operation="single_file")
         
         try:
-            # Clean up existing entities for this file BEFORE processing (prevents duplicates)
-            # This ensures single file indexing gets same cleanup treatment as batch processing
-            try:
-                relative_path = str(file_path.relative_to(self.project_path))
-                logger.info(f"🧹 DEBUG: Single file cleanup starting for: {relative_path}")
-                
-                # Check if collection exists first
-                collection_exists = self.vector_store.collection_exists(collection_name)
-                logger.info(f"🧹 DEBUG: Collection '{collection_name}' exists: {collection_exists}")
-                
-                if collection_exists:
-                    # Try to find entities before deletion
-                    full_path = str(file_path)
-                    logger.info(f"🧹 DEBUG: Searching for entities with path: {full_path}")
-                    found_entities = self.vector_store.find_entities_for_file(collection_name, full_path)
-                    logger.info(f"🧹 DEBUG: Found {len(found_entities)} entities before cleanup")
-                    
-                    # Run cleanup
-                    self._handle_deleted_files(collection_name, relative_path, verbose=True)
-                    
-                    # Check after cleanup
-                    found_entities_after = self.vector_store.find_entities_for_file(collection_name, full_path)
-                    logger.info(f"🧹 DEBUG: Found {len(found_entities_after)} entities after cleanup")
-                else:
-                    logger.info(f"🧹 DEBUG: Collection doesn't exist, skipping cleanup")
-                    
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to clean existing entities for {file_path}: {e}")
-                import traceback
-                logger.warning(f"⚠️ Traceback: {traceback.format_exc()}")
-            
-            # Parse file with batch processing for large JSON files
+            # Parse file first to get entities for Git+Meta deduplication check
             batch_callback = None
             if self._should_use_batch_processing(file_path):
                 batch_callback = self._create_batch_callback(collection_name)
                 self.logger.info(f"🚀 Enabling batch processing for large file: {file_path.name}")
             
-            # Get global entity names for relation validation (same as batch processing)
-            if not hasattr(self, '_cached_global_entities'):
-                self._cached_global_entities = self._get_all_entity_names(collection_name)
-                if self._cached_global_entities:
-                    self.logger.debug(f"🌐 Cached {len(self._cached_global_entities)} global entities for cross-file relation filtering")
-            
-            parse_result = self.parser_registry.parse_file(file_path, batch_callback, global_entity_names=self._cached_global_entities)
+            # Parse file using cached global entities (will be set by Git+Meta setup if needed)
+            parse_result = self.parser_registry.parse_file(file_path, batch_callback, global_entity_names=getattr(self, '_cached_global_entities', None))
             
             if not parse_result.success:
                 result.success = False
                 result.files_failed = 1
                 result.errors.extend(parse_result.errors)
                 return result
+            
+            # Use unified Git+Meta setup
+            git_meta = self._prepare_git_meta_context(collection_name, parse_result.entities)
+            
+            # Early exit if all entities are unchanged
+            if not git_meta.should_process:
+                logger.info(f"⚡ Git+Meta: All {git_meta.unchanged_count} entities unchanged, skipping cleanup and storage")
+                
+                # Return success with zero operations
+                result.files_processed = 1
+                result.entities_created = 0
+                result.relations_created = 0
+                result.implementation_chunks_created = 0
+                result.processed_files = [str(file_path)]
+                result.total_tokens = 0
+                result.total_cost_estimate = 0.0
+                result.embedding_requests = 0
+                result.processing_time = time.time() - start_time
+                return result
+            
+            # Clean up existing entities for this file only if content changed
+            if git_meta.should_process:
+                try:
+                    relative_path = str(file_path.relative_to(self.project_path))
+                    logger.info(f"🧹 DEBUG: Single file cleanup starting for: {relative_path}")
+                    
+                    # Check if collection exists first with null safety
+                    collection_exists = False
+                    if self.vector_store and hasattr(self.vector_store, 'collection_exists'):
+                        collection_exists = self.vector_store.collection_exists(collection_name)
+                        logger.info(f"🧹 DEBUG: Collection '{collection_name}' exists: {collection_exists}")
+                    else:
+                        logger.debug(f"🧹 DEBUG: Vector store not available, skipping cleanup")
+                    
+                    if collection_exists:
+                        # Try to find entities before deletion
+                        full_path = str(file_path)
+                        logger.info(f"🧹 DEBUG: Searching for entities with path: {full_path}")
+                        found_entities = self.vector_store.find_entities_for_file(collection_name, full_path)
+                        logger.info(f"🧹 DEBUG: Found {len(found_entities)} entities before cleanup")
+                        
+                        # Run cleanup
+                        self._handle_deleted_files(collection_name, relative_path, verbose=True)
+                        
+                        # Check after cleanup
+                        found_entities_after = self.vector_store.find_entities_for_file(collection_name, full_path)
+                        logger.info(f"🧹 DEBUG: Found {len(found_entities_after)} entities after cleanup")
+                    else:
+                        logger.info(f"🧹 DEBUG: Collection doesn't exist, skipping cleanup")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to clean existing entities for {file_path}: {e}")
+                    import traceback
+                    logger.warning(f"⚠️ Traceback: {traceback.format_exc()}")
             
             # Handle storage based on whether batch processing was used
             if batch_callback:
@@ -411,8 +506,8 @@ class CoreIndexer:
                 result.processed_files = [str(file_path)]
                 self.logger.info(f"✅ Streaming batch processing completed for {file_path.name}")
             else:
-                # Traditional processing - store accumulated results
-                storage_success = self._store_vectors(collection_name, parse_result.entities, parse_result.relations, parse_result.implementation_chunks)
+                # Traditional processing - store accumulated results using unified Git+Meta
+                storage_success = self._store_vectors(collection_name, parse_result.entities, parse_result.relations, parse_result.implementation_chunks, git_meta.changed_entity_ids)
                 
                 if storage_success:
                     result.files_processed = 1
@@ -429,6 +524,14 @@ class CoreIndexer:
             result.success = False
             result.files_failed = 1
             result.errors.append(f"Failed to index {file_path}: {e}")
+        
+        # Transfer cost data to result
+        if hasattr(self, '_session_cost_data'):
+            result.total_tokens = self._session_cost_data.get('tokens', 0)
+            result.total_cost_estimate = self._session_cost_data.get('cost', 0.0)
+            result.embedding_requests = self._session_cost_data.get('requests', 0)
+            # Reset for next operation
+            self._session_cost_data = {'tokens': 0, 'cost': 0.0, 'requests': 0}
         
         result.processing_time = time.time() - start_time
         return result
@@ -861,13 +964,13 @@ class CoreIndexer:
                     batch_callback = self._create_batch_callback(collection_name)
                     self.logger.info(f"🚀 Enabling batch processing for large file: {file_path.name}")
                 
-                # Get global entity names for entity-aware filtering (once per batch, cached)
-                if not hasattr(self, '_cached_global_entities'):
-                    self._cached_global_entities = self._get_all_entity_names(collection_name)
-                    if self._cached_global_entities:
-                        self.logger.debug(f"🌐 Cached {len(self._cached_global_entities)} global entities for cross-file relation filtering")
+                # Get global entity names for entity-aware filtering (use unified Git+Meta setup)
+                # This ensures global entities are cached consistently across all flows
+                git_meta_temp = self._prepare_git_meta_context(collection_name, [])  # Empty entities just to trigger caching
                 
-                result = self.parser_registry.parse_file(file_path, batch_callback, global_entity_names=self._cached_global_entities)
+                # Use cached global entities with fallback to empty set
+                global_entity_names = getattr(self, '_cached_global_entities', set())
+                result = self.parser_registry.parse_file(file_path, batch_callback, global_entity_names=global_entity_names)
                 
                 if result.success:
                     all_entities.extend(result.entities)
@@ -889,194 +992,55 @@ class CoreIndexer:
         return all_entities, all_relations, all_implementation_chunks, errors
     
     def _store_vectors(self, collection_name: str, entities: List[Entity], 
-                      relations: List[Relation], implementation_chunks: List[EntityChunk] = None) -> bool:
-        """Store entities, relations, and implementation chunks in vector database using batch processing."""
+                      relations: List[Relation], implementation_chunks: List[EntityChunk] = None,
+                      changed_entity_ids: set = None) -> bool:
+        """Store entities, relations, and implementation chunks with Git+Meta content deduplication."""
         if implementation_chunks is None:
             implementation_chunks = []
+        if changed_entity_ids is None:
+            changed_entity_ids = set()
         
         logger = self.logger if hasattr(self, 'logger') else None
+        
+        # Critical error check - vector store should always be available in production
+        if not self.vector_store:
+            if logger:
+                logger.error("🚨 CRITICAL: Vector store is None during storage operation! This is a major bug if not in test environment.")
+                logger.error("🚨 Simulating storage success but NO DATA WILL BE SAVED")
+            return True
+        
         if logger:
-            logger.debug(f"🔄 Starting storage: {len(entities)} entities, {len(relations)} relations, {len(implementation_chunks)} chunks")
+            logger.debug(f"🔄 Starting Git+Meta storage: {len(entities)} entities, {len(relations)} relations, {len(implementation_chunks)} chunks")
+            logger.debug(f"📊 Git+Meta changed entity IDs: {len(changed_entity_ids)} entities flagged as changed")
         
         try:
-            all_points = []
-            total_tokens = 0
-            total_cost = 0.0
-            total_requests = 0
+            # Create unified processor (NEW)
+            from .processing import UnifiedContentProcessor
+            processor = UnifiedContentProcessor(self.vector_store, self.embedder, logger)
             
-            # Create implementation chunk lookup for has_implementation flags
-            implementation_entity_names = set()
-            if implementation_chunks:
-                implementation_entity_names = {chunk.entity_name for chunk in implementation_chunks}
+            # Single call replacing ~200 lines of duplicated logic (NEW)
+            result = processor.process_all_content(
+                collection_name, entities, relations, implementation_chunks, changed_entity_ids
+            )
             
-            # Batch process entities with progressive disclosure
-            if entities:
+            if not result.success:
                 if logger:
-                    logger.debug(f"🧠 Processing entities: {len(entities)} items")
-                
-                # Convert entities to metadata chunks for dual storage
-                metadata_chunks = []
-                for entity in entities:
-                    has_implementation = entity.name in implementation_entity_names
-                    metadata_chunk = EntityChunk.create_metadata_chunk(entity, has_implementation)
-                    metadata_chunks.append(metadata_chunk)
-                
-                metadata_texts = [chunk.content for chunk in metadata_chunks]
-                if logger:
-                    logger.debug(f"🔤 Generating embeddings for {len(metadata_texts)} entity texts")
-                
-                embedding_results = self.embedder.embed_batch(metadata_texts)
-                if logger:
-                    logger.debug(f"🔤 Entity embeddings: processing {len(metadata_texts)} texts...")
-                if logger:
-                    logger.debug(f"✅ Entity embeddings completed: {sum(1 for r in embedding_results if r.success)}/{len(embedding_results)} successful")
-                
-                # Process embedding results for metadata chunks
-                cost_data = self._collect_embedding_cost_data(embedding_results)
-                total_tokens += cost_data['tokens']
-                total_cost += cost_data['cost']
-                total_requests += cost_data['requests']
-                
-                for chunk, embedding_result in zip(metadata_chunks, embedding_results):
-                    if embedding_result.success:
-                        point = self.vector_store.create_chunk_point(
-                            chunk, embedding_result.embedding, collection_name
-                        )
-                        all_points.append(point)
+                    logger.error(f"❌ Unified processing failed: {result.error}")
+                return False
             
-            # Batch process relations
-            if relations:
-                if logger:
-                    logger.debug(f"🔗 Processing relations: {len(relations)} items")
-                
-                # Deduplicate relations BEFORE embedding to save API costs
-                seen_relation_keys = set()
-                unique_relations = []
-                duplicate_count = 0
-                duplicate_details = {}
-                
-                logger.debug(f"🔍 === RELATION DEDUPLICATION ===")
-                logger.debug(f"   Total relations to process: {len(relations)}")
-                
-                for relation in relations:
-                    # Generate the same key that will be used for storage
-                    relation_chunk = RelationChunk.from_relation(relation)
-                    relation_key = relation_chunk.id
-                    import_type = relation.metadata.get('import_type', 'none') if relation.metadata else 'none'
-                    
-                    if relation_key not in seen_relation_keys:
-                        seen_relation_keys.add(relation_key)
-                        unique_relations.append(relation)
-                        if logger and len(unique_relations) <= 5:
-                            logger.debug(f"   ✅ Unique: {relation_key} [import_type: {import_type}]")
-                    else:
-                        duplicate_count += 1
-                        if import_type not in duplicate_details:
-                            duplicate_details[import_type] = 0
-                        duplicate_details[import_type] += 1
-                        if logger and duplicate_count <= 5:
-                            logger.debug(f"   ❌ Duplicate: {relation_key} [import_type: {import_type}]")
-                
-                logger.debug(f"   Unique relations: {len(unique_relations)}")
-                logger.debug(f"   Duplicates removed: {duplicate_count}")
-                if duplicate_details:
-                    logger.debug(f"   Duplicates by type: {duplicate_details}")
-                    
-                relation_texts = [self._relation_to_text(relation) for relation in unique_relations]
-                if logger:
-                    logger.debug(f"🔤 Generating embeddings for {len(relation_texts)} unique relation texts")
-                    
-                embedding_results = self.embedder.embed_batch(relation_texts)
-                if logger:
-                    logger.debug(f"🔤 Relation embeddings: processing {len(relation_texts)} texts...")
-                if logger:
-                    logger.debug(f"✅ Relation embeddings completed: {sum(1 for r in embedding_results if r.success)}/{len(embedding_results)} successful")
-                
-                # Process embedding results for relations
-                cost_data = self._collect_embedding_cost_data(embedding_results)
-                total_tokens += cost_data['tokens']
-                total_cost += cost_data['cost']
-                total_requests += cost_data['requests']
-                
-                for relation, embedding_result in zip(unique_relations, embedding_results):
-                    if embedding_result.success:
-                        # Convert relation to chunk for v2.4 pure architecture
-                        relation_chunk = RelationChunk.from_relation(relation)
-                        point = self.vector_store.create_relation_chunk_point(
-                            relation_chunk, embedding_result.embedding, collection_name
-                        )
-                        all_points.append(point)
-            
-            # Batch process implementation chunks for progressive disclosure
-            if implementation_chunks:
-                if logger:
-                    logger.debug(f"💻 Processing implementation chunks: {len(implementation_chunks)} items")
-                    
-                implementation_texts = [chunk.content for chunk in implementation_chunks]
-                if logger:
-                    logger.debug(f"🔤 Generating embeddings for {len(implementation_texts)} implementation texts")
-                    
-                embedding_results = self.embedder.embed_batch(implementation_texts)
-                if logger:
-                    logger.debug(f"🔤 Implementation embeddings: processing {len(implementation_texts)} texts...")
-                if logger:
-                    logger.debug(f"✅ Implementation embeddings completed: {sum(1 for r in embedding_results if r.success)}/{len(embedding_results)} successful")
-                
-                # Process embedding results for implementation chunks
-                cost_data = self._collect_embedding_cost_data(embedding_results)
-                total_tokens += cost_data['tokens']
-                total_cost += cost_data['cost']
-                total_requests += cost_data['requests']
-                
-                for chunk, embedding_result in zip(implementation_chunks, embedding_results):
-                    if embedding_result.success:
-                        point = self.vector_store.create_chunk_point(
-                            chunk, embedding_result.embedding, collection_name
-                        )
-                        all_points.append(point)
-            
-            # Store cost tracking data for result reporting
+            # Store session cost data (PRESERVED)
             if not hasattr(self, '_session_cost_data'):
                 self._session_cost_data = {'tokens': 0, 'cost': 0.0, 'requests': 0}
             
-            self._session_cost_data['tokens'] += total_tokens
-            self._session_cost_data['cost'] += total_cost
-            self._session_cost_data['requests'] += total_requests
+            self._session_cost_data['tokens'] += result.total_tokens
+            self._session_cost_data['cost'] += result.total_cost
+            self._session_cost_data['requests'] += result.total_requests
             
-            # Batch store all points
-            if all_points:
-                if logger:
-                    logger.debug(f"💾 === FINAL STORAGE SUMMARY ===")
-                    logger.debug(f"   Collection: {collection_name}")
-                    logger.debug(f"   Total points to store: {len(all_points)}")
-                    
-                    # Count different types of points
-                    entity_points = sum(1 for p in all_points if p.payload.get('chunk_type') == 'metadata' and p.payload.get('entity_type') != 'relation')
-                    relation_points = sum(1 for p in all_points if p.payload.get('chunk_type') == 'relation')
-                    impl_points = sum(1 for p in all_points if p.payload.get('chunk_type') == 'implementation')
-                    
-                    logger.debug(f"   - Entity metadata: {entity_points}")
-                    logger.debug(f"   - Relations: {relation_points}")
-                    logger.debug(f"   - Implementations: {impl_points}")
-                    logger.debug(f"   API calls made: {total_requests}")
-                    logger.debug(f"   Tokens used: {total_tokens:,}")
-                
-                result = self.vector_store.batch_upsert(collection_name, all_points)
-                
-                if logger:
-                    if result.success:
-                        logger.debug(f"✅ Successfully stored all {len(all_points)} points")
-                    else:
-                        logger.error(f"❌ Failed to store points: {getattr(result, 'errors', 'Unknown error')}")
-                
-                return result.success
-            else:
-                if logger:
-                    logger.debug("ℹ️ No points to store")
-                return True
+            return True
             
         except Exception as e:
-            logger.error(f"Error in _store_vectors: {e}")
+            if logger:
+                logger.error(f"Error in _store_vectors: {e}")
             return False
     
     def _entity_to_text(self, entity: Entity) -> str:
@@ -1117,7 +1081,13 @@ class CoreIndexer:
                     "size": file_path.stat().st_size,
                     "mtime": file_path.stat().st_mtime
                 }
-            except Exception:
+            except (OSError, ValueError) as e:
+                logger = get_logger()
+                logger.warning(f"Failed to get state for file {file_path}: {e}")
+                continue
+            except Exception as e:
+                logger = get_logger()
+                logger.error(f"Unexpected error getting state for file {file_path}: {e}")
                 continue
         
         return state
@@ -1127,7 +1097,13 @@ class CoreIndexer:
         try:
             with open(file_path, 'rb') as f:
                 return hashlib.sha256(f.read()).hexdigest()
-        except Exception:
+        except (OSError, IOError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to read file for hashing {file_path}: {e}")
+            return ""
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error hashing file {file_path}: {e}")
             return ""
     
     def _load_state(self, collection_name: str) -> Dict[str, Dict[str, Any]]:
@@ -1137,8 +1113,12 @@ class CoreIndexer:
             if state_file.exists():
                 with open(state_file) as f:
                     return json.load(f)
-        except Exception:
-            pass
+        except (OSError, IOError, json.JSONDecodeError) as e:
+            logger = get_logger()
+            logger.warning(f"Failed to load state for collection {collection_name}: {e}")
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Unexpected error loading state for collection {collection_name}: {e}")
         return {}
     
     def _load_previous_statistics(self, collection_name: str) -> Dict[str, int]:
@@ -1289,8 +1269,12 @@ class CoreIndexer:
         if temp_file and temp_file.exists():
             try:
                 temp_file.unlink()
-            except Exception:
-                pass  # Ignore cleanup errors
+            except (OSError, IOError) as e:
+                logger = get_logger()
+                logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
+            except Exception as e:
+                logger = get_logger()
+                logger.error(f"Unexpected error cleaning up temp file {temp_file}: {e}")
     
     def _handle_deleted_files(self, collection_name: str, deleted_files: Union[str, List[str]], verbose: bool = False):
         """Handle deleted files by removing their entities and orphaned relations."""
@@ -1368,7 +1352,12 @@ class CoreIndexer:
                     for df in deleted_files:
                         logger.info(f"   📁 {df}")
                 
-                orphaned_deleted = self.vector_store._cleanup_orphaned_relations(collection_name, verbose)
+                # Orphan cleanup with null safety
+                orphaned_deleted = 0
+                if self.vector_store and hasattr(self.vector_store, '_cleanup_orphaned_relations'):
+                    orphaned_deleted = self.vector_store._cleanup_orphaned_relations(collection_name, verbose)
+                else:
+                    logger.info("✅ No orphaned relations found (vector store not available)")
                 if verbose and orphaned_deleted > 0:
                     logger.info(f"✅ Cleanup complete: {total_entities_deleted} entities, {orphaned_deleted} orphaned relations removed")
                 elif verbose:

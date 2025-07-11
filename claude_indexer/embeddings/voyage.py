@@ -141,13 +141,37 @@ class VoyageEmbedder(RetryableEmbedder):
         if not texts:
             return []
         
-        # Voyage supports up to 128 texts per batch
-        batch_size = min(128, len(texts))
-        results = []
+        # Voyage token limits per API testing
+        model_limits = {
+            'voyage-3-lite': 30_000,  # Safe limit below 32K context (tested up to 32K)
+            'voyage-3': 120_000,
+            'voyage-code-3': 120_000,
+        }
+        token_limit = model_limits.get(self.model, 120_000)  # Conservative default
+        text_count_limit = 1000  # Voyage API batch size limit
         
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
-            batch_results = self._embed_batch(batch)
+        results = []
+        current_batch = []
+        current_tokens = 0
+        
+        for text in texts:
+            text_tokens = self._estimate_tokens(text)
+            
+            # Check both token limit AND text count limit
+            if ((current_tokens + text_tokens > token_limit or len(current_batch) >= text_count_limit) 
+                and current_batch):
+                # Process current batch
+                batch_results = self._embed_batch(current_batch)
+                results.extend(batch_results)
+                current_batch = []
+                current_tokens = 0
+            
+            current_batch.append(text)
+            current_tokens += text_tokens
+        
+        # Process final batch
+        if current_batch:
+            batch_results = self._embed_batch(current_batch)
             results.extend(batch_results)
         
         return results

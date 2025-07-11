@@ -644,12 +644,21 @@ class CoreIndexer:
         for file_path in files:
             # Skip files matching exclude patterns
             relative_path = file_path.relative_to(self.project_path)
-            if any(relative_path.match(pattern) for pattern in exclude_patterns):
-                continue
+            should_exclude = False
+            relative_str = str(relative_path)
             
-            # Skip files in excluded directories (check directory paths only, not filenames)
-            path_parts = relative_path.parts
-            if any(excluded in path_parts for excluded in exclude_patterns):
+            for pattern in exclude_patterns:
+                # Handle directory patterns (ending with /)
+                if pattern.endswith('/'):
+                    if relative_str.startswith(pattern) or f'/{pattern}' in f'/{relative_str}':
+                        should_exclude = True
+                        break
+                # Handle glob patterns and exact matches
+                elif relative_path.match(pattern) or pattern in relative_path.parts:
+                    should_exclude = True
+                    break
+            
+            if should_exclude:
                 continue
             
             # Check file size
@@ -664,17 +673,51 @@ class CoreIndexer:
         """Get files that need processing for incremental indexing."""
         return self._find_changed_files(include_tests, collection_name)[0]
     
+    def _get_last_run_time(self, previous_state: Dict) -> float:
+        """Extract latest mtime from state for timestamp filtering."""
+        if not previous_state:
+            return 0.0
+        
+        last_time = 0.0
+        for file_data in previous_state.values():
+            if isinstance(file_data, dict) and 'mtime' in file_data:
+                last_time = max(last_time, file_data['mtime'])
+        
+        return last_time
+    
+    def _find_files_since(self, since_time: float, include_tests: bool = False) -> List[Path]:
+        """Fast filesystem scan: only files with mtime > since_time."""
+        if since_time <= 0:
+            # No previous state, return all files
+            return self._find_all_files(include_tests)
+        
+        candidate_files = []
+        all_files = self._find_all_files(include_tests)
+        
+        for file_path in all_files:
+            try:
+                if file_path.stat().st_mtime > since_time:
+                    candidate_files.append(file_path)
+            except (OSError, FileNotFoundError):
+                # File might have been deleted or inaccessible
+                continue
+        
+        return candidate_files
+
     def _find_changed_files(self, include_tests: bool = False, collection_name: str = None) -> Tuple[List[Path], List[str]]:
         """Find files that have changed since last indexing."""
-        current_files = self._find_all_files(include_tests)
-        current_state = self._get_current_state(current_files)
         previous_state = self._load_state(collection_name)
+        last_run_time = self._get_last_run_time(previous_state)
+        
+        # OPTIMIZATION: Only scan modified files instead of ALL files
+        candidate_files = self._find_files_since(last_run_time, include_tests)
+        current_state = self._get_current_state(candidate_files)  # Hash only suspects
         
         changed_files = []
         deleted_files = []
         
         # Find new and modified files
-        for file_path in current_files:
+        for file_path in candidate_files:
             file_key = str(file_path.relative_to(self.project_path))
             current_hash = current_state.get(file_key, {}).get("hash", "")
             previous_hash = previous_state.get(file_key, {}).get("hash", "")
@@ -682,8 +725,10 @@ class CoreIndexer:
             if current_hash != previous_hash:
                 changed_files.append(file_path)
         
-        # Find deleted files
-        current_keys = set(current_state.keys())
+        # Find deleted files (still need full scan for deletions)
+        all_files = self._find_all_files(include_tests)
+        all_current_state = self._get_current_state(all_files)
+        current_keys = set(all_current_state.keys())
         previous_keys = set(previous_state.keys())
         deleted_keys = previous_keys - current_keys
         deleted_files.extend(deleted_keys)

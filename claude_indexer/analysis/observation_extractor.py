@@ -197,6 +197,9 @@ class ObservationExtractor:
                         return result
             
             return None
+        
+        # Actually call the helper function (this was missing!)
+        return find_first_string_literal(node)
     
     def _extract_jsdoc_comment(self, node: 'tree_sitter.Node', source_code: str) -> Optional[str]:
         """Extract JSDoc comment from JavaScript function node."""
@@ -402,10 +405,11 @@ class ObservationExtractor:
         return False
     
     def _extract_exception_handling(self, node: 'tree_sitter.Node', source_code: str) -> Set[str]:
-        """Extract exception types that are caught with enhanced pattern recognition."""
+        """Extract exception types that are caught/thrown with enhanced pattern recognition."""
         exceptions = set()
         
         def find_exceptions(n):
+            # Python exception handling
             if n.type == 'except_clause':
                 # Enhanced exception type extraction
                 for child in n.children:
@@ -429,7 +433,7 @@ class ObservationExtractor:
                         if '.' in attr_text and 'Error' in attr_text or 'Exception' in attr_text:
                             exceptions.add(attr_text.split('.')[-1])
             
-            # Also look for raised exceptions
+            # Also look for raised exceptions (Python)
             elif n.type == 'raise_statement':
                 for child in n.children:
                     if child.type == 'call':
@@ -443,6 +447,24 @@ class ObservationExtractor:
                         exc_name = child.text.decode('utf-8')
                         if 'Error' in exc_name or 'Exception' in exc_name:
                             exceptions.add(exc_name)
+            
+            # JavaScript exception handling - throw statements with new expressions
+            elif n.type == 'throw_statement':
+                for child in n.children:
+                    if child.type == 'new_expression':
+                        # Look for constructor being called (e.g., new Error(), new AuthenticationError())
+                        for new_child in child.children:
+                            if new_child.type == 'identifier':
+                                exc_name = new_child.text.decode('utf-8')
+                                if 'Error' in exc_name or 'Exception' in exc_name:
+                                    exceptions.add(exc_name)
+                            elif new_child.type == 'call_expression':
+                                # Handle cases like new Something.Error()
+                                func_node = new_child.child_by_field_name('function')
+                                if func_node:
+                                    exc_text = source_code[func_node.start_byte:func_node.end_byte]
+                                    if 'Error' in exc_text or 'Exception' in exc_text:
+                                        exceptions.add(exc_text.split('.')[-1])
             
             for child in n.children:
                 find_exceptions(child)
@@ -481,12 +503,15 @@ class ObservationExtractor:
     def _extract_parameter_patterns(self, node: 'tree_sitter.Node', source_code: str) -> Optional[str]:
         """Extract parameter patterns from function signature."""
         try:
-            # Look for parameters node
+            # Look for parameters node (Python) or formal_parameters node (JavaScript)
             for child in node.children:
-                if child.type == 'parameters':
+                if child.type in ['parameters', 'formal_parameters']:
                     param_count = len([c for c in child.children if c.type == 'identifier'])
                     if param_count > 0:
-                        return f"{param_count} parameters"
+                        # Extract parameter names for richer context
+                        param_names = [source_code[c.start_byte:c.end_byte] 
+                                     for c in child.children if c.type == 'identifier']
+                        return f"{param_count} parameters: {', '.join(param_names)}"
             return None
         except Exception:
             return None

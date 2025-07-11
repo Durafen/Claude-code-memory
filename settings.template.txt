@@ -46,6 +46,9 @@ include_markdown=true
 include_tests=false
 max_file_size=1048576
 
+# Performance Settings
+cleanup_interval_minutes=60
+
 # Service Configuration
 service_config_path=~/.claude-indexer/config.json
 auto_start_service=false

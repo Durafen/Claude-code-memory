@@ -311,10 +311,10 @@ class CachingVectorStore(VectorStore):
         else:
             raise AttributeError(f"Backend {type(self.backend)} does not support check_content_exists")
     
-    def _cleanup_orphaned_relations(self, collection_name: str, verbose: bool = False):
+    def _cleanup_orphaned_relations(self, collection_name: str, verbose: bool = False, force: bool = False):
         """Delegate orphaned relation cleanup to backend"""
         if hasattr(self.backend, '_cleanup_orphaned_relations'):
-            return self.backend._cleanup_orphaned_relations(collection_name, verbose)
+            return self.backend._cleanup_orphaned_relations(collection_name, verbose, force)
         else:
             raise AttributeError(f"Backend {type(self.backend)} does not support _cleanup_orphaned_relations")
     

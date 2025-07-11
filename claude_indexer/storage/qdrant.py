@@ -1091,7 +1091,91 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         
         return results
     
-    def _cleanup_orphaned_relations(self, collection_name: str, verbose: bool = False) -> int:
+    def _should_run_cleanup(self, collection_name: str, force: bool = False) -> bool:
+        """Check if orphan cleanup should run based on timer interval."""
+        if force:
+            return True
+            
+        # Load cleanup interval from config (default 60 minutes)
+        try:
+            from ..config.config_loader import ConfigLoader
+            config = ConfigLoader().load()
+            interval_minutes = getattr(config, 'cleanup_interval_minutes', 60)
+        except Exception:
+            interval_minutes = 60  # Fallback default
+            
+        # 0 means disabled timer (always run - original behavior)
+        if interval_minutes == 0:
+            return True
+            
+        # Check last cleanup timestamp
+        try:
+            from ..indexer import CoreIndexer  # Import here to avoid circular imports
+            import time
+            import json
+            from pathlib import Path
+            
+            # Create a dummy indexer instance to access state methods
+            # We need the project path - try to get it from config or use current dir
+            project_path = Path.cwd()
+            state_dir = project_path / ".claude-indexer"
+            state_file = state_dir / f"{collection_name}.json"
+            
+            if not state_file.exists():
+                return True  # No state file, run cleanup
+                
+            with open(state_file, 'r') as f:
+                state = json.load(f)
+                
+            cleanup_state = state.get('_cleanup', {})
+            last_cleanup = cleanup_state.get('last_cleanup_timestamp', 0)
+            
+            current_time = time.time()
+            elapsed_minutes = (current_time - last_cleanup) / 60
+            
+            return elapsed_minutes >= interval_minutes
+            
+        except Exception as e:
+            logger.debug(f"Failed to check cleanup timer: {e}, defaulting to run cleanup")
+            return True  # On error, default to running cleanup
+    
+    def _update_cleanup_timestamp(self, collection_name: str):
+        """Update the last cleanup timestamp in state file."""
+        try:
+            import time
+            import json
+            from pathlib import Path
+            
+            # Get state file path
+            project_path = Path.cwd()
+            state_dir = project_path / ".claude-indexer"
+            state_file = state_dir / f"{collection_name}.json"
+            
+            # Load existing state or create new
+            state = {}
+            if state_file.exists():
+                try:
+                    with open(state_file, 'r') as f:
+                        state = json.load(f)
+                except (json.JSONDecodeError, IOError):
+                    state = {}
+            
+            # Update cleanup timestamp
+            if '_cleanup' not in state:
+                state['_cleanup'] = {}
+            state['_cleanup']['last_cleanup_timestamp'] = time.time()
+            
+            # Atomic write
+            state_dir.mkdir(parents=True, exist_ok=True)
+            temp_file = state_file.with_suffix('.tmp')
+            with open(temp_file, 'w') as f:
+                json.dump(state, f, indent=2)
+            temp_file.rename(state_file)
+            
+        except Exception as e:
+            logger.debug(f"Failed to update cleanup timestamp: {e}")
+    
+    def _cleanup_orphaned_relations(self, collection_name: str, verbose: bool = False, force: bool = False) -> int:
         """Clean up relations that reference non-existent entities.
         
         Uses a single atomic query to get a consistent snapshot of the database,
@@ -1100,10 +1184,17 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         Args:
             collection_name: Name of the collection to clean
             verbose: Whether to log detailed information about orphaned relations
+            force: Whether to bypass timer and force cleanup
             
         Returns:
             Number of orphaned relations deleted
         """
+        # Check timer first - skip cleanup if interval hasn't elapsed
+        if not self._should_run_cleanup(collection_name, force):
+            if verbose:
+                logger.debug("⏱️ Skipping orphan cleanup - timer interval not elapsed")
+            return 0
+        
         if verbose:
             logger.debug("🔍 Scanning collection for orphaned relations...")
         
@@ -1269,6 +1360,8 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 if delete_result.success:
                     if verbose:
                         logger.debug(f"🗑️  Deleted {len(orphaned_relations)} orphaned relations")
+                    # Update cleanup timestamp after successful cleanup
+                    self._update_cleanup_timestamp(collection_name)
                     return len(orphaned_relations)
                 else:
                     logger.debug(f"❌ Failed to delete orphaned relations: {delete_result.errors}")
@@ -1276,6 +1369,8 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             else:
                 if verbose:
                     logger.debug("   No orphaned relations found")
+                # Update cleanup timestamp even when no orphans found (successful scan)
+                self._update_cleanup_timestamp(collection_name)
                 return 0
                 
         except Exception as e:

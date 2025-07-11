@@ -21,6 +21,7 @@ def load_legacy_settings(settings_file: Path) -> Dict[str, Any]:
         'QDRANT_URL': 'qdrant_url',
         'CHAT_MODEL': 'chat_model',
         'VOYAGE_MODEL': 'voyage_model',
+        'cleanup_interval_minutes': 'cleanup_interval_minutes',
     }
     
     if not settings_file.exists():

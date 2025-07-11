@@ -90,6 +90,11 @@ class JavaScriptParser(TreeSitterParser):
             for entity in variable_entities:
                 entities.append(entity)
             
+            # Extract class field definitions (classField, staticField, etc.)
+            field_entities = self._extract_class_fields(tree.root_node, file_path, content)
+            for entity in field_entities:
+                entities.append(entity)
+            
             # Extract imports
             relations = []
             for node in self._find_nodes_by_type(tree.root_node, ['import_statement', 'import_from']):
@@ -675,13 +680,17 @@ class JavaScriptParser(TreeSitterParser):
                 'function_declaration', 'arrow_function', 'function_expression', 
                 'method_definition', 'for_statement', 'for_in_statement', 
                 'for_of_statement', 'while_statement', 'if_statement', 
-                'block_statement', 'try_statement', 'catch_clause'
+                'statement_block', 'try_statement', 'catch_clause',
+                'switch_statement', 'case_clause'
             ]:
                 current_scope = node.type
             
             # For any scope-creating context, propagate to children
-            # This ensures variables inside functions stay function-scoped
-            elif scope_context in ['function_declaration', 'arrow_function', 'function_expression', 'method_definition']:
+            # This ensures variables inside functions/blocks stay scoped
+            elif scope_context in [
+                'function_declaration', 'arrow_function', 'function_expression', 'method_definition',
+                'statement_block', 'try_statement', 'catch_clause', 'switch_statement', 'case_clause'
+            ]:
                 current_scope = scope_context
             
             # Extract variables from declarations
@@ -848,7 +857,7 @@ class JavaScriptParser(TreeSitterParser):
             if child.type == 'identifier':
                 # Simple element: [first, second]
                 var_name = self.extract_node_text(child, content)
-                if var_name and self._should_include_variable(var_name, scope_context):
+                if var_name and var_name not in [',', '[', ']'] and self._should_include_variable(var_name, scope_context):
                     entity = self._create_variable_entity(var_name, file_path, declarator, "array destructuring")
                     variables.append(entity)
             
@@ -890,7 +899,8 @@ class JavaScriptParser(TreeSitterParser):
             'function_declaration', 'arrow_function', 'function_expression', 
             'method_definition', 'for_statement', 'for_in_statement', 
             'for_of_statement', 'while_statement', 'if_statement', 
-            'block_statement', 'try_statement', 'catch_clause'
+            'statement_block', 'try_statement', 'catch_clause',
+            'switch_statement', 'case_clause'
         ]:
             return False
         
@@ -920,6 +930,38 @@ class JavaScriptParser(TreeSitterParser):
             line_number=declarator.start_point[0] + 1,
             end_line_number=declarator.end_point[0] + 1
         )
+
+    def _extract_class_fields(self, root: Node, file_path: Path, content: str) -> List[Entity]:
+        """Extract class field definitions as variables."""
+        variables = []
+        seen_variables = set()
+        
+        for field_node in self._find_nodes_by_type(root, ['field_definition']):
+            name_node = field_node.child_by_field_name('name')
+            if name_node and name_node.type == 'identifier':
+                field_name = self.extract_node_text(name_node, content)
+                
+                if field_name and field_name not in seen_variables:
+                    seen_variables.add(field_name)
+                    
+                    is_static = any(child.type == 'static' for child in field_node.children)
+                    
+                    entity = Entity(
+                        name=field_name,
+                        entity_type=EntityType.VARIABLE,
+                        observations=[
+                            f"Variable: {field_name}",
+                            f"Defined in: {file_path}",
+                            f"Line: {field_node.start_point[0] + 1}",
+                            f"Class field {'(static)' if is_static else '(instance)'}"
+                        ],
+                        file_path=file_path,
+                        line_number=field_node.start_point[0] + 1,
+                        end_line_number=field_node.end_point[0] + 1
+                    )
+                    variables.append(entity)
+        
+        return variables
 
     def _init_ts_server(self):
         """Initialize TypeScript language server (stub for future implementation)."""

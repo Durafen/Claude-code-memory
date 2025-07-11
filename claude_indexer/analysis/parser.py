@@ -267,13 +267,16 @@ class PythonParser(CodeParser):
             current_context = parent_context
             if node.type in ['function_definition', 'class_definition']:
                 current_context = node.type
+            elif node.type in ['with_statement', 'try_statement', 'except_clause', 'finally_clause']:
+                # Block contexts should also be tracked to prevent extraction of block-local variables
+                current_context = 'block_context'
             
             if node.type in entity_mapping:
                 # Apply scope-aware filtering for variables
                 if node.type == 'assignment':
-                    # Skip function-local variables
-                    if current_context == 'function_definition':
-                        logger.debug(f"Skipping function-local variable at line {node.start_point[0] + 1}")
+                    # Skip function-local and block-local variables
+                    if current_context in ['function_definition', 'block_context']:
+                        logger.debug(f"Skipping {current_context} variable at line {node.start_point[0] + 1}")
                     else:
                         # Use enhanced assignment extraction for complex patterns
                         assignment_variables = self._extract_variables_from_assignment(node, file_path)

@@ -751,10 +751,10 @@ class ObservationExtractor:
             code_text = source_code[node.start_byte:node.end_byte].lower()
             
             # Node.js/Backend patterns
-            if any(pattern in code_text for pattern in ['require(', 'import ', 'express', 'app.', 'req.', 'res.']):
+            if any(pattern in code_text for pattern in ['require(', 'import ', 'express', 'app.', 'req.', 'res.', 'database.', 'logger.', 'log.']):
                 if 'express' in code_text or 'app.' in code_text:
                     frameworks.append('Express.js')
-                elif 'require(' in code_text or 'import ' in code_text:
+                elif 'require(' in code_text or 'import ' in code_text or 'database.' in code_text or 'logger.' in code_text or 'log.' in code_text:
                     frameworks.append('Node.js')
             
             # Frontend patterns
@@ -822,6 +822,17 @@ class ObservationExtractor:
     def _extract_clean_purpose(self, docstring: str) -> str:
         """Extract clean purpose from JSDoc/docstring without parameter clutter."""
         try:
+            # Handle single-line JSDoc with @tags inline (no line breaks)
+            if '\n' not in docstring and ('@param' in docstring or '@returns' in docstring or '@throws' in docstring):
+                # Extract everything before the first @tag
+                at_tag_pattern = r'\s*@\w+'
+                import re
+                match = re.search(at_tag_pattern, docstring)
+                if match:
+                    purpose = docstring[:match.start()].strip()
+                    if purpose:
+                        return purpose
+            
             # Split into lines and find the main description
             lines = docstring.strip().split('\n')
             purpose_lines = []

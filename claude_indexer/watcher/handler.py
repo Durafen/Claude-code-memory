@@ -176,7 +176,9 @@ class IndexingEventHandler(FileSystemEventHandler):
         # FIX: Add file existence check to prevent phantom deletions
         if path.exists():
             logger = get_logger()
-            logger.info(f"🛡️  File still exists at {path.relative_to(self.project_path)}, ignoring phantom deletion event")
+            logger.info(f"🛡️  File still exists at {path.relative_to(self.project_path)}, treating as modification")
+            # Treat phantom deletion as file modification instead of aborting
+            self._process_file_change(path, "modified")
             return
         
         try:

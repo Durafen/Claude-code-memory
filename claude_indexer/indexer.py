@@ -360,6 +360,15 @@ class CoreIndexer:
                 else:
                     self.logger.warning("⚠️ No entities available for filtering - proceeding without pre-filtering")
             
+            # RACE CONDITION FIX: Pre-capture file states before storage
+            successfully_processed = [f for f in files_to_process if str(f) not in result.failed_files]
+            pre_captured_states = None
+            if successfully_processed:
+                from datetime import datetime
+                logger.info(f"🔒 PRE-CAPTURE: Taking atomic file state snapshot at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
+                pre_captured_states = self._get_current_state(successfully_processed)
+                logger.info(f"🔒 PRE-CAPTURE: Captured {len(pre_captured_states)} file states for atomic consistency")
+            
             # Store vectors using direct Qdrant automation with progressive disclosure
             if all_entities or all_relations or all_implementation_chunks:
                 # Use unified Git+Meta setup
@@ -374,10 +383,13 @@ class CoreIndexer:
                     result.relations_created = len(all_relations)
                     result.implementation_chunks_created = len(all_implementation_chunks)
             
-            # Update state file - merge successfully processed files with existing state
-            successfully_processed = [f for f in files_to_process if str(f) not in result.failed_files]
+            # Update state file using atomic pre-captured states
+            logger.info(f"🚨 FAILED FILES: {result.failed_files}")
+            logger.info(f"✅ SUCCESS FILES: {len(successfully_processed)} / {len(files_to_process)} total")
             if successfully_processed:
-                self._update_state(successfully_processed, collection_name, verbose, deleted_files=deleted_files if incremental else None)
+                self._update_state(successfully_processed, collection_name, verbose, 
+                                   deleted_files=deleted_files if incremental else None,
+                                   pre_captured_state=pre_captured_states)
                 # Store processed files in result for test verification
                 result.processed_files = [str(f) for f in successfully_processed]
                 
@@ -1002,6 +1014,12 @@ class CoreIndexer:
         
         logger = self.logger if hasattr(self, 'logger') else None
         
+        # RACE CONDITION DEBUG: Track storage timing
+        from datetime import datetime
+        if logger:
+            logger.info(f"💾 STORAGE START: {len(entities)} entities at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
+            logger.info(f"💾 Files being stored: {set(entity.file_path for entity in entities) if entities else 'none'}")
+        
         # Critical error check - vector store should always be available in production
         if not self.vector_store:
             if logger:
@@ -1035,6 +1053,10 @@ class CoreIndexer:
             self._session_cost_data['tokens'] += result.total_tokens
             self._session_cost_data['cost'] += result.total_cost
             self._session_cost_data['requests'] += result.total_requests
+            
+            # RACE CONDITION DEBUG: Track storage completion
+            if logger:
+                logger.info(f"💾 STORAGE COMPLETE: Success at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
             
             return True
             
@@ -1126,6 +1148,36 @@ class CoreIndexer:
         state = self._load_state(collection_name)
         return state.get('_statistics', {})
     
+    def _atomic_json_write(self, file_path: Path, data: dict, description: str = "file") -> None:
+        """Atomically write JSON data to a file using temp file + rename pattern.
+        
+        Args:
+            file_path: Target file path
+            data: Dictionary to write as JSON
+            description: Description for error logging
+        """
+        try:
+            # Ensure parent directory exists
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Create temp file and write data
+            temp_file = file_path.with_suffix('.tmp')
+            with open(temp_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            
+            # Atomic rename
+            temp_file.rename(file_path)
+            
+        except Exception as e:
+            # Clean up temp file if it exists
+            temp_file = file_path.with_suffix('.tmp')
+            if temp_file.exists():
+                try:
+                    temp_file.unlink()
+                except:
+                    pass
+            raise RuntimeError(f"Failed to atomically write {description}: {e}") from e
+
     def _save_statistics_to_state(self, collection_name: str, result: 'IndexingResult'):
         """Save current statistics to state file."""
         import time
@@ -1140,30 +1192,56 @@ class CoreIndexer:
                 'timestamp': time.time()
             }
             
-            # Save updated state
             state_file = self._get_state_file(collection_name)
-            state_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            temp_file = state_file.with_suffix('.tmp')
-            with open(temp_file, 'w') as f:
-                json.dump(state, f, indent=2)
-            temp_file.rename(state_file)
+            self._atomic_json_write(state_file, state, "statistics state")
             
         except Exception as e:
             logger.debug(f"Failed to save statistics to state: {e}")
     
-    def _update_state(self, new_files: List[Path], collection_name: str, verbose: bool = False, full_rebuild: bool = False, deleted_files: List[str] = None):
+    def _update_state(self, new_files: List[Path], collection_name: str, verbose: bool = False, full_rebuild: bool = False, deleted_files: List[str] = None, pre_captured_state: Dict[str, Dict[str, Any]] = None):
         """Update state file by merging new files with existing state, or do full rebuild."""
         try:
-            if full_rebuild:
-                # Full rebuild: use only the new files as complete state
+            from datetime import datetime
+            logger.info(f"🔍 STATE UPDATE START: {len(new_files)} files at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
+            logger.info(f"🔍 Input files: {[str(f.name) for f in new_files[:5]]}{'...' if len(new_files) > 5 else ''}")
+            
+            if pre_captured_state:
+                # Use pre-captured state (fixes race condition)
+                logger.info(f"🔍 USING PRE-CAPTURED STATE: {len(pre_captured_state)} files from atomic snapshot")
+                if full_rebuild:
+                    final_state = pre_captured_state
+                    operation_desc = "rebuilt"
+                    file_count_desc = f"{len(new_files)} files tracked"
+                else:
+                    # Incremental update: merge pre-captured state with existing
+                    existing_state = self._load_state(collection_name)
+                    final_state = existing_state.copy()
+                    final_state.update(pre_captured_state)
+                    operation_desc = "updated"
+                    file_count_desc = f"{len(new_files)} new files added, {len(final_state)} total files tracked"
+            elif full_rebuild:
+                # Fallback: Full rebuild without pre-captured state
+                logger.info(f"🔍 SNAPSHOT TIME: Taking state snapshot at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
                 final_state = self._get_current_state(new_files)
                 operation_desc = "rebuilt"
                 file_count_desc = f"{len(new_files)} files tracked"
             else:
-                # Incremental update: merge new files with existing state
+                # Fallback: Incremental update with fresh scanning (original race condition behavior)
                 existing_state = self._load_state(collection_name)
+                logger.info(f"🔍 SNAPSHOT TIME: Taking state snapshot at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
                 new_state = self._get_current_state(new_files)
+                logger.info(f"🔍 SNAPSHOT RESULT: {len(new_state)} files captured in snapshot")
+                
+                # CRITICAL: Check for files that exist on disk but not in snapshot
+                all_files_on_disk = self._find_all_files(include_tests=False)
+                files_in_snapshot = set(new_state.keys())
+                files_on_disk = {str(f) for f in all_files_on_disk}
+                missing_from_snapshot = files_on_disk - files_in_snapshot - set(existing_state.keys())
+                if missing_from_snapshot:
+                    logger.warning(f"🚨 RACE CONDITION DETECTED: {len(missing_from_snapshot)} files on disk but missing from snapshot:")
+                    for missing_file in sorted(missing_from_snapshot):
+                        logger.warning(f"   MISSING: {missing_file}")
+                
                 final_state = existing_state.copy()
                 final_state.update(new_state)
                 operation_desc = "updated"
@@ -1190,16 +1268,9 @@ class CoreIndexer:
                     else:  # rebuilt
                         file_count_desc = f"{len(new_files)} files tracked, {files_removed} deleted files removed"
             
-            # Save state atomically
+            # Save state atomically using consolidated utility
             state_file = self._get_state_file(collection_name)
-            state_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            temp_file = state_file.with_suffix('.tmp')
-            with open(temp_file, 'w') as f:
-                json.dump(final_state, f, indent=2)
-            
-            # Atomic rename
-            temp_file.rename(state_file)
+            self._atomic_json_write(state_file, final_state, "state file")
             
             # Verify saved state
             with open(state_file) as f:

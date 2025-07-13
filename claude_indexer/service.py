@@ -269,7 +269,8 @@ class IndexingService:
                 project_path=project_path,
                 collection_name=collection_name,
                 debounce_seconds=debounce_seconds,
-                settings=settings
+                settings=settings,
+                verbose=config.indexer_verbose  # Use config setting
             )
             
             # Create and start observer

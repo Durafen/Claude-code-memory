@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Dict, Any, Callable, Awaitable, Set
+from typing import Dict, Any, Callable, Awaitable, Set, List
 from pathlib import Path
 
 
@@ -146,25 +146,55 @@ class AsyncDebouncer:
 
 
 class FileChangeCoalescer:
-    """Simple file change coalescer for synchronous use."""
+    """Simple file change coalescer for synchronous use with batch processing support."""
     
     def __init__(self, delay: float = 2.0):
         self.delay = delay
         self._pending: Dict[str, float] = {}
+        self._last_batch_check: float = 0
     
     def add_change(self, file_path: str) -> bool:
-        """Add a file change. Returns True if enough time has passed."""
+        """Add a file change. Returns True if batch should be checked (for backwards compatibility)."""
         current_time = time.time()
-        last_change = self._pending.get(file_path, 0)
         
-        if current_time - last_change >= self.delay:
-            # Enough time has passed, process this change
-            self._pending[file_path] = current_time
+        # Always update the timestamp for this file
+        self._pending[file_path] = current_time
+        
+        # Check if enough time has passed since last batch check
+        # This prevents checking batch on every file but allows periodic checks
+        if current_time - self._last_batch_check >= self.delay:
+            self._last_batch_check = current_time
             return True
-        else:
-            # Too soon, update timestamp but don't process
-            self._pending[file_path] = current_time
-            return False
+        
+        return False
+    
+    def get_ready_batch(self) -> List[str]:
+        """Get all files that are ready for processing and remove them from pending."""
+        current_time = time.time()
+        ready_files = []
+        
+        # Find all files that have passed the debounce timeout
+        files_to_remove = []
+        for file_path, timestamp in self._pending.items():
+            if current_time - timestamp >= self.delay:
+                ready_files.append(file_path)
+                files_to_remove.append(file_path)
+        
+        # Remove processed files from pending
+        for file_path in files_to_remove:
+            del self._pending[file_path]
+        
+        return ready_files
+    
+    def has_pending_files(self) -> bool:
+        """Check if there are any pending files."""
+        return len(self._pending) > 0
+    
+    def force_batch(self) -> List[str]:
+        """Force return all pending files regardless of timeout (for cleanup)."""
+        ready_files = list(self._pending.keys())
+        self._pending.clear()
+        return ready_files
     
     def should_process(self, file_path: str) -> bool:
         """Check if a file should be processed now."""

@@ -56,7 +56,15 @@ def matches_patterns(text: str, patterns: List[str]) -> bool:
     Returns:
         True if text matches any pattern, False otherwise
     """
+    file_path = Path(text)
+    
     for pattern in patterns:
-        if fnmatch.fnmatch(text, pattern) or pattern in text:
+        # Handle directory patterns (ending with /) - same logic as indexer
+        if pattern.endswith('/'):
+            # Check if pattern appears anywhere in the path (for nested directories)
+            if text.startswith(pattern) or f'/{pattern}' in f'/{text}':
+                return True
+        # Handle glob patterns and exact matches
+        elif fnmatch.fnmatch(text, pattern) or pattern in file_path.parts:
             return True
     return False

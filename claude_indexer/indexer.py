@@ -188,13 +188,31 @@ class CoreIndexer:
         if entities and hasattr(self.vector_store, 'collection_exists') and self.vector_store.collection_exists(collection_name):
             for entity in entities:
                 try:
-                    metadata_chunk = EntityChunk.create_metadata_chunk(entity, False)
-                    content_hash = metadata_chunk.to_vector_payload()["content_hash"]
-                    if hasattr(self.vector_store, 'check_content_exists') and self.vector_store.check_content_exists(collection_name, content_hash):
+                    # FIX: Use file content hash instead of entity metadata hash
+                    # This prevents infinite loops when file content changes but entity metadata stays same
+                    content_hash = self._get_file_hash(entity.file_path) if entity.file_path else ""
+                    
+                    # Robustness: Validate hash and vector store capability before checking
+                    if not content_hash:
+                        self.logger.debug(f"🔄 Git+Meta: Empty content hash for {entity.name}, treating as changed")
+                        continue
+                        
+                    if not hasattr(self.vector_store, 'check_content_exists'):
+                        self.logger.debug(f"🔄 Git+Meta: Vector store doesn't support content checking, treating as changed")
+                        continue
+                        
+                    # Check if content exists with fallback handling
+                    exists = self.vector_store.check_content_exists(collection_name, content_hash)
+                    if exists:
                         unchanged_entities += 1
+                        self.logger.debug(f"🔄 Git+Meta: Content unchanged for {entity.name}")
+                    else:
+                        self.logger.debug(f"🔄 Git+Meta: Content changed for {entity.name}")
+                        
                 except Exception as e:
                     self.logger.debug(f"🔄 Git+Meta: Content check failed for {entity.name}: {e}")
-                    # Continue processing - assume entity changed if check fails
+                    # Robustness: Fallback to processing as "changed" (safe default)
+                    self.logger.debug(f"🔄 Git+Meta: Falling back to processing {entity.name} as changed")
         
         # Changed entity IDs computation (unified from both patterns)
         changed_entity_ids = {
@@ -650,6 +668,8 @@ class CoreIndexer:
             for pattern in exclude_patterns:
                 # Handle directory patterns (ending with /)
                 if pattern.endswith('/'):
+                    # Check if pattern appears anywhere in the path (for nested directories)
+                    pattern_name = pattern.rstrip('/')
                     if relative_str.startswith(pattern) or f'/{pattern}' in f'/{relative_str}':
                         should_exclude = True
                         break

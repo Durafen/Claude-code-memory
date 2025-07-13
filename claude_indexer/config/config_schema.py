@@ -60,9 +60,9 @@ class FilePatterns(BaseModel):
         "*.yaml", "*.yml", "*.html", "*.css", "*.md", "*.txt"
     ])
     exclude: List[str] = Field(default_factory=lambda: [
-        "*.pyc", "__pycache__", ".git", ".venv", "node_modules",
-        "dist", "build", "*.min.js", ".env", "*.log", ".mypy_cache",
-        "qdrant_storage", "backups", "*.egg-info", "settings.txt", ".claude-indexer"
+        "*.pyc", "__pycache__/", ".git/", ".venv/", "node_modules/",
+        "dist/", "build/", "*.min.js", ".env", "*.log", ".mypy_cache/",
+        "qdrant_storage/", "backups/", "*.egg-info", "settings.txt", ".claude-indexer/"
     ])
     
     @validator('include', 'exclude')

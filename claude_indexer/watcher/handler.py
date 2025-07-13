@@ -1,8 +1,9 @@
 """File system event handler for automatic indexing."""
 
 import asyncio
+import time
 from pathlib import Path
-from typing import Dict, Any, Optional, Set
+from typing import Dict, Any, Optional, Set, List
 from .debounce import FileChangeCoalescer
 from ..indexer_logging import get_logger
 
@@ -72,7 +73,7 @@ class IndexingEventHandler(FileSystemEventHandler):
             self._handle_file_event(event.dest_path, "created")
     
     def _handle_file_event(self, file_path: str, event_type: str):
-        """Process a file system event."""
+        """Process a file system event with batch processing support."""
         self.events_received += 1
         
         try:
@@ -89,10 +90,18 @@ class IndexingEventHandler(FileSystemEventHandler):
                 self._process_file_deletion(path)
                 self.events_processed += 1
             else:
-                # Debounce modifications and creations
-                if self.coalescer.add_change(file_path):
-                    self._process_file_change(path, event_type)
-                    self.events_processed += 1
+                # Add to coalescer for debouncing
+                should_check_batch = self.coalescer.add_change(file_path)
+                
+                # Check for batch when enough time has passed
+                if should_check_batch:
+                    # Check if any files are ready for batch processing
+                    ready_files = self.coalescer.get_ready_batch()
+                    if ready_files:
+                        # Convert to Path objects and process as batch
+                        ready_paths = [Path(fp) for fp in ready_files]
+                        self._process_file_batch(ready_paths)
+                        self.events_processed += len(ready_files)
         
         except Exception as e:
             logger = get_logger()
@@ -118,23 +127,43 @@ class IndexingEventHandler(FileSystemEventHandler):
             if not hasattr(self, '_indexer'):
                 self._indexer = self._create_indexer()
             
-            # Use the same optimized path as CLI single-file indexing
-            result = self._indexer.index_single_file(path, self.collection_name)
+            # Use main.py session summary display (same as CLI runs)
+            from ..main import run_indexing_with_specific_files
+            success = run_indexing_with_specific_files(
+                str(self.project_path), self.collection_name, [path],
+                quiet=not self.verbose, verbose=self.verbose
+            )
             
-            if result.success:
+            if success:
                 self.processed_files.add(str(path))
-                
-                # Log Git+Meta efficiency information
-                if result.embedding_requests == 0:
-                    logger.info(f"⚡ Git+Meta: Skipped {relative_path} (unchanged content)")
-                else:
-                    logger.info(f"✅ Indexed: {relative_path} ({result.entities_created} entities, {result.embedding_requests} requests)")
-                logger.info("-----------------------------------------")
-            else:
-                logger.error(f"❌ Failed to index: {relative_path} - {result.errors}")
         
         except Exception as e:
             logger.error(f"❌ Error processing file change {path}: {e}")
+    
+    def _process_file_batch(self, paths: List[Path]):
+        """Process a batch of file changes with Git+Meta deduplication."""
+        try:
+            if not paths:
+                return
+            
+            logger = get_logger()
+            relative_paths = [p.relative_to(self.project_path) for p in paths]
+            logger.info(f"🔄 Auto-indexing batch ({len(paths)} files): {', '.join(str(rp) for rp in relative_paths)}")
+            
+            # Use main.py batch processing for optimal performance
+            from ..main import run_indexing_with_specific_files
+            success = run_indexing_with_specific_files(
+                str(self.project_path), self.collection_name, paths,
+                quiet=not self.verbose, verbose=self.verbose
+            )
+            
+            if success:
+                for path in paths:
+                    self.processed_files.add(str(path))
+        
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"❌ Error processing file batch: {e}")
     
     def _create_indexer(self):
         """Create a CoreIndexer instance for Git+Meta optimized processing."""
@@ -224,6 +253,14 @@ class IndexingEventHandler(FileSystemEventHandler):
     
     def cleanup(self):
         """Clean up resources and old entries."""
+        # Process any remaining pending files before cleanup
+        if hasattr(self.coalescer, 'has_pending_files') and self.coalescer.has_pending_files():
+            remaining_files = self.coalescer.force_batch()
+            if remaining_files:
+                ready_paths = [Path(fp) for fp in remaining_files]
+                self._process_file_batch(ready_paths)
+                self.events_processed += len(remaining_files)
+        
         # Clean up old coalescer entries
         self.coalescer.cleanup_old_entries()
         
@@ -526,6 +563,15 @@ class AsyncWatcherHandler:
                 # Import here to avoid circular imports
                 from ..main import run_indexing_with_specific_files
                 
+                # DEBUG: Log what we're about to process
+                print(f"🔍 WATCHER DEBUG: About to call run_indexing_with_specific_files")
+                print(f"   Project path: {str(self.repo_path)}")
+                print(f"   Collection: {getattr(self.config, 'collection_name', 'default')}")
+                print(f"   File count: {len(file_paths)}")
+                print(f"   Files: {[str(p) for p in file_paths]}")
+                
+                start_time = time.time()
+                
                 # Process only the specific files that triggered the debounce
                 success = run_indexing_with_specific_files(
                     project_path=str(self.repo_path),
@@ -534,6 +580,10 @@ class AsyncWatcherHandler:
                     quiet=True,
                     verbose=False
                 )
+                
+                duration = time.time() - start_time
+                print(f"🔍 WATCHER DEBUG: run_indexing_with_specific_files completed in {duration:.3f}s")
+                print(f"   Success: {success}")
                 
                 return success
             

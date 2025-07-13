@@ -38,7 +38,7 @@ class IndexerConfig(BaseModel):
     # Watcher Settings
     include_patterns: list = Field(default_factory=lambda: ['*.py', '*.md'])
     exclude_patterns: list = Field(default_factory=lambda: [
-        '*.pyc', '__pycache__', '.git', '.venv', 'node_modules'
+        '*.pyc', '__pycache__/', '.git/', '.venv/', 'node_modules/'
     ])
     
     # File Processing
@@ -112,7 +112,7 @@ class WatcherConfig(BaseModel):
     """File watcher configuration."""
     enabled: bool = Field(default=True)
     debounce_seconds: Optional[float] = Field(default=None)
-    ignore_patterns: List[str] = Field(default_factory=lambda: [".git", "__pycache__", "node_modules"])
+    ignore_patterns: List[str] = Field(default_factory=lambda: [".git/", "__pycache__/", "node_modules/"])
 
 
 class ProjectInfo(BaseModel):

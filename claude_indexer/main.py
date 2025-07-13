@@ -266,7 +266,7 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
                     logger.warning(f"⚠️ Failed to clean existing entities for {file_path}: {e}")
         
         # Process files directly using batch processing
-        entities, relations, implementation_chunks, errors = indexer._process_file_batch(paths_to_process, collection_name, verbose)
+        entities, relations, implementation_chunks, errors, actually_processed_files = indexer._process_file_batch(paths_to_process, collection_name, verbose)
         
         # Handle any processing errors
         if errors:
@@ -286,8 +286,8 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
                     logger.error("❌ Failed to store vectors in Qdrant")
                 return False
         
-        # Update state file with successfully processed files
-        successfully_processed = [f for f in paths_to_process if str(f) not in errors]
+        # Update state file with actually processed files (fix state tracking bug)
+        successfully_processed = actually_processed_files
         
         # Get file changes before updating state (for display purposes)
         file_changes_for_display = None
@@ -298,9 +298,11 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
             state_file = indexer._get_state_file(collection_name)
             incremental = state_file.exists()
             
-            # Get changes before state update for accurate display
+            # Use actual processed files for display (fix state tracking bug)
             if incremental:
-                file_changes_for_display = indexer._categorize_file_changes(False, collection_name)
+                # Convert successfully_processed to display format: (new_files, modified_files, deleted_files)
+                new_files = successfully_processed  # Keep as Path objects for relative_to() calls
+                file_changes_for_display = (new_files, [], [])
                 
                 # We already captured before_vectored_files at the start
                 # No need to capture it again here

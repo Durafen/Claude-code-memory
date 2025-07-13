@@ -331,6 +331,7 @@ class CoreIndexer:
             all_entities = []
             all_relations = []
             all_implementation_chunks = []
+            all_processed_files = []
             
             for i in range(0, len(files_to_process), batch_size):
                 batch = files_to_process[i:i + batch_size]
@@ -338,11 +339,12 @@ class CoreIndexer:
                 total_batches = (len(files_to_process) + batch_size - 1) // batch_size
                 self.logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch)} files)")
                 
-                batch_entities, batch_relations, batch_implementation_chunks, batch_errors = self._process_file_batch(batch, collection_name, verbose)
+                batch_entities, batch_relations, batch_implementation_chunks, batch_errors, batch_processed_files = self._process_file_batch(batch, collection_name, verbose)
                 
                 all_entities.extend(batch_entities)
                 all_relations.extend(batch_relations)
                 all_implementation_chunks.extend(batch_implementation_chunks)
+                all_processed_files.extend(batch_processed_files)
                 result.errors.extend(batch_errors)
                 
                 # Track failed files properly
@@ -378,8 +380,8 @@ class CoreIndexer:
                 else:
                     self.logger.warning("⚠️ No entities available for filtering - proceeding without pre-filtering")
             
-            # RACE CONDITION FIX: Pre-capture file states before storage
-            successfully_processed = [f for f in files_to_process if str(f) not in result.failed_files]
+            # RACE CONDITION FIX: Use actual processed files (fix state tracking bug)
+            successfully_processed = all_processed_files
             pre_captured_states = None
             if successfully_processed:
                 from datetime import datetime
@@ -933,7 +935,7 @@ class CoreIndexer:
             if relation.relation_type.value == 'calls':
                 if relation.to_entity in global_entity_names:
                     valid_relations.append(relation)
-                    self.logger.debug(f"✅ Kept relation: {relation.from_entity} -> {relation.to_entity}")
+                    # self.logger.debug(f"✅ Kept relation: {relation.from_entity} -> {relation.to_entity}")
                 else:
                     orphan_count += 1
                     self.logger.debug(f"🚫 Filtered orphan: {relation.from_entity} -> {relation.to_entity}")
@@ -942,10 +944,10 @@ class CoreIndexer:
             elif relation.relation_type.value == 'imports':
                 if resolve_module_name(relation.to_entity):
                     valid_relations.append(relation)
-                    self.logger.debug(f"✅ Kept import: {relation.to_entity}")
+                    # self.logger.debug(f"✅ Kept import: {relation.to_entity}")
                 else:
                     import_orphan_count += 1
-                    self.logger.debug(f"🚫 Filtered external import: {relation.to_entity}")
+                    # self.logger.debug(f"🚫 Filtered external import: {relation.to_entity}")
             else:
                 # Keep all other relations (contains, inherits, etc.)
                 valid_relations.append(relation)
@@ -1010,12 +1012,17 @@ class CoreIndexer:
             self.logger.warning(f"Failed to get global entities: {e}")
             return set()
     
-    def _process_file_batch(self, files: List[Path], collection_name: str, verbose: bool = False) -> Tuple[List[Entity], List[Relation], List[EntityChunk], List[str]]:
-        """Process a batch of files with progressive disclosure support."""
+    def _process_file_batch(self, files: List[Path], collection_name: str, verbose: bool = False) -> Tuple[List[Entity], List[Relation], List[EntityChunk], List[str], List[Path]]:
+        """Process a batch of files with progressive disclosure support.
+        
+        Returns:
+            Tuple of (entities, relations, implementation_chunks, errors, successfully_processed_files)
+        """
         all_entities = []
         all_relations = []
         all_implementation_chunks = []
         errors = []
+        successfully_processed_files = []
         
         for file_path in files:
             try:
@@ -1053,6 +1060,7 @@ class CoreIndexer:
                     all_entities.extend(result.entities)
                     all_relations.extend(result.relations)
                     all_implementation_chunks.extend(result.implementation_chunks)
+                    successfully_processed_files.append(file_path)  # Track successful processing
                     self.logger.debug(f"  Found {len(result.entities)} entities, {len(result.relations)} relations, {len(result.implementation_chunks)} implementation chunks")
                 else:
                     error_msg = f"Failed to parse {relative_path}"
@@ -1066,7 +1074,7 @@ class CoreIndexer:
                 self.logger.error(f"  {error_msg}")
                 logger.error(f"❌ Processing error in {file_path}: {e}")
         
-        return all_entities, all_relations, all_implementation_chunks, errors
+        return all_entities, all_relations, all_implementation_chunks, errors, successfully_processed_files
     
     def _store_vectors(self, collection_name: str, entities: List[Entity], 
                       relations: List[Relation], implementation_chunks: List[EntityChunk] = None,

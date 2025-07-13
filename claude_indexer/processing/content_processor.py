@@ -32,8 +32,8 @@ class ContentProcessor(ContentHashMixin, ABC):
             content_hash = self._get_content_hash(item)
             if self.vector_store.check_content_exists(collection_name, content_hash):
                 to_skip.append(item)
-                if self.logger:
-                    self.logger.debug(f"⚡ Skipping unchanged item: {getattr(item, 'entity_name', item)}")
+                # if self.logger:
+                    # self.logger.debug(f"⚡ Skipping unchanged item: {getattr(item, 'entity_name', item)}")
             else:
                 to_embed.append(item)
         
@@ -52,15 +52,15 @@ class ContentProcessor(ContentHashMixin, ABC):
         # Extract content for embedding
         texts = [getattr(item, 'content', str(item)) for item in items]
         
-        if self.logger:
-            self.logger.debug(f"🔤 Generating embeddings for {len(texts)} {item_name} texts")
+        # if self.logger:
+            # self.logger.debug(f"🔤 Generating embeddings for {len(texts)} {item_name} texts")
         
         # Generate embeddings
         embedding_results = self.embedder.embed_batch(texts)
         
-        if self.logger:
-            successful = sum(1 for r in embedding_results if r.success)
-            self.logger.debug(f"✅ {item_name.title()} embeddings completed: {successful}/{len(embedding_results)} successful")
+        # if self.logger:
+            # successful = sum(1 for r in embedding_results if r.success)
+            # self.logger.debug(f"✅ {item_name.title()} embeddings completed: {successful}/{len(embedding_results)} successful")
         
         # Collect cost data
         cost_data = self._collect_embedding_cost_data(embedding_results)

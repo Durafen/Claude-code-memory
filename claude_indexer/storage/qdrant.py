@@ -155,13 +155,12 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
     def collection_exists(self, collection_name: str) -> bool:
         """Check if collection exists."""
         try:
-            collections = self.client.get_collections()
-            return any(col.name == collection_name for col in collections.collections)
-        except (ConnectionError, TimeoutError) as e:
-            logger = get_logger()
-            logger.warning(f"Failed to check if collection {collection_name} exists: {e}")
-            return False
+            self.client.get_collection(collection_name)
+            return True
         except Exception as e:
+            error_msg = str(e).lower()
+            if "not found" in error_msg or "does not exist" in error_msg:
+                return False
             logger = get_logger()
             logger.error(f"Unexpected error checking collection {collection_name}: {e}")
             return False
@@ -408,7 +407,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             
             # Enhanced verification: check exact count matches
             if expected_new > 0:
-                logger.debug(f"✅ Storage verification: {current_count} total points in collection")
+                # logger.debug(f"✅ Storage verification: {current_count} total points in collection")
                 
                 # Check for storage discrepancy
                 if expected_new != total_attempted:

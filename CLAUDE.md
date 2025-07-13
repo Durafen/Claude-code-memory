@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Testing and Debug Environment
 
-**⚠️ CRITICAL: Use `debug/` folder for ALL test scripts and test databases**
+**⚠️ CRITICAL: Use `debug/` folder for ALL test scripts and test databases. NEVER INDEX MAIN PROJECT PATH.**
 
 - Create test scripts in `debug/` folder only (never in project root)
 - Use `debug/test_collections/` for test database collections

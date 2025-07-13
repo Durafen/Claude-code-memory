@@ -891,7 +891,7 @@ class PythonParser(CodeParser):
                 nonlocal functions_found
                 if node.type in ['function_definition', 'class_definition']:
                     functions_found += 1
-                    logger.debug(f"🔧 Found {node.type}: attempting chunk extraction")
+                    # logger.debug(f"🔧 Found {node.type}: attempting chunk extraction")
                     chunk = self._extract_implementation_chunk(node, source_lines, script, file_path)
                     if chunk:
                         chunks.append(chunk)
@@ -924,7 +924,7 @@ class PythonParser(CodeParser):
             # Debug logging
             from ..indexer_logging import get_logger
             logger = get_logger()
-            logger.debug(f"🔧   Extracting chunk for {node.type} at line {node.start_point[0]}")
+            # logger.debug(f"🔧   Extracting chunk for {node.type} at line {node.start_point[0]}")
             
             # Get entity name
             entity_name = None
@@ -933,7 +933,7 @@ class PythonParser(CodeParser):
                     entity_name = child.text.decode('utf-8')
                     break
             
-            logger.debug(f"🔧   Entity name: {entity_name}")
+            # logger.debug(f"🔧   Entity name: {entity_name}")
             
             if not entity_name:
                 logger.debug(f"🔧   ❌ No entity name found")
@@ -1170,7 +1170,7 @@ class PythonParser(CodeParser):
                                         # Truncate long content for cleaner logs
                                         display_ref = file_ref[:50] + "..." if len(file_ref) > 50 else file_ref
                                         logger.debug(f"   ✅ Created {op_type} relation: {file_path} -> {display_ref}")
-                                        logger.debug(f"      Relation has import_type: {relation.metadata.get('import_type', 'MISSING')}")
+                                        # logger.debug(f"      Relation has import_type: {relation.metadata.get('import_type', 'MISSING')}")
                                         break
                     
                     # Handle method calls on objects (e.g., df.to_json())
@@ -1191,7 +1191,7 @@ class PythonParser(CodeParser):
                                             )
                                             relations.append(relation)
                                             logger.debug(f"   ✅ Created DataFrame {FILE_OPERATIONS[method_name]} relation: {file_path} -> {file_ref}")
-                                            logger.debug(f"      Method: {method_name}, import_type: {relation.metadata.get('import_type', 'MISSING')}")
+                                            # logger.debug(f"      Method: {method_name}, import_type: {relation.metadata.get('import_type', 'MISSING')}")
                                             break
                     
                     # Special handling for open() built-in
@@ -1294,7 +1294,8 @@ class PythonParser(CodeParser):
                         relations.append(relation)
                         logger.debug(f"Created CALLS relation: {chunk.entity_name} -> {called_name}")
                     else:
-                        logger.debug(f"Skipped non-entity call: {chunk.entity_name} -> {called_name}")
+                        # logger.debug(f"Skipped non-entity call: {chunk.entity_name} -> {called_name}")
+                        pass
         
         return relations
 

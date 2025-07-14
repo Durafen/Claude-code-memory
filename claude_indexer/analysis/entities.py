@@ -78,6 +78,8 @@ class EntityChunk:
         """Create metadata chunk from existing Entity for progressive disclosure."""
         # Build content from entity observations
         content_parts = []
+        if entity.signature:
+            content_parts.append(f"Signature: {entity.signature}")
         if entity.docstring:
             content_parts.append(f"Description: {entity.docstring}")
         

@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 import time
+import logging
 
 
 @dataclass
@@ -29,6 +30,55 @@ class EmbeddingResult:
     def dimension(self) -> int:
         """Get the dimensionality of the embedding vector."""
         return len(self.embedding)
+
+
+class TiktokenMixin:
+    """Mixin for accurate token counting with tiktoken."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._tiktoken_encoder = None
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self._init_tiktoken()
+    
+    def _init_tiktoken(self):
+        """Initialize tiktoken encoder for the model."""
+        try:
+            import tiktoken
+            if hasattr(self, 'model'):
+                # Try model-specific encoder first
+                try:
+                    self._tiktoken_encoder = tiktoken.encoding_for_model(self.model)
+                    self.logger.debug(f"Using model-specific encoder for {self.model}")
+                except KeyError:
+                    # Fallback to cl100k_base for most embedding models
+                    self._tiktoken_encoder = tiktoken.get_encoding("cl100k_base")
+                    self.logger.debug(f"Using cl100k_base encoder for {self.model}")
+            else:
+                # Default to cl100k_base for most models
+                self._tiktoken_encoder = tiktoken.get_encoding("cl100k_base")
+                self.logger.debug("Using default cl100k_base encoder")
+        except ImportError:
+            self.logger.warning("tiktoken not available, using character approximation")
+            self._tiktoken_encoder = None
+        except Exception as e:
+            self.logger.warning(f"tiktoken initialization failed: {e}")
+            self._tiktoken_encoder = None
+    
+    def _estimate_tokens_with_tiktoken(self, text: str) -> int:
+        """Accurate token count using tiktoken with fallback."""
+        if self._tiktoken_encoder:
+            try:
+                return max(1, len(self._tiktoken_encoder.encode(text)))
+            except Exception as e:
+                self.logger.debug(f"Tiktoken encoding failed: {e}, falling back to approximation")
+        
+        # Fallback to character-based approximation
+        return max(1, len(text) // 4)
+    
+    def _character_approximation(self, text: str) -> int:
+        """Character-based token approximation fallback."""
+        return max(1, len(text) // 4)
 
 
 class Embedder(ABC):
@@ -59,7 +109,37 @@ class Embedder(ABC):
         if max_tokens is None:
             max_tokens = self.get_max_tokens()
         
-        # Simple approximation: ~4 characters per token for English
+        # Use tiktoken if available (for classes that inherit TiktokenMixin)
+        if hasattr(self, '_estimate_tokens_with_tiktoken'):
+            current_tokens = self._estimate_tokens_with_tiktoken(text)
+            if current_tokens <= max_tokens:
+                return text
+            
+            # Binary search approach for accurate truncation
+            left, right = 0, len(text)
+            best_length = 0
+            
+            while left <= right:
+                mid = (left + right) // 2
+                truncated = text[:mid]
+                tokens = self._estimate_tokens_with_tiktoken(truncated)
+                
+                if tokens <= max_tokens:
+                    best_length = mid
+                    left = mid + 1
+                else:
+                    right = mid - 1
+            
+            # Truncate at word boundary when possible
+            truncated = text[:best_length]
+            last_space = truncated.rfind(' ')
+            
+            if last_space > best_length * 0.8:  # Don't lose too much content
+                truncated = truncated[:last_space]
+            
+            return truncated + "..."
+        
+        # Fallback to character approximation
         max_chars = max_tokens * 4
         
         if len(text) <= max_chars:

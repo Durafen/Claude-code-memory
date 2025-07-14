@@ -13,7 +13,38 @@ from qdrant_client import QdrantClient
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from claude_indexer.cleanup.detection import is_manual_entry
+# Correct manual entry detection from working backup system
+def is_manual_entry(payload: Dict[str, Any]) -> bool:
+    """Enhanced logic for v2.4 chunk format - matches manual_memory_backup.py exactly."""
+    # Pattern 1: Auto entities have file_path field
+    if 'file_path' in payload:
+        return False
+    
+    # Pattern 2: Auto relations have entity_name/relation_target/relation_type structure  
+    if all(field in payload for field in ['entity_name', 'relation_target', 'relation_type']):
+        return False
+    
+    # Pattern 3: Auto entities have extended metadata fields
+    automation_fields = {
+        'line_number', 'ast_data', 'signature', 'docstring', 'full_name', 
+        'ast_type', 'start_line', 'end_line', 'source_hash', 'parsed_at'
+    }
+    if any(field in payload for field in automation_fields):
+        return False
+    
+    # True manual entries have minimal fields: entity_name, entity_type
+    has_name = 'entity_name' in payload
+    has_type = 'entity_type' in payload
+    
+    if not (has_name and has_type):
+        return False
+    
+    # Additional v2.4 validation - manual entries shouldn't have certain auto fields
+    auto_only_fields = {'file_hash', 'parser_version', 'indexed_at'}
+    if any(field in payload for field in auto_only_fields):
+        return False
+    
+    return True
 from claude_indexer.config.config_loader import ConfigLoader
 
 

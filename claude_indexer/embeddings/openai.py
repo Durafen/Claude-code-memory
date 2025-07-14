@@ -2,7 +2,7 @@
 
 import time
 from typing import List, Dict, Any, Optional
-from .base import RetryableEmbedder, EmbeddingResult
+from .base import RetryableEmbedder, EmbeddingResult, TiktokenMixin
 
 try:
     import openai
@@ -11,7 +11,7 @@ except ImportError:
     OPENAI_AVAILABLE = False
 
 
-class OpenAIEmbedder(RetryableEmbedder):
+class OpenAIEmbedder(TiktokenMixin, RetryableEmbedder):
     """OpenAI embeddings with retry logic and rate limiting."""
     
     # Model configurations with current 2025 pricing
@@ -53,10 +53,11 @@ class OpenAIEmbedder(RetryableEmbedder):
         if model not in self.MODELS:
             raise ValueError(f"Unsupported model: {model}. Available: {list(self.MODELS.keys())}")
         
-        super().__init__(max_retries=max_retries, base_delay=base_delay)
-        
         self.model = model
         self.model_config = self.MODELS[model]
+        
+        super().__init__(max_retries=max_retries, base_delay=base_delay)
+        
         self.client = openai.OpenAI(api_key=final_api_key, timeout=30.0)
         
         # Rate limiting
@@ -89,9 +90,8 @@ class OpenAIEmbedder(RetryableEmbedder):
                 time.sleep(sleep_time)
     
     def _estimate_tokens(self, text: str) -> int:
-        """Estimate token count for text."""
-        # Simple approximation: ~4 characters per token for English
-        return max(1, len(text) // 4)
+        """Accurate token estimation using tiktoken."""
+        return self._estimate_tokens_with_tiktoken(text)
     
     def _calculate_cost(self, token_count: int) -> float:
         """Calculate estimated cost for token count."""
@@ -145,20 +145,48 @@ class OpenAIEmbedder(RetryableEmbedder):
             )
     
     def embed_batch(self, texts: List[str]) -> List[EmbeddingResult]:
-        """Generate embeddings for multiple texts."""
+        """Generate embeddings for multiple texts with enhanced token-based batching."""
         if not texts:
             return []
         
-        # For batch requests, we can send up to 2048 texts at once (16 for Azure OpenAI)
-        batch_size = min(2048, len(texts))  # OpenAI standard API limit
-        results = []
+        # Model-specific token limits with tiktoken accuracy
+        token_limit = self._get_effective_token_limit()
+        text_count_limit = self._get_text_count_limit()
         
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
-            batch_results = self._embed_batch(batch)
+        results = []
+        current_batch = []
+        current_tokens = 0
+        
+        for text in texts:
+            # Use accurate tiktoken counting for batch optimization
+            text_tokens = self._estimate_tokens(text)
+            
+            if ((current_tokens + text_tokens > token_limit or 
+                 len(current_batch) >= text_count_limit) and current_batch):
+                # Process current batch
+                batch_results = self._embed_batch(current_batch)
+                results.extend(batch_results)
+                current_batch = []
+                current_tokens = 0
+            
+            current_batch.append(text)
+            current_tokens += text_tokens
+        
+        # Process final batch
+        if current_batch:
+            batch_results = self._embed_batch(current_batch)
             results.extend(batch_results)
         
         return results
+    
+    def _get_effective_token_limit(self) -> int:
+        """Get effective token limit for batching."""
+        # Conservative limit for OpenAI embeddings - leave room for overhead
+        return 120_000  # Well below the ~8K limit per text, allows for multiple texts
+    
+    def _get_text_count_limit(self) -> int:
+        """Get text count limit for batching."""
+        return 2048  # OpenAI's batch size limit
     
     def _embed_batch(self, texts: List[str]) -> List[EmbeddingResult]:
         """Embed a single batch of texts."""

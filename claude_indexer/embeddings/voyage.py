@@ -2,7 +2,7 @@
 
 import time
 from typing import List, Dict, Any, Optional
-from .base import RetryableEmbedder, EmbeddingResult
+from .base import RetryableEmbedder, EmbeddingResult, TiktokenMixin
 
 try:
     import voyageai
@@ -11,7 +11,7 @@ except ImportError:
     VOYAGE_AVAILABLE = False
 
 
-class VoyageEmbedder(RetryableEmbedder):
+class VoyageEmbedder(TiktokenMixin, RetryableEmbedder):
     """Voyage AI embeddings with retry logic and rate limiting."""
     
     # Model configurations with current 2025 pricing
@@ -45,10 +45,11 @@ class VoyageEmbedder(RetryableEmbedder):
         if model not in self.MODELS:
             raise ValueError(f"Unsupported model: {model}. Available: {list(self.MODELS.keys())}")
         
-        super().__init__(max_retries=max_retries, base_delay=base_delay)
-        
         self.model = model
         self.model_config = self.MODELS[model]
+        
+        super().__init__(max_retries=max_retries, base_delay=base_delay)
+        
         self.client = voyageai.Client(api_key=api_key)
         
         # Rate limiting - Voyage has different limits than OpenAI
@@ -56,6 +57,20 @@ class VoyageEmbedder(RetryableEmbedder):
         self._tokens_per_minute = 1000000  # 1M tokens per minute
         self._request_times: List[float] = []
         self._token_counts: List[tuple[float, int]] = []
+    
+    def _init_tiktoken(self):
+        """Initialize tiktoken - Voyage uses similar tokenization to OpenAI's cl100k_base."""
+        try:
+            import tiktoken
+            # Voyage tokenization is similar to OpenAI's cl100k_base
+            self._tiktoken_encoder = tiktoken.get_encoding("cl100k_base")
+            self.logger.debug("Using cl100k_base encoder for Voyage (similar tokenization to OpenAI)")
+        except ImportError:
+            self.logger.warning("tiktoken not available, using character approximation")
+            self._tiktoken_encoder = None
+        except Exception as e:
+            self.logger.warning(f"tiktoken initialization failed: {e}")
+            self._tiktoken_encoder = None
     
     def _check_rate_limits(self, estimated_tokens: int = 1000):
         """Check and enforce rate limits."""
@@ -81,9 +96,8 @@ class VoyageEmbedder(RetryableEmbedder):
                 time.sleep(sleep_time)
     
     def _estimate_tokens(self, text: str) -> int:
-        """Estimate token count for text."""
-        # Voyage uses similar tokenization to OpenAI, ~4 characters per token
-        return max(1, len(text) // 4)
+        """Accurate token estimation using tiktoken (cl100k_base)."""
+        return self._estimate_tokens_with_tiktoken(text)
     
     def _calculate_cost(self, token_count: int) -> float:
         """Calculate estimated cost for token count."""

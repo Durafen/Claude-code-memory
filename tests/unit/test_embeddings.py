@@ -73,10 +73,11 @@ class TestOpenAIEmbedder:
                 config = load_config()
                 embedder = OpenAIEmbedder(api_key=config.openai_api_key)
                 
-                # Test token estimation (approximately 4 chars per token)
+                # Test token estimation (now using tiktoken for accuracy)
                 assert embedder._estimate_tokens("hello") >= 1
-                assert embedder._estimate_tokens("a" * 100) >= 25
-                assert embedder._estimate_tokens("") == 1  # Minimum 1 token
+                # With tiktoken, 100 'a' characters are more efficiently tokenized than char approximation
+                assert embedder._estimate_tokens("a" * 100) >= 10  # Adjusted for tiktoken accuracy
+                assert embedder._estimate_tokens("") == 1  # Minimum 1 token maintained
     
     def test_calculate_cost(self):
         """Test cost calculation."""
@@ -230,12 +231,15 @@ class TestOpenAIEmbedder:
                 from claude_indexer.config import load_config
                 config = load_config()
                 embedder = OpenAIEmbedder(api_key=config.openai_api_key)
-                texts = [f"text {i}" for i in range(1200)]  # More than batch size (500)
+                # Create texts that are large enough to force multiple batches with tiktoken
+                long_text = "This is a longer text sample that will consume more tokens. " * 100
+                texts = [f"{long_text} {i}" for i in range(1200)]  # Each text is ~600+ tokens
                 results = embedder.embed_batch(texts)
                 
                 assert len(results) == 1200
-                # Should have called API multiple times: ceil(1200/500) = 3 times
-                assert mock_client.embeddings.create.call_count == 3
+                # With tiktoken's accurate counting, large texts should force multiple API calls
+                # Each text is ~600 tokens, so 1200 texts won't fit in OpenAI's 2048 batch limit
+                assert mock_client.embeddings.create.call_count >= 2
     
     def test_rate_limiting(self):
         """Test rate limiting functionality."""

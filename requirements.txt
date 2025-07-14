@@ -1,13 +1,5 @@
 tree-sitter
-tree-sitter-python
-tree-sitter-javascript
-tree-sitter-typescript
-tree-sitter-json
-tree-sitter-html
-tree-sitter-css
-tree-sitter-yaml
-tree-sitter-xml
-tree-sitter-markdown
+tree-sitter-language-pack
 jedi
 requests
 qdrant-client
@@ -15,3 +7,4 @@ openai
 voyageai
 watchdog
 ijson
+tiktoken

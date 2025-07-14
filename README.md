@@ -126,6 +126,34 @@ We're moving fast and breaking things (in a good way). Your feedback helps us pr
 
 ### Installation
 
+#### Option 1: Cross-Platform Automated Setup (Recommended)
+
+**Single command setup for Windows/macOS/Linux:**
+
+```bash
+# Download and run cross-platform installer
+curl -O https://raw.githubusercontent.com/Durafen/Claude-code-memory/master/install-cross-platform.sh
+chmod +x install-cross-platform.sh
+./install-cross-platform.sh
+```
+
+**What it does:**
+- ✅ Detects your OS (Windows/macOS/Linux) automatically
+- ✅ Validates Python 3.9+ and Node.js prerequisites
+- ✅ Clones both main repository and MCP server
+- ✅ Sets up virtual environment and installs dependencies
+- ✅ Builds MCP server (TypeScript → JavaScript)
+- ✅ Creates global `claude-indexer` and `mcp-qdrant-memory` commands
+- ✅ Configures environment files and API key templates
+
+**After installation:**
+1. Edit `~/Claude-code-memory/settings.txt` with your API keys
+2. Edit `~/Claude-code-memory/mcp-qdrant-memory/.env` with your API keys
+3. Start Qdrant: `docker run -p 6333:6333 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdrant`
+4. Test: `claude-indexer --help`
+
+#### Option 2: Manual Setup
+
 ```bash
 # 1. Clone and setup
 git clone https://github.com/Durafen/Claude-code-memory.git
@@ -144,6 +172,10 @@ cd mcp-qdrant-memory && npm install && npm run build && cd ..
 
 # 4. Install global wrapper (creates claude-indexer command)
 ./install.sh
+
+# Alternative: Cross-platform installer (Windows/macOS/Linux)
+# Automatically clones both repositories and sets up everything
+./install-cross-platform.sh
 
 # 5. Start Qdrant
 docker run -p 6333:6333 -p 6334:6334 -v $(pwd)/qdrant_storage:/qdrant/storage:z qdrant/qdrant

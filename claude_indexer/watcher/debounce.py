@@ -146,68 +146,121 @@ class AsyncDebouncer:
 
 
 class FileChangeCoalescer:
-    """Simple file change coalescer for synchronous use with batch processing support."""
+    """Simple file change coalescer with background timer for automatic processing."""
     
     def __init__(self, delay: float = 2.0):
+        import threading
+        import time
+        
         self.delay = delay
         self._pending: Dict[str, float] = {}
-        self._last_batch_check: float = 0
+        self._ready_batches: List[List[str]] = []
+        self._lock = threading.Lock()
+        self._timer_thread = None
+        self._stop_event = threading.Event()
+        self._start_timer()
+    
+    def _start_timer(self):
+        """Start background timer thread to automatically process files."""
+        import threading
+        if self._timer_thread is None or not self._timer_thread.is_alive():
+            self._timer_thread = threading.Thread(target=self._timer_loop, daemon=True)
+            self._timer_thread.start()
+    
+    def _timer_loop(self):
+        """Background timer that periodically checks for ready files."""
+        import time
+        
+        while not self._stop_event.is_set():
+            try:
+                time.sleep(self.delay)
+                self._check_and_move_ready_files()
+            except Exception as e:
+                print(f"❌ Timer error: {e}")
+    
+    def _check_and_move_ready_files(self):
+        """Check pending files and move ready ones to batch queue."""
+        import time
+        current_time = time.time()
+        
+        with self._lock:
+            ready_files = []
+            files_to_remove = []
+            
+            # Find files ready for processing
+            for file_path, timestamp in self._pending.items():
+                if current_time - timestamp >= self.delay:
+                    ready_files.append(file_path)
+                    files_to_remove.append(file_path)
+            
+            # Move ready files to batch queue
+            if ready_files:
+                self._ready_batches.append(ready_files)
+            
+            # Remove from pending
+            for file_path in files_to_remove:
+                del self._pending[file_path]
     
     def add_change(self, file_path: str) -> bool:
-        """Add a file change. Returns True if batch should be checked (for backwards compatibility)."""
+        """Add a file change. Returns True if batch should be checked."""
+        import time
         current_time = time.time()
         
-        # Always update the timestamp for this file
-        self._pending[file_path] = current_time
-        
-        # Check if enough time has passed since last batch check
-        # This prevents checking batch on every file but allows periodic checks
-        if current_time - self._last_batch_check >= self.delay:
-            self._last_batch_check = current_time
-            return True
-        
-        return False
+        with self._lock:
+            self._pending[file_path] = current_time
+            # Return True if we have ready batches waiting
+            return len(self._ready_batches) > 0
     
     def get_ready_batch(self) -> List[str]:
-        """Get all files that are ready for processing and remove them from pending."""
-        current_time = time.time()
-        ready_files = []
-        
-        # Find all files that have passed the debounce timeout
-        files_to_remove = []
-        for file_path, timestamp in self._pending.items():
-            if current_time - timestamp >= self.delay:
-                ready_files.append(file_path)
-                files_to_remove.append(file_path)
-        
-        # Remove processed files from pending
-        for file_path in files_to_remove:
-            del self._pending[file_path]
-        
-        return ready_files
+        """Get next ready batch from timer-processed queue."""
+        with self._lock:
+            if self._ready_batches:
+                return self._ready_batches.pop(0)
+        return []
     
     def has_pending_files(self) -> bool:
-        """Check if there are any pending files."""
-        return len(self._pending) > 0
+        """Check if there are pending files or ready batches."""
+        with self._lock:
+            return len(self._pending) > 0 or len(self._ready_batches) > 0
     
     def force_batch(self) -> List[str]:
-        """Force return all pending files regardless of timeout (for cleanup)."""
-        ready_files = list(self._pending.keys())
-        self._pending.clear()
-        return ready_files
+        """Force return all pending files for cleanup."""
+        with self._lock:
+            all_files = list(self._pending.keys())
+            
+            # Add files from ready batches
+            for batch in self._ready_batches:
+                all_files.extend(batch)
+            
+            # Clear everything
+            self._pending.clear()
+            self._ready_batches.clear()
+            
+        return all_files
     
     def should_process(self, file_path: str) -> bool:
         """Check if a file should be processed now."""
+        import time
         current_time = time.time()
-        last_change = self._pending.get(file_path, 0)
-        return current_time - last_change >= self.delay
+        
+        with self._lock:
+            last_change = self._pending.get(file_path, 0)
+            return current_time - last_change >= self.delay
     
     def cleanup_old_entries(self, max_age: float = 300.0):
         """Remove old entries to prevent memory leaks."""
+        import time
         current_time = time.time()
         cutoff_time = current_time - max_age
         
-        self._pending = {
-            path: timestamp for path, timestamp in self._pending.items()
-            if timestamp >= cutoff_time
-        }
+        with self._lock:
+            self._pending = {
+                path: timestamp for path, timestamp in self._pending.items()
+                if timestamp >= cutoff_time
+            }
+    
+    def stop(self):
+        """Stop the timer thread."""
+        self._stop_event.set()
+        if self._timer_thread and self._timer_thread.is_alive():
+            self._timer_thread.join(timeout=2.0)

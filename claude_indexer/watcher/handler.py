@@ -28,7 +28,7 @@ class IndexingEventHandler(FileSystemEventHandler):
         
         super().__init__()
         
-        self.project_path = Path(project_path)
+        self.project_path = Path(project_path).resolve()
         self.collection_name = collection_name
         self.debounce_seconds = debounce_seconds
         self.settings = settings or {}
@@ -106,10 +106,12 @@ class IndexingEventHandler(FileSystemEventHandler):
         except Exception as e:
             logger = get_logger()
             logger.error(f"❌ Error handling file event {file_path}: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
     
     def _should_process_file(self, path: Path) -> bool:
         """Check if a file should be processed."""
-        from .file_utils import should_process_file
+        from claude_indexer.watcher.file_utils import should_process_file
         return should_process_file(
             path, self.project_path, self.watch_patterns, 
             self.ignore_patterns, self.max_file_size
@@ -146,8 +148,8 @@ class IndexingEventHandler(FileSystemEventHandler):
             if not paths:
                 return
             
-            logger = get_logger()
             relative_paths = [p.relative_to(self.project_path) for p in paths]
+            logger = get_logger()
             logger.info(f"🔄 Auto-indexing batch ({len(paths)} files): {', '.join(str(rp) for rp in relative_paths)}")
             
             # Use main.py batch processing for optimal performance
@@ -160,10 +162,14 @@ class IndexingEventHandler(FileSystemEventHandler):
             if success:
                 for path in paths:
                     self.processed_files.add(str(path))
+            else:
+                logger.error(f"❌ Batch indexing failed for {len(paths)} files")
         
         except Exception as e:
             logger = get_logger()
             logger.error(f"❌ Error processing file batch: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
     
     def _create_indexer(self):
         """Create a CoreIndexer instance for Git+Meta optimized processing."""
@@ -467,6 +473,11 @@ class WatcherBridgeHandler(FileSystemEventHandler):
     def _schedule_event(self, file_path: str, event_type: str):
         """Schedule an event to be processed in the main thread."""
         try:
+            # DEBUG: Log event scheduling
+            print(f"🔍 BRIDGE DEBUG: _schedule_event called")
+            print(f"   File path: {file_path}")
+            print(f"   Event type: {event_type}")
+            
             if self.loop and not self.loop.is_closed():
                 # Use call_soon_threadsafe to schedule the coroutine from any thread
                 asyncio.run_coroutine_threadsafe(
@@ -479,12 +490,19 @@ class WatcherBridgeHandler(FileSystemEventHandler):
     async def _handle_event(self, file_path: str, event_type: str):
         """Process a file system event asynchronously."""
         try:
+            # DEBUG: Log event handling
+            print(f"🔍 BRIDGE DEBUG: _handle_event called")
+            print(f"   File path: {file_path}")
+            print(f"   Event type: {event_type}")
+            
             path = Path(file_path)
             
             # Check if we should process this file
             if not self._should_process_file(path):
+                print(f"🔍 BRIDGE DEBUG: File filtered out by patterns: {file_path}")
                 return
             
+            print(f"🔍 BRIDGE DEBUG: Forwarding to async handler: {file_path}")
             # Forward to async handler
             await self.async_handler.handle_file_event(file_path, event_type)
             
@@ -493,7 +511,7 @@ class WatcherBridgeHandler(FileSystemEventHandler):
     
     def _should_process_file(self, path: Path) -> bool:
         """Check if a file should be processed based on patterns."""
-        from .file_utils import should_process_file
+        from claude_indexer.watcher.file_utils import should_process_file
         return should_process_file(
             path, self.repo_path, self.include_patterns, 
             self.exclude_patterns, max_file_size=1048576
@@ -532,20 +550,36 @@ class AsyncWatcherHandler:
     
     async def handle_file_event(self, file_path: str, event_type: str):
         """Handle a file system event."""
+        # DEBUG: Log async handler event
+        print(f"🔍 ASYNC DEBUG: handle_file_event called")
+        print(f"   File path: {file_path}")
+        print(f"   Event type: {event_type}")
+        
         await self.debouncer.add_file_event(file_path, event_type)
     
     async def _process_batch(self, batch_event: Dict[str, Any]):
         """Process a batch of file changes using the provided embedder and store."""
         try:
+            # DEBUG: Log batch processing
+            print(f"🔍 BATCH DEBUG: _process_batch called")
+            print(f"   Batch event keys: {list(batch_event.keys())}")
+            print(f"   Raw batch event: {batch_event}")
+            
             modified_files = batch_event.get("modified_files", [])
             deleted_files = batch_event.get("deleted_files", [])
             
+            print(f"🔍 BATCH DEBUG: Extracted files")
+            print(f"   Modified files: {modified_files}")
+            print(f"   Deleted files: {deleted_files}")
+            
             if modified_files:
+                print(f"🔍 BATCH DEBUG: Processing {len(modified_files)} modified files")
                 success = await self._index_files(modified_files)
                 if success:
                     self.files_processed += len(modified_files)
             
             if deleted_files:
+                print(f"🔍 BATCH DEBUG: Processing {len(deleted_files)} deleted files")
                 await self._handle_deletions(deleted_files)
             
             self.batches_processed += 1

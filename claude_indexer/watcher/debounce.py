@@ -148,13 +148,13 @@ class AsyncDebouncer:
 class FileChangeCoalescer:
     """Simple file change coalescer with background timer for automatic processing."""
     
-    def __init__(self, delay: float = 2.0):
+    def __init__(self, delay: float = 2.0, callback: Callable[[List[str]], None] = None):
         import threading
         import time
         
         self.delay = delay
+        self.callback = callback
         self._pending: Dict[str, float] = {}
-        self._ready_batches: List[List[str]] = []
         self._lock = threading.Lock()
         self._timer_thread = None
         self._stop_event = threading.Event()
@@ -174,17 +174,17 @@ class FileChangeCoalescer:
         while not self._stop_event.is_set():
             try:
                 time.sleep(self.delay)
-                self._check_and_move_ready_files()
+                self._check_and_process_ready_files()
             except Exception as e:
                 print(f"❌ Timer error: {e}")
     
-    def _check_and_move_ready_files(self):
-        """Check pending files and move ready ones to batch queue."""
+    def _check_and_process_ready_files(self):
+        """Check pending files and process ready ones via callback."""
         import time
         current_time = time.time()
         
+        ready_files = []
         with self._lock:
-            ready_files = []
             files_to_remove = []
             
             # Find files ready for processing
@@ -193,49 +193,36 @@ class FileChangeCoalescer:
                     ready_files.append(file_path)
                     files_to_remove.append(file_path)
             
-            # Move ready files to batch queue
-            if ready_files:
-                self._ready_batches.append(ready_files)
-            
-            # Remove from pending
+            # Remove from pending before calling callback
             for file_path in files_to_remove:
-                del self._pending[file_path]
-    
-    def add_change(self, file_path: str) -> bool:
-        """Add a file change. Returns True if batch should be checked."""
+                if file_path in self._pending:
+                    del self._pending[file_path]
+
+        # Call callback with ready files
+        if ready_files and self.callback:
+            try:
+                self.callback(ready_files)
+            except Exception as e:
+                print(f"❌ Error in coalescer callback: {e}")
+
+    def add_change(self, file_path: str):
+        """Add a file change."""
         import time
         current_time = time.time()
         
         with self._lock:
             self._pending[file_path] = current_time
-            # Return True if we have ready batches waiting
-            return len(self._ready_batches) > 0
-    
-    def get_ready_batch(self) -> List[str]:
-        """Get next ready batch from timer-processed queue."""
-        with self._lock:
-            if self._ready_batches:
-                return self._ready_batches.pop(0)
-        return []
     
     def has_pending_files(self) -> bool:
-        """Check if there are pending files or ready batches."""
+        """Check if there are pending files."""
         with self._lock:
-            return len(self._pending) > 0 or len(self._ready_batches) > 0
+            return bool(self._pending)
     
     def force_batch(self) -> List[str]:
         """Force return all pending files for cleanup."""
         with self._lock:
             all_files = list(self._pending.keys())
-            
-            # Add files from ready batches
-            for batch in self._ready_batches:
-                all_files.extend(batch)
-            
-            # Clear everything
             self._pending.clear()
-            self._ready_batches.clear()
-            
         return all_files
     
     def should_process(self, file_path: str) -> bool:

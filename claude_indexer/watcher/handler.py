@@ -42,7 +42,7 @@ class IndexingEventHandler(FileSystemEventHandler):
         self.max_file_size = self.settings.get("max_file_size", 1048576)  # 1MB
         
         # Change tracking
-        self.coalescer = FileChangeCoalescer(delay=debounce_seconds)
+        self.coalescer = FileChangeCoalescer(delay=debounce_seconds, callback=self._process_batch_from_coalescer)
         self.processed_files: Set[str] = set()
         
         # Stats
@@ -73,7 +73,7 @@ class IndexingEventHandler(FileSystemEventHandler):
             self._handle_file_event(event.dest_path, "created")
     
     def _handle_file_event(self, file_path: str, event_type: str):
-        """Process a file system event with batch processing support."""
+        """Process a file system event by adding it to the coalescer."""
         self.events_received += 1
         
         try:
@@ -84,30 +84,21 @@ class IndexingEventHandler(FileSystemEventHandler):
                 self.events_ignored += 1
                 return
             
-            # Use coalescer to debounce rapid changes
-            if event_type == "deleted":
-                # Process deletions immediately using shared deletion logic
-                self._process_file_deletion(path)
-                self.events_processed += 1
-            else:
-                # Add to coalescer for debouncing
-                should_check_batch = self.coalescer.add_change(file_path)
-                
-                # Check for batch when enough time has passed
-                if should_check_batch:
-                    # Check if any files are ready for batch processing
-                    ready_files = self.coalescer.get_ready_batch()
-                    if ready_files:
-                        # Convert to Path objects and process as batch
-                        ready_paths = [Path(fp) for fp in ready_files]
-                        self._process_file_batch(ready_paths)
-                        self.events_processed += len(ready_files)
+            # Add the change to the coalescer. The callback will handle processing.
+            self.coalescer.add_change(file_path)
         
         except Exception as e:
             logger = get_logger()
             logger.error(f"❌ Error handling file event {file_path}: {e}")
             import traceback
             logger.error(f"❌ Traceback: {traceback.format_exc()}")
+
+    def _process_batch_from_coalescer(self, ready_files: List[str]):
+        """Callback for the coalescer to process a batch of files."""
+        if ready_files:
+            ready_paths = [Path(fp) for fp in ready_files]
+            self._process_file_batch(ready_paths)
+            self.events_processed += len(ready_files)
     
     def _should_process_file(self, path: Path) -> bool:
         """Check if a file should be processed."""
@@ -143,27 +134,63 @@ class IndexingEventHandler(FileSystemEventHandler):
             logger.error(f"❌ Error processing file change {path}: {e}")
     
     def _process_file_batch(self, paths: List[Path]):
-        """Process a batch of file changes with Git+Meta deduplication."""
+        """Process a batch of file changes with phantom deletion detection."""
         try:
             if not paths:
                 return
             
-            relative_paths = [p.relative_to(self.project_path) for p in paths]
-            logger = get_logger()
-            logger.info(f"🔄 Auto-indexing batch ({len(paths)} files): {', '.join(str(rp) for rp in relative_paths)}")
+            # Separate existing files from potential deletions
+            existing_files = []
+            potential_deletions = []
             
-            # Use main.py batch processing for optimal performance
-            from ..main import run_indexing_with_specific_files
-            success = run_indexing_with_specific_files(
-                str(self.project_path), self.collection_name, paths,
-                quiet=not self.verbose, verbose=self.verbose
-            )
-            
-            if success:
-                for path in paths:
-                    self.processed_files.add(str(path))
+            for path in paths:
+                if path.exists():
+                    existing_files.append(path)
+                else:
+                    # It might be a temporary deletion (atomic save), so check again
+                    potential_deletions.append(path)
+
+            # Re-check potential deletions after a short delay to handle atomic saves
+            if potential_deletions:
+                time.sleep(0.1)  # Small delay to allow for file rename
+                
+                real_deletions = []
+                for path in potential_deletions:
+                    if path.exists():
+                        # File reappeared, so it was a modification
+                        existing_files.append(path)
+                    else:
+                        # File is still gone, so it's a real deletion
+                        real_deletions.append(path)
             else:
-                logger.error(f"❌ Batch indexing failed for {len(paths)} files")
+                real_deletions = []
+
+            logger = get_logger()
+            
+            # Process existing files (includes phantom deletions treated as modifications)
+            if existing_files:
+                # Use a set to handle duplicates if a file was in both lists
+                unique_existing_paths = sorted(list(set(existing_files)), key=lambda p: str(p))
+                
+                relative_paths = [p.relative_to(self.project_path) for p in unique_existing_paths]
+                logger.info(f"🔄 Auto-indexing batch ({len(unique_existing_paths)} files): {', '.join(str(rp) for rp in relative_paths)}")
+                
+                from ..main import run_indexing_with_specific_files
+                success = run_indexing_with_specific_files(
+                    str(self.project_path), self.collection_name, unique_existing_paths,
+                    quiet=not self.verbose, verbose=self.verbose
+                )
+                
+                if success:
+                    for path in unique_existing_paths:
+                        self.processed_files.add(str(path))
+                else:
+                    logger.error(f"❌ Batch indexing failed for {len(unique_existing_paths)} files")
+            
+            # Process real deletions
+            if real_deletions:
+                for path in real_deletions:
+                    self._process_file_deletion(path)
         
         except Exception as e:
             logger = get_logger()
@@ -279,7 +306,7 @@ class IndexingEventHandler(FileSystemEventHandler):
 
 
 class Watcher:
-    """Unified watcher class that bridges sync file events to async processing."""
+    """Unified watcher class using IndexingEventHandler for reliable file watching."""
     
     def __init__(self, repo_path: str, config, embedder, store, debounce_seconds: float = 2.0):
         """Initialize the watcher with required dependencies.
@@ -332,14 +359,13 @@ class Watcher:
             print(f"   Include: {self.include_patterns}")
             print(f"   Exclude: {self.exclude_patterns}")
         
-        # Observer and async handler
+        # Observer and event handler
         self.observer = Observer()
-        self.async_handler = None
-        self._bridge_handler = None
+        self.event_handler = None
         self._running = False
         
     async def start(self):
-        """Start file watching with async processing."""
+        """Start file watching using IndexingEventHandler."""
         if self._running:
             return
             
@@ -347,29 +373,21 @@ class Watcher:
             # Run initial indexing to ensure collection exists
             await self._run_initial_indexing()
             
-            # Create async handler
-            self.async_handler = AsyncWatcherHandler(
-                repo_path=self.repo_path,
-                config=self.config,
-                embedder=self.embedder,
-                store=self.store,
-                debounce_seconds=self.debounce_seconds
+            # Create IndexingEventHandler (no async complexity needed)
+            settings = {
+                "watch_patterns": self.include_patterns,
+                "ignore_patterns": self.exclude_patterns
+            }
+            self.event_handler = IndexingEventHandler(
+                project_path=str(self.repo_path),
+                collection_name=self.collection_name,
+                debounce_seconds=self.debounce_seconds,
+                settings=settings,
+                verbose=getattr(self.config, 'verbose', False)
             )
-            
-            # Create bridge handler for watchdog -> async
-            self._bridge_handler = WatcherBridgeHandler(
-                repo_path=self.repo_path,
-                async_handler=self.async_handler,
-                include_patterns=self.include_patterns,
-                exclude_patterns=self.exclude_patterns,
-                loop=asyncio.get_running_loop()
-            )
-            
-            # Start async processing
-            await self.async_handler.start()
             
             # Start file system watching
-            self.observer.schedule(self._bridge_handler, str(self.repo_path), recursive=True)
+            self.observer.schedule(self.event_handler, str(self.repo_path), recursive=True)
             self.observer.start()
             
             self._running = True
@@ -429,228 +447,10 @@ class Watcher:
                 self.observer.stop()
                 self.observer.join(timeout=5.0)
             
-            # Stop async handler
-            if self.async_handler:
-                await self.async_handler.stop()
+            # Cleanup IndexingEventHandler coalescer
+            if self.event_handler and hasattr(self.event_handler, 'coalescer'):
+                self.event_handler.coalescer.stop()
                 
         except Exception as e:
             print(f"❌ Error stopping watcher: {e}")
 
-
-class WatcherBridgeHandler(FileSystemEventHandler):
-    """Bridge handler that connects watchdog events to async processing."""
-    
-    def __init__(self, repo_path: Path, async_handler, include_patterns: list, exclude_patterns: list, loop=None):
-        super().__init__()
-        self.repo_path = repo_path
-        self.async_handler = async_handler
-        self.include_patterns = include_patterns or ['*.py', '*.md']
-        self.exclude_patterns = exclude_patterns or []
-        self.loop = loop  # Event loop reference
-        
-    def on_modified(self, event):
-        """Handle file modification events."""
-        if not event.is_directory:
-            self._schedule_event(event.src_path, "modified")
-    
-    def on_created(self, event):
-        """Handle file creation events."""
-        if not event.is_directory:
-            self._schedule_event(event.src_path, "created")
-    
-    def on_deleted(self, event):
-        """Handle file deletion events."""
-        if not event.is_directory:
-            self._schedule_event(event.src_path, "deleted")
-    
-    def on_moved(self, event):
-        """Handle file move events."""
-        if not event.is_directory:
-            # Treat as delete + create
-            self._schedule_event(event.src_path, "deleted")
-            self._schedule_event(event.dest_path, "created")
-    
-    def _schedule_event(self, file_path: str, event_type: str):
-        """Schedule an event to be processed in the main thread."""
-        try:
-            # DEBUG: Log event scheduling
-            print(f"🔍 BRIDGE DEBUG: _schedule_event called")
-            print(f"   File path: {file_path}")
-            print(f"   Event type: {event_type}")
-            
-            if self.loop and not self.loop.is_closed():
-                # Use call_soon_threadsafe to schedule the coroutine from any thread
-                asyncio.run_coroutine_threadsafe(
-                    self._handle_event(file_path, event_type), 
-                    self.loop
-                )
-        except Exception as e:
-            print(f"❌ Error scheduling event {file_path}: {e}")
-    
-    async def _handle_event(self, file_path: str, event_type: str):
-        """Process a file system event asynchronously."""
-        try:
-            # DEBUG: Log event handling
-            print(f"🔍 BRIDGE DEBUG: _handle_event called")
-            print(f"   File path: {file_path}")
-            print(f"   Event type: {event_type}")
-            
-            path = Path(file_path)
-            
-            # Check if we should process this file
-            if not self._should_process_file(path):
-                print(f"🔍 BRIDGE DEBUG: File filtered out by patterns: {file_path}")
-                return
-            
-            print(f"🔍 BRIDGE DEBUG: Forwarding to async handler: {file_path}")
-            # Forward to async handler
-            await self.async_handler.handle_file_event(file_path, event_type)
-            
-        except Exception as e:
-            print(f"❌ Error in bridge handler: {e}")
-    
-    def _should_process_file(self, path: Path) -> bool:
-        """Check if a file should be processed based on patterns."""
-        from claude_indexer.watcher.file_utils import should_process_file
-        return should_process_file(
-            path, self.repo_path, self.include_patterns, 
-            self.exclude_patterns, max_file_size=1048576
-        )
-
-
-class AsyncWatcherHandler:
-    """Async handler that processes file events and triggers indexing."""
-    
-    def __init__(self, repo_path: Path, config, embedder, store, debounce_seconds: float = 2.0):
-        self.repo_path = repo_path
-        self.config = config
-        self.embedder = embedder
-        self.store = store
-        
-        # Import here to avoid circular imports
-        from .debounce import AsyncDebouncer
-        
-        self.debouncer = AsyncDebouncer(
-            delay=debounce_seconds,
-            max_batch_size=50
-        )
-        self.debouncer.set_callback(self._process_batch)
-        
-        # Stats
-        self.files_processed = 0
-        self.batches_processed = 0
-    
-    async def start(self):
-        """Start async processing."""
-        await self.debouncer.start()
-    
-    async def stop(self):
-        """Stop async processing."""
-        await self.debouncer.stop()
-    
-    async def handle_file_event(self, file_path: str, event_type: str):
-        """Handle a file system event."""
-        # DEBUG: Log async handler event
-        print(f"🔍 ASYNC DEBUG: handle_file_event called")
-        print(f"   File path: {file_path}")
-        print(f"   Event type: {event_type}")
-        
-        await self.debouncer.add_file_event(file_path, event_type)
-    
-    async def _process_batch(self, batch_event: Dict[str, Any]):
-        """Process a batch of file changes using the provided embedder and store."""
-        try:
-            # DEBUG: Log batch processing
-            print(f"🔍 BATCH DEBUG: _process_batch called")
-            print(f"   Batch event keys: {list(batch_event.keys())}")
-            print(f"   Raw batch event: {batch_event}")
-            
-            modified_files = batch_event.get("modified_files", [])
-            deleted_files = batch_event.get("deleted_files", [])
-            
-            print(f"🔍 BATCH DEBUG: Extracted files")
-            print(f"   Modified files: {modified_files}")
-            print(f"   Deleted files: {deleted_files}")
-            
-            if modified_files:
-                print(f"🔍 BATCH DEBUG: Processing {len(modified_files)} modified files")
-                success = await self._index_files(modified_files)
-                if success:
-                    self.files_processed += len(modified_files)
-            
-            if deleted_files:
-                print(f"🔍 BATCH DEBUG: Processing {len(deleted_files)} deleted files")
-                await self._handle_deletions(deleted_files)
-            
-            self.batches_processed += 1
-            
-        except Exception as e:
-            print(f"❌ Error processing batch: {e}")
-    
-    async def _index_files(self, file_paths: list) -> bool:
-        """Index the given files using the provided embedder and store."""
-        try:
-            # Run indexing in executor to avoid blocking
-            loop = asyncio.get_running_loop()
-            
-            def run_indexing():
-                # Import here to avoid circular imports
-                from ..main import run_indexing_with_specific_files
-                
-                # DEBUG: Log what we're about to process
-                print(f"🔍 WATCHER DEBUG: About to call run_indexing_with_specific_files")
-                print(f"   Project path: {str(self.repo_path)}")
-                print(f"   Collection: {getattr(self.config, 'collection_name', 'default')}")
-                print(f"   File count: {len(file_paths)}")
-                print(f"   Files: {[str(p) for p in file_paths]}")
-                
-                start_time = time.time()
-                
-                # Process only the specific files that triggered the debounce
-                success = run_indexing_with_specific_files(
-                    project_path=str(self.repo_path),
-                    collection_name=getattr(self.config, 'collection_name', 'default'),
-                    file_paths=file_paths,  # Process only specified files
-                    quiet=True,
-                    verbose=False
-                )
-                
-                duration = time.time() - start_time
-                print(f"🔍 WATCHER DEBUG: run_indexing_with_specific_files completed in {duration:.3f}s")
-                print(f"   Success: {success}")
-                
-                return success
-            
-            return await loop.run_in_executor(None, run_indexing)
-            
-        except Exception as e:
-            print(f"❌ File indexing failed: {e}")
-            return False
-    
-    async def _handle_deletions(self, file_paths: list):
-        """Handle file deletions by removing related entities."""
-        try:
-            print(f"🗑️  Processing {len(file_paths)} deleted files...")
-            
-            # Trigger incremental indexing to handle deletions and cleanup orphaned relations
-            # This uses the existing state-based deletion detection which will:
-            # 1. Detect the deleted files via SHA256 state comparison
-            # 2. Call _handle_deleted_files() which removes entities
-            # 3. Automatically clean up orphaned relations via _cleanup_orphaned_relations()
-            success = await self._index_files([])  # Empty list triggers incremental indexing
-            
-            if success:
-                print(f"✅ Cleanup completed for {len(file_paths)} deleted files")
-            else:
-                print(f"❌ Cleanup may have failed for {len(file_paths)} deleted files")
-            
-        except Exception as e:
-            print(f"❌ Error handling deletions: {e}")
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get handler statistics."""
-        return {
-            "files_processed": self.files_processed,
-            "batches_processed": self.batches_processed,
-            "debouncer_stats": self.debouncer.get_stats()
-        }

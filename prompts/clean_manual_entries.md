@@ -23,9 +23,10 @@ Task: Maintain MANUAL memory entries only (not auto-indexed code) from memories.
 6. **For each entry, FIRST search for the specific entry by title/ID to get its full content and analyze the actual text content, THEN search for similar/duplicate/complementary entries using MCP search_similar and read their full content as well**
 7. **Validate against current codebase: use search_similar with entityTypes=["function", "class", "metadata"] to verify information is still accurate and relevant**
 8. Apply memory consolidation: merge duplicates, update outdated info, resolve conflicts, and create comprehensive manual entries from partial memories
-9. Mark todo as completed and update memories.md:
+9. Mark todo as completed and **AUTOMATICALLY UPDATE memories.md file directly without asking user**:
    - [X] for processed entries
    - [D] for deleted entries
+   - [C] for consolidated entries
 
 **Important**: Use memories.md only for task tracking and progress. All entry processing (finding related entries, synthesis, deletion) uses MCP memory search tools, not file content.
 
@@ -66,7 +67,7 @@ Task: Maintain MANUAL memory entries only (not auto-indexed code) from memories.
 ## Processing Instructions:
 - **SEARCH STRATEGY**: Use entityTypes=["debugging_pattern", "implementation_pattern", "integration_pattern", "configuration_pattern", "architecture_pattern", "performance_pattern", "knowledge_insight"] for manual entries
 - **UNCERTAINTY HANDLING**: If uncertain about whether to delete, merge, or keep an entry, STOP and ask the user for guidance before proceeding
-- **BATCH PROCESSING**: Process all 10 entries completely before stopping for user input - only request guidance at the end after finishing the full batch with a comprehensive summary
+- **BATCH PROCESSING**: Process all 10 entries completely and automatically update memories.md file with [X], [D], or [C] markers - no user input required during processing
 - **EXCLUSIONS**: NEVER process or delete (just pass) "active_issue" (current bugs) or "ideas" (brainstorming) entries - these must remain individual
 - **DUPLICATE DETECTION**: Same topic, different wording (e.g., "auth debugging", "authentication errors") → keep highest quality, delete rest
 - **MEMORY CONSOLIDATION**: Different aspects, same domain → create comprehensive manual entry
@@ -131,7 +132,7 @@ For comprehensive guides, use clear sections:
    SOLUTION: [Implementation approach]
    RESULTS: [Quantified outcomes]
 
-🗑️  Entries Deleted: [list with justification] - mark these as [D] in memories.md
+🗑️  Entries Deleted: [list with justification] - automatically marked as [D] in memories.md
 📝 New Memory Created: [if synthesized] - stored in memory database only
-✅ Status: EDIT memories.md file to change [ ] to [X] for processed entry
+✅ Status: Automatically updated memories.md file ([X] for processed, [D] for deleted, [C] for consolidated)
 ```

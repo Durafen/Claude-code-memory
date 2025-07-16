@@ -43,7 +43,8 @@
         "settings.txt",
         ".claude-indexer/",
         "docs/archive/",
-        "debug/"
+        "debug/",
+        "memories.md"
       ]
     },
     "max_file_size": 1048576,

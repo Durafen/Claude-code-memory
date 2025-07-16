@@ -10,6 +10,7 @@ client = QdrantClient(url=config.qdrant_url, api_key=config.qdrant_api_key)
 
 print('=== FINAL VALIDATION REPORT ===')
 
+
 # Get file entities
 file_result = client.scroll(
     collection_name='debug-flags-test-fixed',

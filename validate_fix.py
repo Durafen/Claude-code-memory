@@ -11,18 +11,9 @@ client = QdrantClient(url=config.qdrant_url, api_key=config.qdrant_api_key)
 print('=== FINAL VALIDATION REPORT ===')
 
 
-# Get file entities
-file_result = client.scroll(
-    collection_name='debug-flags-test-fixed',
-    limit=50,
-    with_payload=True,
-    scroll_filter={
-        'must': [
-            {'key': 'chunk_type', 'match': {'value': 'metadata'}},
-            {'key': 'entity_type', 'match': {'value': 'file'}}
-        ]
-    }
-)
+
+
+
 
 # Get implementation chunks
 impl_result = client.scroll(

@@ -253,17 +253,9 @@ def run_indexing_with_specific_files(project_path: str, collection_name: str,
         if state_file.exists():
             before_vectored_files = indexer._get_vectored_files(collection_name)
         
-        # Clean up existing entities for each file BEFORE processing (prevents duplicates)
-        # This ensures modified files get same cleanup treatment as deleted files
-        for file_path in paths_to_process:
-            try:
-                relative_path = str(file_path.relative_to(project))
-                if verbose:
-                    logger.debug(f"🧹 Cleaning existing entities for: {relative_path}")
-                indexer._handle_deleted_files(collection_name, relative_path, verbose)
-            except Exception as e:
-                if verbose:
-                    logger.warning(f"⚠️ Failed to clean existing entities for {file_path}: {e}")
+        # Smart cleanup is now handled by the downstream UnifiedContentProcessor.
+        # The old brute-force cleanup loop has been removed to fix the bug and
+        # allow the Git+Meta diffing to work as intended.
         
         # Process files directly using batch processing
         entities, relations, implementation_chunks, errors, actually_processed_files = indexer._process_file_batch(paths_to_process, collection_name, verbose)

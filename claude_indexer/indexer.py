@@ -492,40 +492,9 @@ class CoreIndexer:
                 result.processing_time = time.time() - start_time
                 return result
             
-            # Clean up existing entities for this file only if content changed
-            if git_meta.should_process:
-                try:
-                    relative_path = str(file_path.relative_to(self.project_path))
-                    logger.info(f"🧹 DEBUG: Single file cleanup starting for: {relative_path}")
-                    
-                    # Check if collection exists first with null safety
-                    collection_exists = False
-                    if self.vector_store and hasattr(self.vector_store, 'collection_exists'):
-                        collection_exists = self.vector_store.collection_exists(collection_name)
-                        logger.info(f"🧹 DEBUG: Collection '{collection_name}' exists: {collection_exists}")
-                    else:
-                        logger.debug(f"🧹 DEBUG: Vector store not available, skipping cleanup")
-                    
-                    if collection_exists:
-                        # Try to find entities before deletion
-                        full_path = str(file_path)
-                        logger.info(f"🧹 DEBUG: Searching for entities with path: {full_path}")
-                        found_entities = self.vector_store.find_entities_for_file(collection_name, full_path)
-                        logger.info(f"🧹 DEBUG: Found {len(found_entities)} entities before cleanup")
-                        
-                        # Run cleanup
-                        self._handle_deleted_files(collection_name, relative_path, verbose=True)
-                        
-                        # Check after cleanup
-                        found_entities_after = self.vector_store.find_entities_for_file(collection_name, full_path)
-                        logger.info(f"🧹 DEBUG: Found {len(found_entities_after)} entities after cleanup")
-                    else:
-                        logger.info(f"🧹 DEBUG: Collection doesn't exist, skipping cleanup")
-                        
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to clean existing entities for {file_path}: {e}")
-                    import traceback
-                    logger.warning(f"⚠️ Traceback: {traceback.format_exc()}")
+            # The Git+Meta context and UnifiedContentProcessor now handle entity-level
+            # diffing and cleanup automatically. This explicit, inefficient cleanup
+            # step has been removed.
             
             # Handle storage based on whether batch processing was used
             if batch_callback:
@@ -1299,22 +1268,12 @@ class CoreIndexer:
                 operation_desc = "rebuilt"
                 file_count_desc = f"{len(new_files)} files tracked"
             else:
-                # Fallback: Incremental update with fresh scanning (original race condition behavior)
+                # Fallback: Incremental update with fresh scanning
                 existing_state = self._load_state(collection_name)
-                logger.info(f"🔍 SNAPSHOT TIME: Taking state snapshot at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
+                logger.info(f"🔍 SNAPSHOT TIME: Taking state snapshot for {len(new_files)} files at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
                 new_state = self._get_current_state(new_files)
                 logger.info(f"🔍 SNAPSHOT RESULT: {len(new_state)} files captured in snapshot")
-                
-                # CRITICAL: Check for files that exist on disk but not in snapshot
-                all_files_on_disk = self._find_all_files(include_tests=False)
-                files_in_snapshot = set(new_state.keys())
-                files_on_disk = {str(f) for f in all_files_on_disk}
-                missing_from_snapshot = files_on_disk - files_in_snapshot - set(existing_state.keys())
-                if missing_from_snapshot:
-                    logger.warning(f"🚨 RACE CONDITION DETECTED: {len(missing_from_snapshot)} files on disk but missing from snapshot:")
-                    for missing_file in sorted(missing_from_snapshot):
-                        logger.warning(f"   MISSING: {missing_file}")
-                
+
                 final_state = existing_state.copy()
                 final_state.update(new_state)
                 operation_desc = "updated"

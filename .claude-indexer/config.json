@@ -42,6 +42,7 @@
         "*.egg-info",
         "settings.txt",
         ".claude-indexer/",
+        ".claude/",
         "docs/archive/",
         "debug/",
         "memories.md"

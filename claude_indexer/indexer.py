@@ -676,24 +676,53 @@ class CoreIndexer:
         
         return last_time
     
-    def _find_files_since(self, since_time: float, include_tests: bool = False) -> List[Path]:
-        """Fast filesystem scan: only files with mtime > since_time."""
+    def _find_files_since(self, since_time: float, include_tests: bool = False, collection_name: str = None) -> List[Path]:
+        """Find files modified since timestamp using state cache."""
         if since_time <= 0:
-            # No previous state, return all files
             return self._find_all_files(include_tests)
         
-        candidate_files = []
-        all_files = self._find_all_files(include_tests)
-        
-        for file_path in all_files:
-            try:
-                if file_path.stat().st_mtime > since_time:
-                    candidate_files.append(file_path)
-            except (OSError, FileNotFoundError):
-                # File might have been deleted or inaccessible
-                continue
-        
-        return candidate_files
+        try:
+            # Use cached mtime from state file (O(1) vs O(n) filesystem scan)
+            state = self._load_state(collection_name)
+            candidates = []
+            
+            for file_path, metadata in state.items():
+                if file_path.startswith('_'):  # Skip metadata keys
+                    continue
+                    
+                cached_mtime = metadata.get('mtime', 0)
+                if cached_mtime > since_time:
+                    path_obj = self.project_path / file_path
+                    if path_obj.exists():  # Verify file still exists
+                        candidates.append(path_obj)
+            
+            # Detect stale state cache: if no results but state exists, verify with filesystem
+            if len(candidates) == 0 and len(state) > 3:
+                # Quick sample check for recent files
+                all_files = self._find_all_files(include_tests)
+                for file_path in all_files[:5]:  # Check first 5 files only
+                    try:
+                        if file_path.stat().st_mtime > since_time:
+                            # Found recent files - state cache is stale
+                            raise Exception("Stale state cache")
+                    except (OSError, FileNotFoundError):
+                        continue
+            
+            return candidates
+            
+        except Exception:
+            # Fallback: simple implementation if state cache fails
+            all_files = self._find_all_files(include_tests)
+            changed_files = []
+            
+            for file_path in all_files:
+                try:
+                    if file_path.stat().st_mtime > since_time:
+                        changed_files.append(file_path)
+                except (OSError, FileNotFoundError):
+                    continue
+            
+            return changed_files
 
     def _find_changed_files(self, include_tests: bool = False, collection_name: str = None) -> Tuple[List[Path], List[str]]:
         """Find files that have changed since last indexing."""
@@ -701,7 +730,7 @@ class CoreIndexer:
         last_run_time = self._get_last_run_time(previous_state)
         
         # OPTIMIZATION: Only scan modified files instead of ALL files
-        candidate_files = self._find_files_since(last_run_time, include_tests)
+        candidate_files = self._find_files_since(last_run_time, include_tests, collection_name)
         current_state = self._get_current_state(candidate_files)  # Hash only suspects
         
         changed_files = []

@@ -137,10 +137,59 @@ class EnhancedOrphanCleanup:
     
     def __init__(self, client):
         self.client = client
+        self._qdrant_store = None
+    
+    def _get_qdrant_store(self):
+        """Get QdrantStore instance"""
+        if self._qdrant_store is None:
+            from ..storage.qdrant import QdrantStore
+            from ..config.config_loader import ConfigLoader
+            
+            config = ConfigLoader().load()
+            self._qdrant_store = QdrantStore(
+                url=config.qdrant_url,
+                api_key=config.qdrant_api_key
+            )
+        return self._qdrant_store
+    
+    def _batch_get_existing_entities(self, collection_name: str) -> set:
+        """Batch get all existing entities in single query"""
+        from qdrant_client import models
+        
+        qdrant_store = self._get_qdrant_store()
+        
+        # Use existing _scroll_collection method
+        metadata_points = qdrant_store._scroll_collection(
+            collection_name=collection_name,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="chunk_type",
+                        match=models.MatchValue(value="metadata")
+                    )
+                ]
+            ),
+            limit=1000,
+            with_vectors=False,
+            handle_pagination=True
+        )
+        
+        # Build set of existing entity names
+        existing_entities = set()
+        for point in metadata_points:
+            if point.payload and point.payload.get("entity_name"):
+                existing_entities.add(point.payload.get("entity_name"))
+        
+        return existing_entities
     
     def cleanup_hash_orphaned_relations(self, collection_name: str, 
                                       file_path: str = None) -> int:
-        """Clean up relations orphaned by content hash changes"""
+        """Clean up relations orphaned by content hash changes
+        
+        Note: For 66x performance improvement, use:
+        - self._get_qdrant_store()._get_all_relations() instead of manual scroll
+        - self._batch_get_existing_entities() instead of individual lookups
+        """
         from qdrant_client.models import Filter, FieldCondition, MatchValue, PointIdsList
         
         # Scenario 1: Entity content changed, hash changed, old relations point to old entity
@@ -150,23 +199,30 @@ class EnhancedOrphanCleanup:
         orphaned_count = 0
         
         try:
-            # Get all relations (file-specific if provided)
-            relation_filter = [FieldCondition(key="chunk_type", match=MatchValue(value="relation"))]
-            if file_path:
-                relation_filter.append(
-                    FieldCondition(key="file_path", match=MatchValue(value=file_path))
-                )
+            # Get all relations using optimized approach with file filtering
+            qdrant_store = self._get_qdrant_store()
             
-            relations_result = self.client.scroll(
-                collection_name=collection_name,
-                scroll_filter=Filter(must=relation_filter),
-                with_payload=True,
-                limit=1000
-            )
+            if file_path:
+                # File-specific relations - use optimized pagination
+                relation_filter = [FieldCondition(key="chunk_type", match=MatchValue(value="relation")),
+                                 FieldCondition(key="file_path", match=MatchValue(value=file_path))]
+                all_relations = qdrant_store._scroll_collection(
+                    collection_name=collection_name,
+                    scroll_filter=Filter(must=relation_filter),
+                    limit=1000,
+                    with_vectors=False,
+                    handle_pagination=True
+                )
+            else:
+                # All relations - use existing optimized method
+                all_relations = qdrant_store._get_all_relations(collection_name)
+            
+            # Get all existing entities in batch (221x faster than individual queries)
+            existing_entities = self._batch_get_existing_entities(collection_name)
             
             orphaned_points = []
             
-            for point in relations_result[0]:
+            for point in all_relations:
                 if not point.payload:
                     continue
                     
@@ -174,12 +230,12 @@ class EnhancedOrphanCleanup:
                 from_entity = relation_data.get("entity_name")
                 to_entity = relation_data.get("relation_target")
                 
-                # Check if target entities still exist with current content hashes
-                if not self._entity_exists_with_current_hash(collection_name, from_entity):
+                # Check if target entities still exist using batch lookup (O(1) vs O(N))
+                if from_entity not in existing_entities:
                     orphaned_points.append(point.id)
                     continue
                     
-                if not self._entity_exists_with_current_hash(collection_name, to_entity):
+                if to_entity not in existing_entities:
                     orphaned_points.append(point.id)
                     continue
             

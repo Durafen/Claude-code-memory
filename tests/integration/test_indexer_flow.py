@@ -691,7 +691,9 @@ NEW_CONSTANT = "test_value"
         processed_files = extract_processed_files_from_cli_output(incremental_output)
         
         # ENHANCED STATE FILE VALIDATION
-        expected_files_in_final_state = set(initial_state.keys()) | {"new_module.py"}
+        # Filter out metadata keys (those starting with _) from expected files
+        initial_files = {k for k in initial_state.keys() if not k.startswith('_')}
+        expected_files_in_final_state = initial_files | {"new_module.py"}
         final_state_validated = validate_state_file_structure(str(state_file), expected_files_in_final_state)
         
         # Verify vector count increased (new entities added)
@@ -774,7 +776,8 @@ DELETABLE_CONSTANT = "to_be_removed"
         
         with open(state_file, 'r') as f:
             initial_state = json.load(f)
-        initial_state_file_count = len(initial_state)
+        # Count only actual files, not metadata keys
+        initial_state_file_count = sum(1 for k in initial_state.keys() if not k.startswith('_'))
         assert "deletable.py" in initial_state, "deletable.py should be in initial state"
         
         # Delete exactly 1 file
@@ -811,7 +814,9 @@ DELETABLE_CONSTANT = "to_be_removed"
         deletion_info = extract_deletion_info_from_cli_output(deletion_output)
         
         # ENHANCED STATE FILE VALIDATION FOR DELETION
-        expected_files_after_deletion = set(initial_state.keys()) - {"deletable.py"}
+        # Filter out metadata keys (those starting with _) from expected files
+        initial_files = {k for k in initial_state.keys() if not k.startswith('_')}
+        expected_files_after_deletion = initial_files - {"deletable.py"}
         final_state_validated = validate_state_file_structure(str(state_file), expected_files_after_deletion)
         
         # Verify vector count decreased (entities removed)
@@ -820,7 +825,8 @@ DELETABLE_CONSTANT = "to_be_removed"
         # Verify state file was updated with file removed
         with open(state_file, 'r') as f:
             final_state = json.load(f)
-        final_state_file_count = len(final_state)
+        # Count only actual files, not metadata keys
+        final_state_file_count = sum(1 for k in final_state.keys() if not k.startswith('_'))
         
         assert final_state_file_count == initial_state_file_count - 1, \
             f"State file should have {initial_state_file_count - 1} files, got {final_state_file_count}"
@@ -944,7 +950,9 @@ class NewClass_{i}:
         
         # ENHANCED STATE FILE VALIDATION
         new_file_names = {f"new_module_{i}.py" for i in range(1, 4)}
-        expected_files_in_final_state = set(initial_state.keys()) | new_file_names
+        # Filter out metadata keys (those starting with _) from expected files
+        initial_files = {k for k in initial_state.keys() if not k.startswith('_')}
+        expected_files_in_final_state = initial_files | new_file_names
         final_state_validated = validate_state_file_structure(str(state_file), expected_files_in_final_state)
         
         # Verify vector count increased significantly (new entities added)
@@ -1081,7 +1089,9 @@ class DeletableClass_{i}:
         
         # ENHANCED STATE FILE VALIDATION FOR THREE-FILE DELETION
         deleted_file_names = {f"deletable_{i}.py" for i in range(1, 4)}
-        expected_files_after_deletion = set(initial_state.keys()) - deleted_file_names
+        # Filter out metadata keys (those starting with _) from expected files
+        initial_files = {k for k in initial_state.keys() if not k.startswith('_')}
+        expected_files_after_deletion = initial_files - deleted_file_names
         final_state_validated = validate_state_file_structure(str(state_file), expected_files_after_deletion)
         
         # Verify vector count decreased significantly (entities removed)

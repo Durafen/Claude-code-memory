@@ -10,6 +10,8 @@ Stop treating Claude like a goldfish. Give it the superpower of perfect memory a
 
 **🚀 PRODUCTION READY:** Memory Guard automatically prevents Claude from writing duplicate code using AI-powered semantic analysis!
 
+**🆕 NEW: Comment-Based Override System** - Use `@allow-duplicate: reason` to instantly approve legitimate duplicates without waiting for AI analysis. Zero setup, multi-language support, saves 15-25s per override.
+
 **The Problem:** Even with perfect memory access, Claude sometimes recreates existing functions/classes
 **The Solution:** Memory Guard intelligently hooks into Claude Code and blocks duplicate implementations in real-time
 

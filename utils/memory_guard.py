@@ -165,6 +165,24 @@ class MemoryGuard:
             
         return True, None
     
+    def check_for_override_comments(self, code_content: str) -> Tuple[bool, str]:
+        """Check if code contains override comments to allow duplicates."""
+        override_patterns = [
+            r'#\s*@allow-duplicate(?:\s*:\s*(.+))?',        # Python: # @allow-duplicate: reason
+            r'//\s*@allow-duplicate(?:\s*:\s*(.+))?',       # JS/TS/Java: // @allow-duplicate: reason  
+            r'/\*\s*@allow-duplicate(?:\s*:\s*(.+))?\s*\*/', # Block: /* @allow-duplicate: reason */
+            r'#\s*MEMORY_GUARD_ALLOW(?:\s*:\s*(.+))?',      # Alternative: # MEMORY_GUARD_ALLOW: reason
+            r'//\s*MEMORY_GUARD_ALLOW(?:\s*:\s*(.+))?'      # Alternative: // MEMORY_GUARD_ALLOW: reason
+        ]
+        
+        for pattern in override_patterns:
+            match = re.search(pattern, code_content, re.IGNORECASE | re.MULTILINE)
+            if match:
+                reason = match.group(1) if match.group(1) else "Override comment detected"
+                return True, reason.strip()
+        
+        return False, ""
+
     def get_code_info(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
         """Extract code information from the operation."""
         if tool_name == "Write":
@@ -177,7 +195,23 @@ class MemoryGuard:
             new_string = tool_input.get("new_string", "")
             old_lines = len(old_string.split('\n'))
             new_lines = len(new_string.split('\n'))
-            return f"EDIT OPERATION:\nREMOVING ({old_lines} lines):\n```\n{old_string}\n```\nADDING ({new_lines} lines):\n```\n{new_string}\n```"
+            
+            # Add line number context for better AI analysis
+            line_info = ""
+            add_line_info = ""
+            file_path = tool_input.get("file_path", "")
+            if file_path and Path(file_path).exists():
+                try:
+                    with open(file_path, 'r') as f:
+                        content = f.read()
+                    if old_string in content:
+                        lines_before = content[:content.find(old_string)].count('\n')
+                        line_info = f", line {lines_before + 1}"
+                        add_line_info = f", starting line {lines_before + 1}"
+                except:
+                    pass
+            
+            return f"EDIT OPERATION:\nREMOVING ({old_lines} lines{line_info}):\n```\n{old_string}\n```\nADDING ({new_lines} lines{add_line_info}):\n```\n{new_string}\n```"
             
         elif tool_name == "MultiEdit":
             edits = tool_input.get("edits", [])
@@ -203,35 +237,53 @@ OPERATION CONTEXT:
 - Code changes:
 {code_info}
 
+CRITICAL DISTINCTION - WHAT TO BLOCK vs ALLOW:
+
+❌ BLOCK ONLY: 
+1. NEW FUNCTION/CLASS DEFINITIONS that duplicate existing functionality
+2. DUPLICATE CODE LOGIC/ALGORITHMS (same patterns, different locations)
+3. COPY-PASTE CODE with minor variations
+4. REDUNDANT IMPLEMENTATIONS of existing utility functions
+5. SIMILAR VALIDATION/PROCESSING patterns already in codebase
+   Examples: "def existing_function():", "class ExistingClass:", implementing same logic again
+
+✅ ALWAYS ALLOW: FUNCTION CALLS, imports, variable assignments, using existing code
+   Examples: "result = existing_function()", "from module import function", "obj.method()"
+
 SEARCH PROTOCOL:
 1. Use MCP service: {self.mcp_collection}search_similar
-2. Search for similar code functionality in the codebase
-3. Check if the NEW code being added duplicates existing implementations
-4. If duplicates found, suggest using existing code instead
+2. Search for similar IMPLEMENTATIONS AND LOGIC PATTERNS in the codebase
+3. Check if the NEW code is DEFINING duplicate functions/classes/logic
+4. IGNORE function calls, imports, or usage of existing code (these are GOOD)
 
-IMPORTANT SEARCH STRATEGY:
+IMPORTANT: Only block if someone is creating a NEW implementation of existing functionality.
+Using/calling existing code is exactly what we want - NEVER block function calls.
+
+ANALYSIS STRATEGY:
 - Use entityTypes filters for faster, more relevant results
 - Start with: entityTypes=["metadata", "function", "class"]
 - For detailed code: entityTypes=["implementation"]
-- Always search for the most specific functionality first
+- Look for NEW function definitions (def keyword) or class definitions (class keyword)
+- Ignore function calls, method calls, imports, variable assignments
 
 RESPONSE FORMAT (JSON only):
-For BLOCKING (duplicates found): {{
+For BLOCKING (NEW duplicate implementation found): {{
   "hasDuplicates": true,
-  "reason": "Search results summary and suggestion to use existing code",
-  "debug": "2 sentences: What you found in search + Why you made this decision",
+  "reason": "Found existing implementation: [name] at [location]. Consider using existing function instead of creating new one.",
+  "debug": "2 sentences: What duplicate IMPLEMENTATION you found + Why this is creating new duplicate logic",
   "turns_used": "number of turns it took to complete this analysis"
 }}
 
-For APPROVING (no duplicates): {{
+For APPROVING (no duplicate implementations OR just using existing code): {{
   "hasDuplicates": false,
   "decision": "approve",
-  "reason": "No code duplication detected", 
-  "debug": "2 sentences: What you found in search + Why you made this decision",
+  "reason": "No duplicate implementations detected - code is using existing functionality appropriately", 
+  "debug": "2 sentences: What you found in search + Why this is acceptable (function call/import/usage vs new implementation)",
   "turns_used": "number of turns it took to complete this analysis"
 }}
 
-Check if this NEW code duplicates existing implementations and suggest alternatives.
+Only block NEW function/class definitions OR duplicate logic patterns that replicate existing implementations. 
+NEVER block function calls, imports, or usage of existing code.
 
 IMPORTANT: Return ONLY the JSON object, no explanatory text."""
     
@@ -247,7 +299,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             result = subprocess.run([
                 'claude', '-p', 
                 '--output-format', 'json', 
-                '--max-turns', '10', 
+                '--max-turns', '5', 
                 '--model', 'sonnet',
                 '--allowedTools', allowed_tools
             ], input=prompt, capture_output=True, text=True, timeout=60, cwd=str(claude_dir))
@@ -333,6 +385,13 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             code_info = self.get_code_info(tool_name, tool_input)
             if not code_info:
                 result["reason"] = "No code content to check"
+                return result
+            
+            # Check override comments before Claude CLI
+            has_override, override_reason = self.check_for_override_comments(code_info)
+            if has_override:
+                result["reason"] = f"Duplicate allowed: {override_reason}"
+                self.save_debug_info(f"\nOVERRIDE: {override_reason}\n")
                 return result
             
             # Build prompt and check for duplicates

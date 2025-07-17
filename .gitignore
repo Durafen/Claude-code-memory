@@ -36,6 +36,29 @@ cleanup_*.py
 test_*/
 debug/
 
+# Node.js artifacts (should not be in Python project)
+node_modules/
+package.json
+package-lock.json
+*.config.ts
+*.config.js
+
+# Temporary test files
+another_test_file.py
+temp_test_file.py
+watcher_test_*.py
+
+# Planning/evaluation docs
+SIMPLE_EVALUATION_TESTING_PLAN.md
+docs/evaluation2.md
+docs/refactor.md
+
+# Claude config (development only)
+.claude/
+
+# Memory Guard debug logs
+memory_guard_debug.txt
+
 # Chat reports
 chat_reports/
 

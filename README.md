@@ -6,6 +6,81 @@
 
 Stop treating Claude like a goldfish. Give it the superpower of perfect memory and watch it become the senior developer who never forgets a single line of code.
 
+## 🛡️ **Memory Guard - Intelligent Code Duplication Prevention**
+
+**🚀 PRODUCTION READY:** Memory Guard automatically prevents Claude from writing duplicate code using AI-powered semantic analysis!
+
+**The Problem:** Even with perfect memory access, Claude sometimes recreates existing functions/classes
+**The Solution:** Memory Guard intelligently hooks into Claude Code and blocks duplicate implementations in real-time
+
+### How Memory Guard Works
+1. **🕵️ Intercepts Every Action**: PreToolUse hook catches all Write/Edit/MultiEdit operations
+2. **🧠 AI-Powered Analysis**: Uses Claude CLI with MCP memory tools for semantic duplicate detection
+3. **⚡ Real-Time Decisions**: 15-25 second analysis with detailed reasoning
+4. **🎯 Smart Blocking**: Distinguishes between true duplicates and legitimate similar patterns
+5. **📍 Precise Guidance**: Shows exact file locations and suggests existing implementations
+
+**Technical Architecture:**
+```
+Claude Code Write/Edit → PreToolUse Hook → Memory Guard → Claude CLI + MCP → Block/Approve
+```
+
+### Memory Guard in Action
+
+**✅ APPROVAL Example:**
+```
+✅ APPROVED: calculate_matrix_determinant function
+🔍 ANALYSIS: Searched memory for matrix operations - found only generic math functions
+⚡ RESULT: Unique mathematical algorithm approved for implementation
+```
+
+**❌ BLOCKING Example:**
+```
+❌ BLOCKED: EntityExtractor class creation
+🎯 DETECTED: Identical class exists in memory_guard.py:13-50 with same methods
+🔍 ANALYSIS: extract_entities_from_operation + _extract_python_entities already implemented
+⚡ RESULT: Claude redirected to use existing implementation
+```
+
+**Memory Guard Features:**
+- 🧠 **Semantic Understanding** - Analyzes functionality, not just names or syntax
+- 🎯 **MCP Integration** - Uses full memory search capabilities for accurate detection  
+- ⚡ **Multi-Project Support** - Works across any project with automatic configuration
+- 🛡️ **Graceful Degradation** - Approves on errors to never block legitimate development
+- 📊 **Project-Specific Logging** - Debug logs saved to each project's root directory
+- ⚙️ **Configurable** - Easy toggle and filename configuration at top of script
+
+### Memory Guard Installation
+
+Add to your `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 '/path/to/your/project/utils/memory_guard.py'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Requirements:** Python 3.12+, MCP memory server active, restart Claude Code after setup.
+
+**Configuration:**
+```python
+# memory_guard.py - Top of file
+DEBUG_ENABLED = True                    # Toggle debug logging
+DEBUG_LOG_FILE = 'memory_guard_debug.txt'  # Log filename
+```
+
 ## 🎯 NEW: 95.3% Variable Coverage Achievement
 **Latest Update:** Enhanced variable extraction with comprehensive pattern support
 - **JavaScript Breakthrough:** 56.2% → 90.6% extraction rate with full destructuring support

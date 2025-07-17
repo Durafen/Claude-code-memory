@@ -18,6 +18,7 @@ import sys
 import re
 import subprocess
 import os
+import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
@@ -25,6 +26,63 @@ from pathlib import Path
 # Configuration
 DEBUG_ENABLED = True
 DEBUG_LOG_FILE = 'memory_guard_debug.txt'
+
+
+class BypassManager:
+    """Manages Memory Guard bypass state with simple on/off commands."""
+    
+    def __init__(self, project_root: Optional[Path] = None):
+        self.project_root = project_root or Path.cwd()
+        self.state_file = self.project_root / '.claude' / 'guard_state.json'
+        self.lock = threading.Lock()
+        
+        # Ensure .claude directory exists
+        self.state_file.parent.mkdir(exist_ok=True)
+    
+    def is_disabled(self, session_id: str) -> bool:
+        """Check if Memory Guard is disabled for the session."""
+        try:
+            if not self.state_file.exists():
+                return False
+            
+            with self.lock:
+                state = json.loads(self.state_file.read_text())
+                return state.get(session_id, {}).get('disabled', False)
+        except:
+            return False
+    
+    def set_state(self, session_id: str, disabled: bool) -> str:
+        """Enable or disable Memory Guard for the session."""
+        try:
+            with self.lock:
+                state = {}
+                if self.state_file.exists():
+                    state = json.loads(self.state_file.read_text())
+                
+                state[session_id] = {
+                    'disabled': disabled,
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+                self.state_file.write_text(json.dumps(state, indent=2))
+                
+                if disabled:
+                    return "🔴 Memory Guard disabled for this session"
+                else:
+                    return "🟢 Memory Guard enabled for this session"
+        except Exception as e:
+            return f"❌ Error setting guard state: {str(e)}"
+    
+    def get_status(self, session_id: str) -> str:
+        """Get current Memory Guard status for the session."""
+        try:
+            is_disabled = self.is_disabled(session_id)
+            if is_disabled:
+                return "📊 Memory Guard Status: 🔴 DISABLED (use 'dups on' to enable)"
+            else:
+                return "📊 Memory Guard Status: 🟢 ENABLED (use 'dups off' to disable)"
+        except:
+            return "📊 Memory Guard Status: 🟢 ENABLED (default)"
 
 
 class EntityExtractor:
@@ -75,6 +133,7 @@ class MemoryGuard:
         self.project_root = self._detect_project_root()
         self.project_name = self.project_root.name if self.project_root else "unknown"
         self.mcp_collection = self._detect_mcp_collection()
+        self.bypass_manager = BypassManager(self.project_root)
         
     def _detect_project_root(self) -> Optional[Path]:
         """Detect the project root directory."""
@@ -104,8 +163,8 @@ class MemoryGuard:
             if claude_md.exists():
                 try:
                     content = claude_md.read_text()
-                    # Look for MCP collection pattern
-                    match = re.search(r'mcp__([^_]+)-memory__', content)
+                    # Look for MCP collection pattern (captures collection names with underscores and hyphens)
+                    match = re.search(r'mcp__(.+?)-memory__', content)
                     if match:
                         return f"mcp__{match.group(1)}-memory__"
                 except:
@@ -135,6 +194,11 @@ class MemoryGuard:
     
     def should_process(self, hook_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """Determine if this hook event should be processed."""
+        # Check bypass state first
+        session_id = hook_data.get("session_id", "")
+        if self.bypass_manager.is_disabled(session_id):
+            return False, "🔴 Memory Guard bypass active (use 'dups on' to re-enable)"
+        
         tool_name = hook_data.get("tool_name", "")
         hook_event = hook_data.get("hook_event_name", "")
         tool_input = hook_data.get("tool_input", {})
@@ -299,7 +363,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             result = subprocess.run([
                 'claude', '-p', 
                 '--output-format', 'json', 
-                '--max-turns', '5', 
+                '--max-turns', '10', 
                 '--model', 'sonnet',
                 '--allowedTools', allowed_tools
             ], input=prompt, capture_output=True, text=True, timeout=60, cwd=str(claude_dir))
@@ -328,6 +392,13 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             # Handle CLI wrapper format
             if stdout.startswith('{"type":"result"'):
                 cli_response = json.loads(stdout)
+                
+                # Check for any CLI errors first
+                if cli_response.get('subtype') == 'error_max_turns':
+                    return True, f"⚠️  MEMORY GUARD ERROR: Claude CLI hit max turns limit ({cli_response.get('num_turns', '?')} turns). Analysis incomplete.", cli_response
+                elif cli_response.get('is_error'):
+                    return True, f"⚠️  MEMORY GUARD ERROR: Claude CLI error occurred: {cli_response}", cli_response
+                
                 result_content = cli_response.get('result', '')
                 
                 # Extract JSON from markdown if present

@@ -12,6 +12,8 @@ Stop treating Claude like a goldfish. Give it the superpower of perfect memory a
 
 **🆕 NEW: Comment-Based Override System** - Use `@allow-duplicate: reason` to instantly approve legitimate duplicates without waiting for AI analysis. Zero setup, multi-language support, saves 15-25s per override.
 
+**🆕 NEW: Bypass Commands** - Simple session control: `dups off` (disable), `dups on` (enable), `dups status` (check). Per-project settings, instant toggle.
+
 **The Problem:** Even with perfect memory access, Claude sometimes recreates existing functions/classes
 **The Solution:** Memory Guard intelligently hooks into Claude Code and blocks duplicate implementations in real-time
 
@@ -59,13 +61,24 @@ Add to your `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command", 
+            "command": "python3 '/path/to/Claude-code-memory/utils/prompt_handler.py'"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 '/path/to/your/project/utils/memory_guard.py'"
+            "command": "python3 '/path/to/Claude-code-memory/utils/memory_guard.py'"
           }
         ]
       }

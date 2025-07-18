@@ -98,7 +98,7 @@ class ProjectConfigManager:
             "*.pyc", "__pycache__", ".git", ".venv", "node_modules",
             "dist", "build", "*.min.js", ".env", "*.log", ".mypy_cache",
             "qdrant_storage", "backups", "*.egg-info", "settings.txt",
-            ".claude-indexer", "package-lock.json"
+            ".claude-indexer", "package-lock.json", "memory_guard_debug.txt"
         ]
         
         config = ProjectConfig(

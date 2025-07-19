@@ -59,11 +59,11 @@ def is_manual_entry(payload):
         'is_chunk',       # Chunk indicator
         'chunk_index'     # Chunk sequence
     }
-    
+
     # If ANY automation field exists, it's auto-indexed
     if any(field in payload for field in automation_fields):
         return False
-    
+
     # Absence of automation fields = manual entry
     # This works for ANY entity type, existing or future
     return True
@@ -89,7 +89,7 @@ The beauty of field-based detection is that it works for ANY entity type:
 
 # Manual documentation (user insight)
 {
-    "entityType": "documentation", 
+    "entityType": "documentation",
     "name": "Architecture Decision",
     "content": "We chose microservices because..."
 }
@@ -129,7 +129,7 @@ The beauty of field-based detection is that it works for ANY entity type:
 ```python
 class MemoryCleanupPipeline:
     """Main orchestrator for memory cleanup operations"""
-    
+
     def __init__(self, store: QdrantStore, llm_scorer: QualityScorer):
         self.store = store
         self.scorer = llm_scorer
@@ -141,7 +141,7 @@ class MemoryCleanupPipeline:
             "reusability": 0.15,
             "recency": 0.1
         }
-    
+
     async def run_cleanup(self, collection_name: str, dry_run: bool = True):
         """Execute cleanup pipeline for manual entries only"""
         # 1. Create backup
@@ -159,19 +159,19 @@ class MemoryCleanupPipeline:
 ```python
 class SimilarityClusterer:
     """Groups similar manual entries using existing embeddings"""
-    
+
     def cluster_manual_patterns(self, patterns: List[Dict], threshold: float = 0.85) -> List[List[Dict]]:
         """
         Cluster manual entries by similarity using dynamic field-based detection.
-        
+
         This method is entity-type agnostic and works with ANY entity type,
         present or future, by examining field structure rather than type names.
-        
+
         Process:
         1. Filter entries using is_manual_entry() - excludes ANY entry with automation fields
-        2. Group remaining manual entries by cosine similarity > threshold  
+        2. Group remaining manual entries by cosine similarity > threshold
         3. Return clusters for duplicate/conflict detection
-        
+
         The clustering works identically whether the entity type is:
         - Traditional: debugging_pattern, implementation_pattern, etc.
         - Domain-specific: ml_experiment, security_vulnerability, etc.
@@ -192,11 +192,11 @@ class SimilarityClusterer:
 ```python
 class QualityScorer:
     """LLM-based quality assessment using GPT-4.1-mini for patterns"""
-    
+
     def __init__(self):
         self.model = "gpt-4.1-mini"  # 83% cheaper than GPT-4o, 1M context window
         self.client = openai.OpenAI()
-    
+
     async def score_manual_entry(self, entry: Dict) -> QualityScore:
         """
         Score entries using dynamic field-based detection.
@@ -205,7 +205,7 @@ class QualityScorer:
         # Dynamic detection - works for any current or future entity type
         if not is_manual_entry(entry['payload']):
             return None  # Skip auto-indexed entries
-            
+
         # Score any manual entry regardless of its entityType
         prompt = self._build_scoring_prompt(entry)
         scores = await self._call_llm(prompt)
@@ -217,13 +217,13 @@ class QualityScorer:
             recency=scores['recency'],
             overall=self._calculate_weighted_score(scores)
         )
-    
+
     def _build_scoring_prompt(self, entry: Dict) -> str:
         """Generate scoring prompt that works for ANY entity type"""
         return f"""
         Evaluate this {entry['entityType']} entry for quality.
         Content: {entry['content']}
-        
+
         Score on standard dimensions regardless of type...
         """
 ```
@@ -240,7 +240,7 @@ class QualityScorer:
 ```python
 class ConflictResolver:
     """Resolve contradictory patterns intelligently"""
-    
+
     async def resolve_conflicts(self, cluster: List[Dict]) -> ResolutionAction:
         """Determine how to handle conflicting patterns"""
         if self._are_version_specific(cluster):
@@ -262,7 +262,7 @@ class ConflictResolver:
 ```python
 class CleanupExecutor:
     """Execute cleanup actions with safety limits"""
-    
+
     def execute_actions(self, actions: List[CleanupAction], safety_config: SafetyConfig):
         """Apply cleanup actions with rollback capability"""
         # Safety checks:
@@ -288,10 +288,10 @@ class CleanupExecutor:
 ```python
 class SafetyManager:
     """Ensure cleanup operations are safe and reversible"""
-    
+
     def create_backup(self, collection_name: str) -> BackupHandle:
         """Create point-in-time backup before cleanup"""
-        
+
     def validate_cleanup(self, metrics: CleanupMetrics) -> bool:
         """Check if cleanup was successful"""
         # Rollback if search accuracy drops > 20%
@@ -383,10 +383,10 @@ class CleanupConfig:
 # tests/unit/test_cleanup_pipeline.py
 def test_similarity_clustering():
     """Test pattern clustering with known duplicates"""
-    
+
 def test_quality_scoring():
     """Test LLM scoring with mock responses"""
-    
+
 def test_conflict_resolution():
     """Test various conflict scenarios"""
 ```
@@ -396,7 +396,7 @@ def test_conflict_resolution():
 # tests/integration/test_cleanup_flow.py
 def test_full_cleanup_pipeline():
     """Test end-to-end cleanup with real data"""
-    
+
 def test_rollback_on_failure():
     """Test automatic rollback triggers"""
 ```

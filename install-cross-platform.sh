@@ -34,7 +34,7 @@ detect_os() {
 detect_python() {
     local python_cmd=""
     local python_version=""
-    
+
     # Try different Python commands
     for cmd in python3.12 python3.11 python3.10 python3.9 python3 python py; do
         if command -v "$cmd" &> /dev/null; then
@@ -45,7 +45,7 @@ detect_python() {
             fi
         fi
     done
-    
+
     if [[ -z "$python_cmd" ]]; then
         echo ""
     else
@@ -75,7 +75,7 @@ get_bin_dir() {
 create_dir() {
     local dir="$1"
     local os="$2"
-    
+
     if [[ "$os" == "windows" ]]; then
         mkdir -p "$dir"
     else
@@ -93,7 +93,7 @@ install_file() {
     local file="$1"
     local dest="$2"
     local os="$3"
-    
+
     if [[ "$os" == "windows" ]]; then
         cp "$file" "$dest"
         chmod +x "$dest"

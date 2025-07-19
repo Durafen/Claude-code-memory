@@ -123,7 +123,7 @@ Use `§m` to search memory for detailed configuration patterns, file organizatio
 **Research-backed categorization with semantic content analysis:**
 
 - **`debugging_pattern` (30% target)**: SOLUTIONS and resolution patterns for errors (not the bugs themselves)
-- **`implementation_pattern` (25% target)**: Coding solutions, algorithms, best practices  
+- **`implementation_pattern` (25% target)**: Coding solutions, algorithms, best practices
 - **`integration_pattern` (15% target)**: APIs, databases, authentication, pipelines
 - **`configuration_pattern` (12% target)**: Environment setup, deployment, CI/CD
 - **`architecture_pattern` (10% target)**: System design, component structure
@@ -136,7 +136,7 @@ Use `§m` to search memory for detailed configuration patterns, file organizatio
 ***Don't store just info about bugs, but store about solutions, insights about how the code works***
 
 When categorizing memories:
-- **debugging_pattern**: Store SOLUTIONS and resolution patterns, not the bugs themselves  
+- **debugging_pattern**: Store SOLUTIONS and resolution patterns, not the bugs themselves
 - **implementation_pattern**: Working code solutions and techniques
 - Focus on "how to fix" rather than "what's broken"
 - Only store after issues are resolved with working solutions
@@ -155,7 +155,7 @@ When categorizing memories:
 # Filter by entity types only
 search_similar("pattern", entityTypes=["function", "class"])
 
-# Filter by chunk types only  
+# Filter by chunk types only
 search_similar("pattern", entityTypes=["metadata"])        # Fast search
 search_similar("pattern", entityTypes=["implementation"])  # Detailed code
 
@@ -209,7 +209,7 @@ claude-indexer index -p /path/to/test-files -c watcher-test --verbose
 
 **Testing Best Practices:**
 - Always use separate test collections (watcher-test, debug-test) for debugging
-- Use 1-2 Python files only for cleaner debug output  
+- Use 1-2 Python files only for cleaner debug output
 - Never contaminate production memory collections during testing
 - Test indexing, relations, file processing, incremental updates, parser functionality
 - MCP server already configured for watcher-test collection
@@ -244,8 +244,8 @@ python utils/manual_memory_backup.py restore -f backup.json --dry-run
 read_graph(entity="AuthService", mode="smart")
 # Returns: AI summary of AuthService's connections, dependencies, usage
 
-# See all relationships for a specific entity  
-read_graph(entity="process_login", mode="relationships") 
+# See all relationships for a specific entity
+read_graph(entity="process_login", mode="relationships")
 # Returns: Only relations involving process_login (incoming/outgoing)
 
 # Get entities connected to a specific component
@@ -317,7 +317,7 @@ search_similar("complex validation logic", entityTypes=["implementation"])
 
 **Performance Benefits:**
 - **10-20 focused relations** instead of 300+ scattered ones
-- **Smart entity summaries** with key statistics and relationship breakdown  
+- **Smart entity summaries** with key statistics and relationship breakdown
 - **Laser-focused debugging** without information overload
 - **Backward compatible** - general graph still works without entity parameter
 
@@ -358,7 +358,7 @@ get_implementation("similar_function", scope="logical")  # Understand code style
 **CLI Debugging:**
 ```bash
 claude-indexer -p /path -c collection --verbose    # Detailed error messages
-claude-indexer service status --verbose            # Service debugging  
+claude-indexer service status --verbose            # Service debugging
 claude-indexer search "query" -p /path -c test     # Test search functionality
 ```
 
@@ -378,7 +378,7 @@ python utils/find_missing_files.py                # File sync debugging
 
 **Qdrant Connection Failed:**
 - Ensure Qdrant is running on port 6333
-- Check firewall settings  
+- Check firewall settings
 - Verify API key matches
 - Use `search_similar("qdrant connection error", entityTypes=["debugging_pattern"])` for solutions
 
@@ -396,7 +396,7 @@ python utils/find_missing_files.py                # File sync debugging
 
 **Use `§m` to search memory for:**
 - Multi-language parser specifications
-- Configuration system details  
+- Configuration system details
 - Performance optimization patterns
 - Version history and migration guides
 - Advanced debugging workflows

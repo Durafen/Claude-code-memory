@@ -94,22 +94,22 @@ Create an abstract observation system that can be plugged into any parser:
 # New: claude_indexer/analysis/observation_system.py
 class BaseObservationExtractor(ABC):
     """Abstract base for all observation extractors."""
-    
+
     @abstractmethod
     def extract_function_observations(self, node, source_code) -> List[str]:
         """Extract function-level observations."""
         pass
-    
+
     @abstractmethod
     def extract_class_observations(self, node, source_code) -> List[str]:
         """Extract class-level observations."""
         pass
-    
+
     @abstractmethod
     def extract_file_observations(self, source_code) -> List[str]:
         """Extract file-level observations."""
         pass
-    
+
     def get_common_observations(self, node, source_code) -> List[str]:
         """Shared observation patterns across all languages."""
         return [
@@ -127,10 +127,10 @@ class BaseObservationExtractor(ABC):
 # Enhanced: claude_indexer/analysis/javascript_observation_extractor.py
 class JavaScriptObservationExtractor(BaseObservationExtractor):
     """Advanced JavaScript/TypeScript observation extraction."""
-    
+
     def extract_function_observations(self, node, source_code) -> List[str]:
         observations = []
-        
+
         # JSDoc Analysis
         jsdoc = self._extract_jsdoc(node, source_code)
         if jsdoc:
@@ -139,23 +139,23 @@ class JavaScriptObservationExtractor(BaseObservationExtractor):
                 f"params: {len(jsdoc.get('params', []))} parameters",
                 f"returns: {jsdoc.get('returns', 'unknown type')}"
             ])
-        
+
         # Async/Await Pattern Detection
         if self._is_async_function(node, source_code):
             observations.append("behavior: asynchronous")
             observations.extend(self._extract_await_patterns(source_code))
-        
+
         # React Patterns
         if self._is_react_component(node, source_code):
             observations.append("type: React component")
             observations.extend(self._extract_react_patterns(source_code))
-        
+
         # Function Calls with Context
         calls = self._extract_semantic_calls(source_code)
         observations.extend([f"calls: {call}" for call in calls])
-        
+
         return observations + self.get_common_observations(node, source_code)
-    
+
     def _extract_react_patterns(self, source_code) -> List[str]:
         """Extract React-specific patterns."""
         patterns = []
@@ -173,19 +173,19 @@ class JavaScriptObservationExtractor(BaseObservationExtractor):
 class HTMLObservationExtractor(BaseObservationExtractor):
     def extract_file_observations(self, source_code) -> List[str]:
         observations = []
-        
+
         # Accessibility Analysis
         if self._has_accessibility_attributes(source_code):
             observations.append("accessibility: WCAG compliant")
-        
+
         # Component Analysis
         custom_elements = self._extract_custom_elements(source_code)
         observations.extend([f"component: {elem}" for elem in custom_elements])
-        
+
         # SEO Analysis
         seo_score = self._calculate_seo_score(source_code)
         observations.append(f"seo_score: {seo_score}/100")
-        
+
         return observations
 ```
 
@@ -196,16 +196,16 @@ class HTMLObservationExtractor(BaseObservationExtractor):
 class CSSObservationExtractor(BaseObservationExtractor):
     def extract_file_observations(self, source_code) -> List[str]:
         observations = []
-        
+
         # Responsive Design Patterns
         if self._has_media_queries(source_code):
             observations.append("responsive: mobile-first design")
-        
+
         # CSS Architecture
         methodology = self._detect_css_methodology(source_code)
         if methodology:
             observations.append(f"methodology: {methodology}")
-        
+
         return observations
 ```
 
@@ -219,16 +219,16 @@ class JavaScriptParser(TreeSitterParser):
     def __init__(self):
         super().__init__('javascript')
         self.observation_extractor = JavaScriptObservationExtractor()
-    
+
     def _create_function_entity(self, node, file_path, content):
         """Enhanced with observation extraction."""
         # Existing entity creation logic...
-        
+
         # NEW: Add observations
         observations = self.observation_extractor.extract_function_observations(
             node, self.extract_node_text(node, content)
         )
-        
+
         # Store in metadata for progressive disclosure
         metadata = {
             'observations': observations,
@@ -237,7 +237,7 @@ class JavaScriptParser(TreeSitterParser):
                 'complexity': self._calculate_complexity(implementation)
             }
         }
-        
+
         return EntityChunk(
             chunk_type="metadata",
             content=signature,

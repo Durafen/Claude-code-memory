@@ -82,7 +82,7 @@ This prompt provides a systematic approach to analyze entity bloat across all di
 
 #### 1. **QdrantStatsCollector** (`utils/qdrant_stats.py`)
 - **Purpose**: Comprehensive collection statistics with detailed entity type analysis
-- **Key Methods**: 
+- **Key Methods**:
   - `get_collection_stats()` - baseline statistics
   - `_analyze_file_types()` - file extension and entity type breakdown
   - `_count_manual_entries()` - manual vs automated detection
@@ -136,8 +136,8 @@ scroll_result = client.scroll(
 #### **Entity vs Relation Detection Logic**
 ```python
 # Distinguish relations from entities
-is_relation = ('entity_name' in payload and 
-              'relation_target' in payload and 
+is_relation = ('entity_name' in payload and
+              'relation_target' in payload and
               'relation_type' in payload)
 ```
 

@@ -15,7 +15,7 @@
 We sought to build the **ideal memory solution** for Claude Code that would provide:
 
 - **Context-aware conversations**: Claude remembers project structure, patterns, and decisions
-- **Long conversation continuity**: Persistent memory across sessions and projects  
+- **Long conversation continuity**: Persistent memory across sessions and projects
 - **High accuracy retrieval**: Semantic + structural search for code understanding
 - **Scalable architecture**: Works for both small scripts and large codebases
 
@@ -577,7 +577,7 @@ collections:
 
 ### Quantitative Goals
 - ✅ **Context Accuracy**: >90% relevant code suggestions
-- ✅ **Search Precision**: >85% accurate semantic search results  
+- ✅ **Search Precision**: >85% accurate semantic search results
 - ✅ **Response Time**: <2 seconds for knowledge graph queries
 - ✅ **Index Coverage**: 100% of project files processed successfully
 
@@ -902,7 +902,7 @@ python -m pytest tests/integration/ -v
 
 # Test by category using markers
 python -m pytest -m "unit" -v
-python -m pytest -m "integration" -v  
+python -m pytest -m "integration" -v
 python -m pytest -m "e2e" -v
 
 # Coverage report with missing lines
@@ -1012,10 +1012,10 @@ def find_installation_patterns(self, content: str) -> List[str]:
 def correlate_docs_to_code(self) -> List[Dict[str, Any]]:
     """Create correlations between documentation and code"""
     correlations = []
-    
+
     # Map README sections to code files
     readme_topics = self.get_indexed_markdown_topics('README.md')
-    
+
     for topic in readme_topics:
         if topic['name'].lower() in ['installation', 'setup']:
             # Link to setup.py, requirements.txt, install.sh
@@ -1026,14 +1026,14 @@ def correlate_docs_to_code(self) -> List[Dict[str, Any]]:
         elif topic['name'].lower() in ['usage', 'api', 'examples']:
             # Link to main modules, example files
             correlations.extend(self.create_usage_correlations(topic))
-    
+
     return correlations
 
 def create_setup_correlations(self, topic: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Create correlations for setup/installation content"""
     correlations = []
     setup_files = ['setup.py', 'requirements.txt', 'install.sh', 'pyproject.toml']
-    
+
     for setup_file in setup_files:
         if self.file_exists_in_project(setup_file):
             correlations.append({
@@ -1042,7 +1042,7 @@ def create_setup_correlations(self, topic: Dict[str, Any]) -> List[Dict[str, Any
                 'relationType': 'documents',
                 'correlation_type': 'installation'
             })
-    
+
     return correlations
 ```
 
@@ -1051,16 +1051,16 @@ def create_setup_correlations(self, topic: Dict[str, Any]) -> List[Dict[str, Any
 def map_architecture_decisions(self) -> List[Dict[str, Any]]:
     """Map CLAUDE.md architecture decisions to code implementations"""
     correlations = []
-    
+
     # Extract architecture decisions from CLAUDE.md
     claude_content = self.get_file_content('CLAUDE.md')
     if claude_content:
         decisions = self.extract_architecture_decisions(claude_content)
-        
+
         for decision in decisions:
             # Find implementing code patterns
             implementing_files = self.find_implementing_code(decision)
-            
+
             for impl_file in implementing_files:
                 correlations.append({
                     'from': f"CLAUDE.md:{decision['section']}",
@@ -1068,13 +1068,13 @@ def map_architecture_decisions(self) -> List[Dict[str, Any]]:
                     'relationType': 'implements',
                     'correlation_type': 'architecture'
                 })
-    
+
     return correlations
 
 def extract_architecture_decisions(self, content: str) -> List[Dict[str, Any]]:
     """Extract architecture decisions from CLAUDE.md"""
     decisions = []
-    
+
     # Look for technology choices
     if 'Tree-sitter' in content:
         decisions.append({
@@ -1082,14 +1082,14 @@ def extract_architecture_decisions(self, content: str) -> List[Dict[str, Any]]:
             'decision': 'Tree-sitter + Jedi',
             'implementation_patterns': ['tree_sitter', 'jedi', 'parse_with_tree_sitter']
         })
-    
+
     if 'Qdrant' in content:
         decisions.append({
             'section': 'Vector Database',
             'decision': 'Qdrant with OpenAI embeddings',
             'implementation_patterns': ['QdrantClient', 'openai', 'create_entities_direct']
         })
-    
+
     return decisions
 ```
 
@@ -1098,7 +1098,7 @@ def extract_architecture_decisions(self, content: str) -> List[Dict[str, Any]]:
 def create_correlation_entities(self, correlations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Create MCP entities for document-code correlations"""
     entities = []
-    
+
     for correlation in correlations:
         entity = {
             'name': f"correlation_{correlation['from']}_{correlation['to']}",
@@ -1111,7 +1111,7 @@ def create_correlation_entities(self, correlations: List[Dict[str, Any]]) -> Lis
             ]
         }
         entities.append(entity)
-    
+
     return entities
 ```
 
@@ -1119,37 +1119,37 @@ def create_correlation_entities(self, correlations: List[Dict[str, Any]]) -> Lis
 
 **Extend `index_project()` method:**
 ```python
-def index_project(self, include_tests: bool = False, incremental: bool = False, 
+def index_project(self, include_tests: bool = False, incremental: bool = False,
                  generate_commands: bool = False,
                  enable_multi_modal: bool = False) -> bool:
     """Index the entire project with optional multi-modal correlation"""
-    
+
     # ... existing indexing logic ...
-    
+
     # Add multi-modal correlation step
     if enable_multi_modal:
         self.log("Starting multi-modal correlation analysis...")
-        
+
         # Extract documentation topics
         doc_topics = self.extract_all_documentation_topics()
-        
+
         # Create code-documentation correlations
         correlations = self.correlate_docs_to_code()
-        
+
         # Map architecture decisions
         arch_correlations = self.map_architecture_decisions()
         correlations.extend(arch_correlations)
-        
+
         # Create correlation entities
         correlation_entities = self.create_correlation_entities(correlations)
         self.entities.extend(correlation_entities)
-        
+
         # Create correlation relations
         for correlation in correlations:
             self.relations.append(correlation)
-        
+
         self.log(f"Created {len(correlations)} multi-modal correlations")
-    
+
     # ... rest of existing logic ...
 ```
 

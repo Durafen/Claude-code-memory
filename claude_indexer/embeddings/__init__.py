@@ -7,6 +7,6 @@ from .registry import EmbedderRegistry
 __all__ = [
     "Embedder",
     "EmbeddingResult",
-    "OpenAIEmbedder", 
+    "OpenAIEmbedder",
     "EmbedderRegistry",
 ]

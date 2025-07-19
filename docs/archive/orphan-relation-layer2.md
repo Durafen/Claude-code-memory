@@ -11,7 +11,7 @@ When files are deleted:
 
 ## Design Principles
 1. **No Duplication**: Reuse existing QdrantStore methods and patterns
-2. **Elegant Integration**: Extend `_handle_deleted_files()` without major refactoring  
+2. **Elegant Integration**: Extend `_handle_deleted_files()` without major refactoring
 3. **Performance**: Use efficient bulk operations via scroll/batch delete
 4. **Observability**: Verbose logging shows what relations are found/deleted
 5. **Testability**: Add comprehensive tests for orphan scenarios
@@ -22,35 +22,35 @@ When files are deleted:
 ```python
 def _cleanup_orphaned_relations(self, collection_name: str, verbose: bool = False) -> int:
     """Clean up relations that reference non-existent entities.
-    
+
     Returns:
         Number of orphaned relations deleted
     """
     # Step 1: Get all entity names currently in collection
     existing_entities = self._get_all_entity_names(collection_name)
-    
+
     # Step 2: Find all relations
     orphaned_relations = []
     all_relations = self._get_all_relations(collection_name)
-    
+
     # Step 3: Check each relation for orphaned references
     for relation in all_relations:
         from_entity = relation.payload.get('from', '')
         to_entity = relation.payload.get('to', '')
-        
+
         if from_entity not in existing_entities or to_entity not in existing_entities:
             orphaned_relations.append(relation)
             if verbose:
                 self.logger.info(f"🔍 Found orphaned relation: {from_entity} -> {to_entity}")
-    
+
     # Step 4: Batch delete orphaned relations
     if orphaned_relations:
         relation_ids = [r.id for r in orphaned_relations]
         self.vector_store.delete_points(collection_name, relation_ids)
-        
+
         if verbose:
             self.logger.info(f"🗑️  Deleted {len(orphaned_relations)} orphaned relations")
-    
+
     return len(orphaned_relations)
 ```
 
@@ -61,7 +61,7 @@ def _cleanup_orphaned_relations(self, collection_name: str, verbose: bool = Fals
 def _get_all_entity_names(self, collection_name: str) -> Set[str]:
     """Get all entity names from the collection."""
     entity_names = set()
-    
+
     # Use scroll to get all entities (type != "relation")
     scroll_result = self.vector_store.client.scroll(
         collection_name=collection_name,
@@ -84,12 +84,12 @@ def _get_all_entity_names(self, collection_name: str) -> Set[str]:
         with_payload=True,
         with_vectors=False
     )
-    
+
     for point in scroll_result[0]:
         name = point.payload.get('name', '')
         if name:
             entity_names.add(name)
-    
+
     return entity_names
 ```
 
@@ -98,7 +98,7 @@ def _get_all_entity_names(self, collection_name: str) -> Set[str]:
 def _get_all_relations(self, collection_name: str) -> List[models.ScoredPoint]:
     """Get all relations from the collection."""
     relations = []
-    
+
     # Use scroll to get all relations
     scroll_result = self.vector_store.client.scroll(
         collection_name=collection_name,
@@ -114,7 +114,7 @@ def _get_all_relations(self, collection_name: str) -> List[models.ScoredPoint]:
         with_payload=True,
         with_vectors=False
     )
-    
+
     relations.extend(scroll_result[0])
     return relations
 ```
@@ -124,21 +124,21 @@ def _get_all_relations(self, collection_name: str) -> List[models.ScoredPoint]:
 Modify the existing method to call orphan cleanup after entity deletion:
 
 ```python
-def _handle_deleted_files(self, deleted_files: List[Path], collection_name: str, 
+def _handle_deleted_files(self, deleted_files: List[Path], collection_name: str,
                          verbose: bool = False) -> Tuple[int, int]:
     """Handle file deletions by removing entities and orphaned relations."""
-    
+
     # Existing entity deletion code...
     total_deleted = len(deleted_entity_ids)
-    
+
     # NEW: Clean up orphaned relations
     orphaned_deleted = 0
     if total_deleted > 0:
         if verbose:
             self.logger.info("🔍 Searching for orphaned relations...")
-        
+
         orphaned_deleted = self._cleanup_orphaned_relations(collection_name, verbose)
-    
+
     return total_deleted, orphaned_deleted
 ```
 
@@ -171,13 +171,13 @@ def test_cleanup_orphaned_relations_basic():
     # Delete some entities
     # Verify orphaned relations are detected
     # Verify cleanup removes only orphaned relations
-    
+
 def test_cleanup_preserves_valid_relations():
     """Test that valid relations are not deleted."""
     # Setup: Create interconnected entities
     # Delete one entity
     # Verify only relations touching deleted entity are removed
-    
+
 def test_cleanup_cross_file_relations():
     """Test orphan cleanup for cross-file relations."""
     # Create entities in multiple files
@@ -195,7 +195,7 @@ def test_incremental_update_with_orphan_cleanup():
     # Modify files to remove entities
     # Run incremental update
     # Verify orphaned relations are cleaned
-    
+
 def test_verbose_logging_output():
     """Test verbose output for orphan detection."""
     # Run with verbose=True

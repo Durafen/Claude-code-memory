@@ -107,7 +107,7 @@ cp settings.template.txt settings.txt
 
 # 3. Install our enhanced MCP memory server
 git clone https://github.com/Durafen/mcp-qdrant-memory.git
-cd mcp-qdrant-memory 
+cd mcp-qdrant-memory
 npm install
 npm run build
 cd ..
@@ -141,7 +141,7 @@ claude-indexer add-mcp -c my-project
 ## 🎯 Proven Results
 
 - **3.99ms** search across millions of lines of code
-- **90% faster** debugging with pattern memory  
+- **90% faster** debugging with pattern memory
 - **85% cost reduction** with Voyage AI embeddings
 - **95.3%** variable extraction coverage
 - **158/158** tests passing in production
@@ -213,7 +213,7 @@ Add to your `~/.claude/settings.json`:
         "matcher": "",
         "hooks": [
           {
-            "type": "command", 
+            "type": "command",
             "command": "python3 '/path/to/Claude-code-memory/utils/prompt_handler.py'"
           }
         ]
@@ -273,7 +273,7 @@ def hash_password_legacy(password):
 You: "dups off" (disable Memory Guard for this session)
 Assistant: 🔴 Memory Guard disabled for this session
 
-You: "dups status" 
+You: "dups status"
 Assistant: 📊 Memory Guard Status: 🔴 DISABLED (use 'dups on' to enable)
 
 You: "dups on" (re-enable protection)
@@ -448,8 +448,8 @@ docker run -p 6333:6333 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdrant
 
 ## 🤝 Contributing
 
-**Found a bug?** 🐛 [Report it here](https://github.com/Durafen/Claude-code-memory/issues)  
-**Want a feature?** ✨ [Request it here](https://github.com/Durafen/Claude-code-memory/issues)  
+**Found a bug?** 🐛 [Report it here](https://github.com/Durafen/Claude-code-memory/issues)
+**Want a feature?** ✨ [Request it here](https://github.com/Durafen/Claude-code-memory/issues)
 **Have feedback?** 💬 [Start a discussion](https://github.com/Durafen/Claude-code-memory/discussions)
 
 ## 🎉 Start Your God Mode Journey

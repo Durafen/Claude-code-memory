@@ -42,7 +42,7 @@ Remove the MCP storage backend from `claude_indexer` to simplify the architectur
 Remove from `claude_indexer/indexer.py`:
 - [ ] `generate_mcp_commands()` method
 - [ ] `save_mcp_commands_to_file()` method
-- [ ] `_send_to_mcp()` method  
+- [ ] `_send_to_mcp()` method
 - [ ] `_call_mcp_api()` method
 - [ ] `_fallback_print_commands()` method
 - [ ] All MCP-related imports
@@ -82,10 +82,10 @@ Update `claude_indexer/config.py`:
 # tests/unit/test_direct_only_mode.py
 def test_direct_qdrant_only():
     """Ensure only Qdrant backend is available"""
-    
+
 def test_no_mcp_imports():
     """Verify MCP modules are not imported"""
-    
+
 def test_single_storage_path():
     """Confirm no dual-mode logic remains"""
 ```
@@ -225,7 +225,7 @@ If issues arise:
 ## Timeline
 
 - **Day 1**: Core removal and CLI updates (3 hours)
-- **Day 2**: Test updates and validation (3 hours)  
+- **Day 2**: Test updates and validation (3 hours)
 - **Day 3**: Documentation and release (1 hour)
 
 Total effort: **7 hours** of focused work

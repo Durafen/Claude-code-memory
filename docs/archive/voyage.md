@@ -29,7 +29,7 @@ This document outlines the complete implementation plan for integrating Voyage-3
                                                         ▲
                        ┌────────────────┐               │
                        │ claude-indexer │───────────────┘
-                       │ (Voyage API)   │        
+                       │ (Voyage API)   │
                        └────────────────┘
 ```
 
@@ -48,7 +48,7 @@ from .base import Embedder, EmbeddingResult
 
 class VoyageEmbedder(Embedder):
     """Voyage AI embedder with superior performance and lower costs."""
-    
+
     MODELS = {
         "voyage-3": {
             "dimensions": 1024,
@@ -61,12 +61,12 @@ class VoyageEmbedder(Embedder):
             "cost_per_1k_tokens": 0.00002
         }
     }
-    
+
     def __init__(self, api_key: str, model: str = "voyage-3-lite"):
         self.client = voyageai.Client(api_key=api_key)
         self.model = model
         self.model_info = self.MODELS[model]
-        
+
     def embed(self, text: str) -> EmbeddingResult:
         """Generate embedding for single text."""
         result = self.client.embed(
@@ -74,11 +74,11 @@ class VoyageEmbedder(Embedder):
             model=self.model,
             input_type="document"
         )
-        
+
         # Calculate token count (Voyage provides this)
         token_count = result.total_tokens
         cost = (token_count / 1000) * self.model_info["cost_per_1k_tokens"]
-        
+
         return EmbeddingResult(
             embedding=result.embeddings[0],
             model=self.model,
@@ -86,13 +86,13 @@ class VoyageEmbedder(Embedder):
             embedding_tokens=token_count,
             total_cost=cost
         )
-    
+
     def embed_batch(self, texts: List[str]) -> List[EmbeddingResult]:
         """Generate embeddings for multiple texts efficiently."""
         # Voyage supports up to 128 texts per batch
         batch_size = 128
         all_results = []
-        
+
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
             result = self.client.embed(
@@ -100,11 +100,11 @@ class VoyageEmbedder(Embedder):
                 model=self.model,
                 input_type="document"
             )
-            
+
             # Calculate costs
             token_count = result.total_tokens
             cost_per_text = (token_count / len(batch) / 1000) * self.model_info["cost_per_1k_tokens"]
-            
+
             for j, embedding in enumerate(result.embeddings):
                 all_results.append(EmbeddingResult(
                     embedding=embedding,
@@ -113,9 +113,9 @@ class VoyageEmbedder(Embedder):
                     embedding_tokens=token_count // len(batch),
                     total_cost=cost_per_text
                 ))
-        
+
         return all_results
-    
+
     @property
     def dimension(self) -> int:
         """Return embedding dimension."""
@@ -143,7 +143,7 @@ def create_embedder(provider: str = "openai", **kwargs) -> Embedder:
     embedder_class = EMBEDDERS.get(provider)
     if not embedder_class:
         raise ValueError(f"Unknown embedder provider: {provider}")
-    
+
     return embedder_class(**kwargs)
 ```
 
@@ -154,7 +154,7 @@ def create_embedder(provider: str = "openai", **kwargs) -> Embedder:
 ```python
 class IndexerConfig(BaseModel):
     # Existing fields...
-    
+
     # Updated embedding configuration
     embedding_provider: str = Field(
         default="openai",
@@ -168,7 +168,7 @@ class IndexerConfig(BaseModel):
         default="voyage-3-lite",
         description="Voyage model: voyage-3 or voyage-3-lite"
     )
-    
+
     @validator("embedding_provider")
     def validate_provider(cls, v):
         valid_providers = ["openai", "voyage", "local", "dummy"]
@@ -209,16 +209,16 @@ export class VoyageEmbeddingProvider implements EmbeddingProvider {
   private apiKey: string;
   private modelName: string;
   private baseUrl = 'https://api.voyageai.com/v1';
-  
+
   constructor(apiKey: string, modelName: string = 'voyage-3-lite') {
     this.apiKey = apiKey;
     this.modelName = modelName;
   }
-  
+
   async initialize(): Promise<void> {
     // Voyage doesn't require initialization
   }
-  
+
   async embed(text: string): Promise<number[]> {
     const response = await axios.post(
       `${this.baseUrl}/embeddings`,
@@ -234,15 +234,15 @@ export class VoyageEmbeddingProvider implements EmbeddingProvider {
         }
       }
     );
-    
+
     return response.data.data[0].embedding;
   }
-  
+
   async embedBatch(texts: string[]): Promise<number[][]> {
     // Voyage supports up to 128 texts per batch
     const batchSize = 128;
     const allEmbeddings: number[][] = [];
-    
+
     for (let i = 0; i < texts.length; i += batchSize) {
       const batch = texts.slice(i, i + batchSize);
       const response = await axios.post(
@@ -259,17 +259,17 @@ export class VoyageEmbeddingProvider implements EmbeddingProvider {
           }
         }
       );
-      
+
       allEmbeddings.push(...response.data.data.map((d: any) => d.embedding));
     }
-    
+
     return allEmbeddings;
   }
-  
+
   getDimensions(): number {
     return this.modelName === 'voyage-3' ? 1024 : 512;
   }
-  
+
   getModelName(): string {
     return this.modelName;
   }
@@ -287,12 +287,12 @@ export async function createEmbeddingProvider(
   config: EmbeddingProviderConfig
 ): Promise<EmbeddingProvider> {
   let provider: EmbeddingProvider;
-  
+
   switch (config.provider) {
     case 'openai':
       // ... existing code ...
       break;
-      
+
     case 'voyage':
       if (!config.apiKey) {
         throw new Error('Voyage API key required');
@@ -302,15 +302,15 @@ export async function createEmbeddingProvider(
         config.modelName || 'voyage-3-lite'
       );
       break;
-      
+
     case 'local':
       // ... existing code ...
       break;
-      
+
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
-  
+
   await provider.initialize();
   return provider;
 }
@@ -325,11 +325,11 @@ const envSchema = z.object({
   QDRANT_URL: z.string().default("http://localhost:6333"),
   QDRANT_API_KEY: z.string().optional(),
   QDRANT_COLLECTION_NAME: z.string(),
-  
+
   // Embedding configuration
   EMBEDDING_PROVIDER: z.enum(['openai', 'voyage', 'local']).default('openai'),
   EMBEDDING_MODEL: z.string().optional(),
-  
+
   // API Keys (provider-specific)
   OPENAI_API_KEY: z.string().optional(),
   VOYAGE_API_KEY: z.string().optional(),
@@ -337,16 +337,16 @@ const envSchema = z.object({
 
 export function validateConfig(env: any) {
   const config = envSchema.parse(env);
-  
+
   // Provider-specific validation
   if (config.EMBEDDING_PROVIDER === 'openai' && !config.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY required when using OpenAI provider');
   }
-  
+
   if (config.EMBEDDING_PROVIDER === 'voyage' && !config.VOYAGE_API_KEY) {
     throw new Error('VOYAGE_API_KEY required when using Voyage provider');
   }
-  
+
   return config;
 }
 ```
@@ -368,24 +368,24 @@ import numpy as np
 
 def test_voyage_embeddings():
     """Test Voyage embeddings functionality."""
-    
+
     # Initialize embedder
     voyage_key = os.getenv("VOYAGE_API_KEY")
     if not voyage_key:
         print("⚠️  Set VOYAGE_API_KEY environment variable")
         return
-    
+
     embedder = VoyageEmbedder(api_key=voyage_key, model="voyage-3-lite")
-    
+
     # Test single embedding
     print("Testing single embedding...")
     result = embedder.embed("def calculate_fibonacci(n): return fibonacci sequence")
-    
+
     print(f"✓ Model: {result.model}")
     print(f"✓ Dimensions: {len(result.embedding)}")
     print(f"✓ Tokens: {result.total_tokens}")
     print(f"✓ Cost: ${result.total_cost:.6f}")
-    
+
     # Test batch embedding
     print("\nTesting batch embedding...")
     test_texts = [
@@ -393,14 +393,14 @@ def test_voyage_embeddings():
         "async function fetchData from API",
         "def validate_email with regex pattern"
     ] * 10  # 30 texts
-    
+
     results = embedder.embed_batch(test_texts)
     total_cost = sum(r.total_cost for r in results)
-    
+
     print(f"✓ Batch size: {len(results)}")
     print(f"✓ Total cost: ${total_cost:.6f}")
     print(f"✓ Avg cost per text: ${total_cost/len(results):.6f}")
-    
+
     # Test semantic similarity
     print("\nTesting semantic similarity...")
     texts = [
@@ -408,17 +408,17 @@ def test_voyage_embeddings():
         ("calculate sum", "add numbers"),
         ("fetch API data", "get server response")
     ]
-    
+
     for text1, text2 in texts:
         emb1 = embedder.embed(text1).embedding
         emb2 = embedder.embed(text2).embedding
-        
+
         similarity = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
         print(f"{text1} <-> {text2}: {similarity:.3f}")
 
 def test_full_indexing():
     """Test full project indexing with Voyage."""
-    
+
     print("\nTesting full indexing...")
     os.system("""
         claude-indexer -p /path/to/test/project \
@@ -506,18 +506,18 @@ def compare_search_quality(query: str, collections: List[str]):
     """Compare search results across collections."""
     results = {}
     timings = {}
-    
+
     for collection in collections:
         start = time.time()
         # Run search
         result = run_search(query, collection)
         timings[collection] = time.time() - start
         results[collection] = result
-    
+
     # Compare results
     print(f"\nQuery: {query}")
     print("-" * 50)
-    
+
     for collection in collections:
         print(f"\n{collection}:")
         print(f"  Time: {timings[collection]:.3f}s")
@@ -551,7 +551,7 @@ def display_cost_comparison(result: IndexingResult):
         openai_cost = (result.total_tokens / 1000) * 0.00013  # OpenAI 3-large
         voyage_cost = result.total_cost
         savings = openai_cost - voyage_cost
-        
+
         print(f"\n💰 [green]Cost Analysis:[/green]")
         print(f"   Voyage cost: ${voyage_cost:.6f}")
         print(f"   OpenAI cost would be: ${openai_cost:.6f}")
@@ -580,7 +580,7 @@ project-memory  # Still intact
 - ✅ Search quality improved (10% better)
 - ✅ Response times acceptable (<100ms)
 
-### Month 1 Goals  
+### Month 1 Goals
 - ✅ All projects migrated to Voyage
 - ✅ $100+ monthly savings achieved
 - ✅ User satisfaction maintained/improved

@@ -23,7 +23,7 @@ def _estimate_tokens(self, text: str) -> int:
 
 **Key Issues Identified:**
 - Inaccurate cost calculations (15-25% error margin)
-- Suboptimal batch sizing for API efficiency 
+- Suboptimal batch sizing for API efficiency
 - Rate limiting based on estimates rather than actual token counts
 - No model-specific tokenization differences
 
@@ -61,7 +61,7 @@ def _estimate_tokens_with_tiktoken(self, text: str) -> int:
             return len(self._tiktoken_encoder.encode(text))
         except Exception as e:
             self.logger.debug(f"Tiktoken encoding failed: {e}, falling back to approximation")
-    
+
     # Fallback to character-based approximation
     return max(1, len(text) // 4)
 ```
@@ -78,12 +78,12 @@ def _estimate_tokens_with_tiktoken(self, text: str) -> int:
 # claude_indexer/embeddings/base.py
 class TiktokenMixin:
     """Mixin for accurate token counting with tiktoken."""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._tiktoken_encoder = None
         self._init_tiktoken()
-    
+
     def _init_tiktoken(self):
         """Initialize tiktoken encoder for the model."""
         try:
@@ -102,11 +102,11 @@ class TiktokenMixin:
 **2. OpenAI Embedder Integration:**
 ```python
 class OpenAIEmbedder(TiktokenMixin, RetryableEmbedder):
-    
+
     def _estimate_tokens(self, text: str) -> int:
         """Accurate token estimation using tiktoken."""
         return self._estimate_tokens_with_tiktoken(text)
-    
+
     def _init_tiktoken(self):
         """Initialize tiktoken with model-specific encoder."""
         try:
@@ -127,7 +127,7 @@ class OpenAIEmbedder(TiktokenMixin, RetryableEmbedder):
 **3. Voyage AI Embedder Integration:**
 ```python
 class VoyageEmbedder(TiktokenMixin, RetryableEmbedder):
-    
+
     def _init_tiktoken(self):
         """Initialize tiktoken - Voyage uses similar tokenization to OpenAI."""
         try:
@@ -147,35 +147,35 @@ def embed_batch(self, texts: List[str]) -> List[EmbeddingResult]:
     """Enhanced batch processing with accurate token counting."""
     if not texts:
         return []
-    
+
     # Model-specific token limits with tiktoken accuracy
     token_limit = self._get_effective_token_limit()
     text_count_limit = self._get_text_count_limit()
-    
+
     results = []
     current_batch = []
     current_tokens = 0
-    
+
     for text in texts:
         # Use accurate tiktoken counting for batch optimization
         text_tokens = self._estimate_tokens(text)
-        
-        if ((current_tokens + text_tokens > token_limit or 
+
+        if ((current_tokens + text_tokens > token_limit or
              len(current_batch) >= text_count_limit) and current_batch):
             # Process current batch
             batch_results = self._embed_batch(current_batch)
             results.extend(batch_results)
             current_batch = []
             current_tokens = 0
-        
+
         current_batch.append(text)
         current_tokens += text_tokens
-    
+
     # Process final batch
     if current_batch:
         batch_results = self._embed_batch(current_batch)
         results.extend(batch_results)
-    
+
     return results
 ```
 
@@ -203,7 +203,7 @@ def _calculate_cost(self, token_count: int) -> float:
 
 **Enhanced with Accurate Tokens:**
 - OpenAI text-embedding-3-small: $0.02/1M tokens
-- Voyage AI voyage-3-lite: $0.02/1M tokens  
+- Voyage AI voyage-3-lite: $0.02/1M tokens
 - 15-25% more accurate billing estimates
 
 ### 3.3 Batch Size Optimization
@@ -214,7 +214,7 @@ def _calculate_cost(self, token_count: int) -> float:
 - Result: Fewer API calls, better efficiency
 
 **Voyage AI Embeddings:**
-- Current: Token-estimated batching with 30K limit  
+- Current: Token-estimated batching with 30K limit
 - Enhanced: Accurate tiktoken-based batching
 - Result: Optimal batch utilization, reduced over/under-batching
 
@@ -225,7 +225,7 @@ def _calculate_cost(self, token_count: int) -> float:
 **Files to Modify:**
 1. `claude_indexer/embeddings/base.py` - Add TiktokenMixin
 2. `claude_indexer/embeddings/openai.py` - Integrate tiktoken
-3. `claude_indexer/embeddings/voyage.py` - Integrate tiktoken  
+3. `claude_indexer/embeddings/voyage.py` - Integrate tiktoken
 4. `requirements.txt` - Already includes tiktoken
 
 **Implementation Steps:**
@@ -257,7 +257,7 @@ def _calculate_cost(self, token_count: int) -> float:
 ```python
 class TestTiktokenIntegration:
     """Test tiktoken integration accuracy and fallback."""
-    
+
     def test_tiktoken_accuracy_vs_approximation(self):
         """Compare tiktoken vs character approximation accuracy."""
         test_texts = [
@@ -266,19 +266,19 @@ class TestTiktokenIntegration:
             "Very long text " * 100,
             "Mixed content with numbers 123 and symbols !!!",
         ]
-        
+
         for text in test_texts:
             # Test with tiktoken available
             openai_embedder = OpenAIEmbedder(api_key="test-key")
             tiktoken_count = openai_embedder._estimate_tokens(text)
-            
-            # Test character approximation  
+
+            # Test character approximation
             char_count = max(1, len(text) // 4)
-            
+
             # Tiktoken should be more accurate for OpenAI models
             assert tiktoken_count != char_count  # Should differ
             assert tiktoken_count > 0
-    
+
     def test_fallback_mechanism(self):
         """Test fallback when tiktoken unavailable."""
         with patch('tiktoken.encoding_for_model', side_effect=ImportError):
@@ -286,15 +286,15 @@ class TestTiktokenIntegration:
             token_count = embedder._estimate_tokens("test text")
             # Should fall back to character approximation
             assert token_count == max(1, len("test text") // 4)
-    
+
     def test_model_specific_encoders(self):
         """Test different encoders for different models."""
         models_to_test = [
             "text-embedding-3-small",
-            "text-embedding-3-large", 
+            "text-embedding-3-large",
             "text-embedding-ada-002"
         ]
-        
+
         for model in models_to_test:
             embedder = OpenAIEmbedder(api_key="test-key", model=model)
             # Should initialize appropriate encoder for each model
@@ -309,13 +309,13 @@ def test_enhanced_batch_processing(self):
     """Test improved batch efficiency with tiktoken."""
     # Generate texts of known token counts
     test_texts = generate_texts_with_known_tokens()
-    
+
     embedder = OpenAIEmbedder(api_key="test-key")
-    
+
     # Mock the API to track batch sizes
     with patch.object(embedder, '_embed_batch') as mock_batch:
         embedder.embed_batch(test_texts)
-        
+
         # Verify optimal batch sizes were used
         for call in mock_batch.call_args_list:
             batch_texts = call[0][0]
@@ -334,20 +334,20 @@ def test_cost_accuracy_improvement(self):
         ("medium_text", "Medium length text " * 20),
         ("long_text", "Very long text content " * 100)
     ]
-    
+
     for scenario_name, text in test_scenarios:
         # Character approximation cost
         char_tokens = len(text) // 4
         char_cost = char_tokens * 0.00002 / 1000  # text-embedding-3-small
-        
+
         # Tiktoken accurate cost
         embedder = OpenAIEmbedder(api_key="test-key")
         tiktoken_tokens = embedder._estimate_tokens(text)
         tiktoken_cost = tiktoken_tokens * 0.00002 / 1000
-        
+
         # Calculate accuracy improvement
         accuracy_diff = abs(tiktoken_cost - char_cost) / char_cost
-        
+
         # Should see significant differences for most texts
         print(f"{scenario_name}: {accuracy_diff*100:.1f}% difference")
 ```
@@ -361,7 +361,7 @@ def test_cost_accuracy_improvement(self):
 - Run comprehensive test suite
 - Validate accuracy improvements
 
-**Stage 2: Testing Environment**  
+**Stage 2: Testing Environment**
 - Deploy with tiktoken enabled
 - Monitor for any regressions
 - Validate cost and performance improvements
@@ -417,7 +417,7 @@ def _estimate_tokens_with_tiktoken(self, text: str) -> int:
     """Robust token estimation with comprehensive error handling."""
     if not self._tiktoken_encoder:
         return self._character_approximation(text)
-    
+
     try:
         return len(self._tiktoken_encoder.encode(text))
     except (UnicodeError, OverflowError) as e:
@@ -437,7 +437,7 @@ def _estimate_tokens_with_tiktoken(self, text: str) -> int:
 - Measure: Compare estimated vs actual API billing
 
 **API Efficiency:**
-- Target: 10-15% improvement in API call efficiency  
+- Target: 10-15% improvement in API call efficiency
 - Measure: Tokens per API request, reduced over/under-batching
 
 **Rate Limiting:**
@@ -485,13 +485,13 @@ def _estimate_tokens_with_tiktoken(self, text: str) -> int:
 This tiktoken integration plan delivers **accurate token counting** to replace the current 15-25% inaccurate character approximation. The implementation focuses on **MVP delivery** with:
 
 - ✅ **Robust fallback** for compatibility
-- ✅ **Model-specific encoders** for accuracy  
+- ✅ **Model-specific encoders** for accuracy
 - ✅ **Enhanced batch processing** for efficiency
 - ✅ **Comprehensive testing** for reliability
 
 **Expected Impact:**
 - 15-25% better cost accuracy
-- 10-15% API efficiency improvement  
+- 10-15% API efficiency improvement
 - Reduced rate limiting issues
 - Better resource utilization
 

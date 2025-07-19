@@ -47,7 +47,7 @@ class EntityChunk:
     chunk_type: ChunkType
     content: str
     metadata: Dict[str, Any]
-    
+
     def to_vector_payload(self) -> Dict[str, Any]:
         """Convert to Qdrant payload format"""
         return {
@@ -70,23 +70,23 @@ from typing import List, Optional
 
 class ASTContentExtractor:
     """Extract full implementation content using AST + Jedi"""
-    
+
     def __init__(self):
         self.jedi_project = jedi.Project(path=".")
-    
+
     def extract_implementation(self, file_path: Path) -> List[EntityChunk]:
         """Extract implementation chunks with semantic metadata"""
         chunks = []
-        
+
         with open(file_path) as f:
             source_code = f.read()
-        
+
         # Parse AST
         tree = ast.parse(source_code, filename=str(file_path))
-        
+
         # Create Jedi script for semantic analysis
         script = jedi.Script(source_code, path=file_path, project=self.jedi_project)
-        
+
         # Extract function implementations
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -97,10 +97,10 @@ class ASTContentExtractor:
                 chunk = self._extract_class_chunk(node, source_code, script)
                 if chunk:
                     chunks.append(chunk)
-        
+
         return chunks
-    
-    def _extract_function_chunk(self, node: ast.FunctionDef, 
+
+    def _extract_function_chunk(self, node: ast.FunctionDef,
                                source: str, script: jedi.Script) -> Optional[EntityChunk]:
         """Extract function implementation with semantic metadata"""
         # Get source code
@@ -108,11 +108,11 @@ class ASTContentExtractor:
         end_line = node.end_lineno
         lines = source.split('\n')[start_line:end_line]
         implementation = '\n'.join(lines)
-        
+
         # Get Jedi semantic data
         try:
             definition = script.goto(node.lineno, node.col_offset)[0]
-            
+
             # Extract semantic metadata
             semantic_metadata = {
                 "inferred_types": self._get_type_hints(definition),
@@ -123,7 +123,7 @@ class ASTContentExtractor:
             }
         except:
             semantic_metadata = {}
-        
+
         return EntityChunk(
             id=f"{hash(source)}::{node.name}::implementation",
             entity_name=node.name,
@@ -144,10 +144,10 @@ class ASTContentExtractor:
 ```python
 # claude_indexer/storage/qdrant.py
 class QdrantStore:
-    def store_dual_chunks(self, metadata_chunk: EntityChunk, 
+    def store_dual_chunks(self, metadata_chunk: EntityChunk,
                          implementation_chunk: Optional[EntityChunk]):
         """Store both metadata and implementation chunks"""
-        
+
         # Store metadata chunk (existing flow)
         metadata_vector = self._embed_content(metadata_chunk.content)
         self.client.upsert(
@@ -163,7 +163,7 @@ class QdrantStore:
                 )
             ]
         )
-        
+
         # Store implementation chunk if available
         if implementation_chunk:
             impl_vector = self._embed_content(implementation_chunk.content)
@@ -187,7 +187,7 @@ class QdrantStore:
 ```javascript
 // mcp-qdrant-memory/src/tools/search.ts
 export async function searchSimilar(
-  query: string, 
+  query: string,
   limit: number = 10
 ): Promise<SearchResult[]> {
   // Search metadata chunks only for performance
@@ -198,7 +198,7 @@ export async function searchSimilar(
     },
     limit
   });
-  
+
   // Enhance results with implementation hints
   return results.map(result => ({
     type: result.payload.type,
@@ -227,11 +227,11 @@ export async function getImplementation(
     },
     limit: 1
   });
-  
+
   if (results.length === 0) {
     return null;
   }
-  
+
   const result = results[0];
   return {
     entity_name: entityName,
@@ -268,7 +268,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     // New tool
     {
-      name: "get_implementation", 
+      name: "get_implementation",
       description: "Get full implementation code for an entity",
       inputSchema: {
         type: "object",
@@ -293,7 +293,7 @@ def test_dual_chunk_storage():
     """Test storing metadata and implementation chunks"""
     extractor = ASTContentExtractor()
     store = QdrantStore("test_collection")
-    
+
     # Create test file
     test_code = '''
 def calculate_sum(a: int, b: int) -> int:
@@ -301,7 +301,7 @@ def calculate_sum(a: int, b: int) -> int:
     result = a + b
     return result
 '''
-    
+
     # Extract chunks
     metadata_chunk = EntityChunk(
         id="file1::calculate_sum::metadata",
@@ -310,12 +310,12 @@ def calculate_sum(a: int, b: int) -> int:
         content="function: calculate_sum | Signature: (a: int, b: int) -> int | Add two numbers",
         metadata={"type": "function"}
     )
-    
+
     impl_chunks = extractor.extract_implementation(test_code)
-    
+
     # Store dual chunks
     store.store_dual_chunks(metadata_chunk, impl_chunks[0])
-    
+
     # Verify storage
     search_results = store.search("calculate sum", filter={"chunk_type": "metadata"})
     assert search_results[0]["has_implementation"] is True
@@ -331,15 +331,15 @@ test('Progressive disclosure workflow', async () => {
   const searchResults = await mcp.callTool('search_similar', {
     query: 'authentication function'
   });
-  
+
   expect(searchResults[0].data.has_implementation).toBe(true);
   expect(searchResults[0].data.name).toBe('authenticate_user');
-  
+
   // Step 2: Get implementation on demand
   const implementation = await mcp.callTool('get_implementation', {
     entity_name: 'authenticate_user'
   });
-  
+
   expect(implementation.source_code).toContain('def authenticate_user');
   expect(implementation.semantic_metadata.calls).toContain('verify_password');
 });
@@ -379,20 +379,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 def analyze_chunk_distribution(collection_name: str):
     """Analyze chunk type and size distribution"""
     store = QdrantStore(collection_name)
-    
+
     # Get all chunks
     metadata_chunks = store.client.scroll(
         collection_name=collection_name,
         scroll_filter=Filter(must=[FieldCondition(key="chunk_type", match=MatchValue(value="metadata"))]),
         limit=10000
     )
-    
+
     impl_chunks = store.client.scroll(
         collection_name=collection_name,
         scroll_filter=Filter(must=[FieldCondition(key="chunk_type", match=MatchValue(value="implementation"))]),
         limit=10000
     )
-    
+
     print(f"Metadata chunks: {len(metadata_chunks[0])}")
     print(f"Implementation chunks: {len(impl_chunks[0])}")
     print(f"Ratio: {len(impl_chunks[0]) / len(metadata_chunks[0]):.2%}")

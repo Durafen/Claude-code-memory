@@ -17,15 +17,15 @@ This plan extends the existing Python file operation detection in `PythonParser.
 1. **Pandas Operations** (High Priority)
    - `pandas.read_json()`, `pandas.read_csv()`, `pandas.read_excel()`
    - `DataFrame.to_json()`, `DataFrame.to_csv()`, `DataFrame.to_excel()`
-   
+
 2. **Pathlib Extended Operations**
    - `Path().read_text()`, `Path().read_bytes()`
    - `Path().write_text()`, `Path().write_bytes()`
-   
+
 3. **Requests/API Operations**
    - `requests.get('api/data.json').json()`
    - `urllib.request.urlopen()`
-   
+
 4. **Configuration File Operations**
    - `configparser.read()`, `toml.load()`, `xml.etree.ElementTree.parse()`
 
@@ -41,14 +41,14 @@ This plan extends the existing Python file operation detection in `PythonParser.
 def _extract_file_operations(self, tree: 'tree_sitter.Tree', file_path: Path, content: str) -> List['Relation']:
     """Extract file operations from Python AST using tree-sitter."""
     relations = []
-    
+
     # Extended file operation patterns
     FILE_OPERATIONS = {
         # Existing patterns (DO NOT MODIFY)
         'open': 'file_open',
         'json.load': 'json_load',
         # ... existing patterns ...
-        
+
         # NEW PATTERNS TO ADD:
         # Pandas operations
         'pandas.read_json': 'pandas_json_read',
@@ -60,18 +60,18 @@ def _extract_file_operations(self, tree: 'tree_sitter.Tree', file_path: Path, co
         '.to_json': 'pandas_json_write',
         '.to_csv': 'pandas_csv_write',
         '.to_excel': 'pandas_excel_write',
-        
+
         # Pathlib operations
         '.read_text': 'path_read_text',
         '.read_bytes': 'path_read_bytes',
         '.write_text': 'path_write_text',
         '.write_bytes': 'path_write_bytes',
-        
+
         # Requests operations
         'requests.get': 'requests_get',
         'requests.post': 'requests_post',
         'urllib.request.urlopen': 'urllib_open',
-        
+
         # Config operations
         'configparser.read': 'config_ini_read',
         'toml.load': 'toml_read',
@@ -88,7 +88,7 @@ For patterns like `requests.get().json()` or `df.to_json()`:
 # Inside find_file_operations() function
 if node.type == 'call':
     func_node = node.child_by_field_name('function')
-    
+
     # Handle method calls (e.g., df.to_json())
     if func_node and func_node.type == 'attribute':
         attr_value = func_node.child_by_field_name('attr')
@@ -331,7 +331,7 @@ with Path('config.yaml').open() as f:
 **Problem**: `.to_json()` is called on a variable, not directly on pandas
 **Solution**: Check if node type is 'attribute' and extract method name from 'attr' field
 
-### Issue 2: Import Alias Detection  
+### Issue 2: Import Alias Detection
 **Problem**: Code uses `pd` but FILE_OPERATIONS has `pandas`
 **Solution**: Add both patterns OR track import aliases (MVP: just add both)
 

@@ -1,6 +1,6 @@
 a# AST-Based Chunking Research and Decision
 
-*Analysis of chunking methodologies for enhanced semantic search in claude-indexer*  
+*Analysis of chunking methodologies for enhanced semantic search in claude-indexer*
 *Date: June 27, 2025*
 
 ## Research Context
@@ -98,7 +98,7 @@ Function parse_file(path: Path) -> ParseResult:
 **Claude's Actual Search Examples:**
 ```
 "incremental upload file changes embeddings vector store"
-"memory system analysis debugging patterns" 
+"memory system analysis debugging patterns"
 "orphaned relation cleanup algorithm entity detection"
 "MCP commands memory functionality usage patterns"
 ```
@@ -163,7 +163,7 @@ function get_implementation(entity_name) {
     "vector": [0.1, 0.2, ...],  // metadata-focused embedding
     "payload": {
         "name": "parse_file",
-        "chunk_type": "metadata", 
+        "chunk_type": "metadata",
         "signature": "parse_file(path: Path) -> ParseResult",
         "docstring": "Parse Python file using Tree-sitter",
         "has_implementation": true
@@ -172,7 +172,7 @@ function get_implementation(entity_name) {
 
 // Implementation chunk (detailed with AST + Jedi enrichment)
 {
-    "id": "file123::parse_file::implementation", 
+    "id": "file123::parse_file::implementation",
     "vector": [0.3, 0.4, ...],  // implementation-focused embedding
     "payload": {
         "name": "parse_file",

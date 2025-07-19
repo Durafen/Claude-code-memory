@@ -50,29 +50,29 @@ from .base import Embedder, EmbeddingResult
 
 class LocalEmbedder(Embedder):
     """Local sentence-transformers embedder with zero API costs."""
-    
+
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model_name = model_name
         self.model = None  # Lazy loading
         self._dimension = 384  # all-MiniLM-L6-v2 dimension
-        
+
     def _load_model(self):
         """Lazy load the model on first use."""
         if self.model is None:
             self.model = SentenceTransformer(self.model_name)
             # Update dimension based on loaded model
             self._dimension = self.model.get_sentence_embedding_dimension()
-    
+
     def embed(self, text: str) -> EmbeddingResult:
         """Generate embedding for single text."""
         self._load_model()
-        
+
         # Generate embedding
         embedding = self.model.encode([text], show_progress_bar=False)[0]
-        
+
         # Simulate token counting for compatibility
         estimated_tokens = len(text.split()) * 1.3
-        
+
         return EmbeddingResult(
             embedding=embedding.tolist(),
             model=self.model_name,
@@ -80,18 +80,18 @@ class LocalEmbedder(Embedder):
             embedding_tokens=int(estimated_tokens),
             total_cost=0.0  # Free!
         )
-    
+
     def embed_batch(self, texts: List[str]) -> List[EmbeddingResult]:
         """Generate embeddings for multiple texts efficiently."""
         self._load_model()
-        
+
         # Batch encode for efficiency
         embeddings = self.model.encode(
-            texts, 
+            texts,
             batch_size=32,
             show_progress_bar=len(texts) > 100
         )
-        
+
         results = []
         for text, embedding in zip(texts, embeddings):
             estimated_tokens = len(text.split()) * 1.3
@@ -102,9 +102,9 @@ class LocalEmbedder(Embedder):
                 embedding_tokens=int(estimated_tokens),
                 total_cost=0.0
             ))
-        
+
         return results
-    
+
     @property
     def dimension(self) -> int:
         """Return embedding dimension."""
@@ -132,11 +132,11 @@ def create_embedder(provider: str = "openai", **kwargs) -> Embedder:
         # Auto-fallback to local embeddings
         print("No OpenAI API key found, using local embeddings (free)")
         provider = "local"
-    
+
     embedder_class = EMBEDDERS.get(provider)
     if not embedder_class:
         raise ValueError(f"Unknown embedder provider: {provider}")
-    
+
     return embedder_class(**kwargs)
 ```
 
@@ -147,7 +147,7 @@ def create_embedder(provider: str = "openai", **kwargs) -> Embedder:
 ```python
 class IndexerConfig(BaseModel):
     # Existing fields...
-    
+
     # New embedding configuration
     embedding_provider: str = Field(
         default="openai",
@@ -157,7 +157,7 @@ class IndexerConfig(BaseModel):
         default="all-MiniLM-L6-v2",
         description="Model name for local embeddings"
     )
-    
+
     @validator("embedding_provider")
     def validate_provider(cls, v):
         valid_providers = ["openai", "local", "dummy"]
@@ -190,7 +190,7 @@ qdrant_url=http://localhost:6333
 def display_results(result: IndexingResult, verbose: bool = False):
     """Display indexing results with provider info."""
     # ... existing code ...
-    
+
     # Show embedding provider info
     if result.embedding_provider == "local":
         print(f"\n📊 [green]Embedding Info:[/green]")
@@ -215,22 +215,22 @@ export interface EmbeddingProvider {
    * Generate embedding for a single text
    */
   embed(text: string): Promise<number[]>;
-  
+
   /**
    * Generate embeddings for multiple texts (batch)
    */
   embedBatch(texts: string[]): Promise<number[][]>;
-  
+
   /**
    * Get the dimension of embeddings produced
    */
   getDimensions(): number;
-  
+
   /**
    * Get the model name for logging
    */
   getModelName(): string;
-  
+
   /**
    * Initialize the provider (load models, etc)
    */
@@ -255,16 +255,16 @@ import { EmbeddingProvider } from './types';
 export class OpenAIEmbeddingProvider implements EmbeddingProvider {
   private client: OpenAI;
   private modelName: string;
-  
+
   constructor(apiKey: string, modelName: string = 'text-embedding-ada-002') {
     this.client = new OpenAI({ apiKey });
     this.modelName = modelName;
   }
-  
+
   async initialize(): Promise<void> {
     // No initialization needed for OpenAI
   }
-  
+
   async embed(text: string): Promise<number[]> {
     const response = await this.client.embeddings.create({
       model: this.modelName,
@@ -272,7 +272,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     });
     return response.data[0].embedding;
   }
-  
+
   async embedBatch(texts: string[]): Promise<number[][]> {
     const response = await this.client.embeddings.create({
       model: this.modelName,
@@ -280,11 +280,11 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     });
     return response.data.map(d => d.embedding);
   }
-  
+
   getDimensions(): number {
     return 1536; // ada-002 dimension
   }
-  
+
   getModelName(): string {
     return this.modelName;
   }
@@ -303,12 +303,12 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   private modelName: string;
   private extractor: any;
   private dimensions: number;
-  
+
   constructor(modelName: string = 'Xenova/all-MiniLM-L6-v2') {
     this.modelName = modelName;
     this.dimensions = 384; // Default for MiniLM
   }
-  
+
   async initialize(): Promise<void> {
     // Load the model
     this.extractor = await pipeline(
@@ -317,7 +317,7 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
       { quantized: true }  // Use quantized model for efficiency
     );
   }
-  
+
   async embed(text: string): Promise<number[]> {
     const output = await this.extractor(text, {
       pooling: 'mean',
@@ -325,17 +325,17 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     });
     return Array.from(output.data);
   }
-  
+
   async embedBatch(texts: string[]): Promise<number[][]> {
     // Process in parallel for efficiency
     const promises = texts.map(text => this.embed(text));
     return Promise.all(promises);
   }
-  
+
   getDimensions(): number {
     return this.dimensions;
   }
-  
+
   getModelName(): string {
     return this.modelName;
   }
@@ -355,7 +355,7 @@ export async function createEmbeddingProvider(
   config: EmbeddingProviderConfig
 ): Promise<EmbeddingProvider> {
   let provider: EmbeddingProvider;
-  
+
   switch (config.provider) {
     case 'openai':
       if (!config.apiKey) {
@@ -366,15 +366,15 @@ export async function createEmbeddingProvider(
         config.modelName
       );
       break;
-      
+
     case 'local':
       provider = new LocalEmbeddingProvider(config.modelName);
       break;
-      
+
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }
-  
+
   await provider.initialize();
   return provider;
 }
@@ -390,11 +390,11 @@ import { createEmbeddingProvider } from './providers/factory';
 
 export class QdrantPersistence {
   private embeddingProvider: EmbeddingProvider;
-  
+
   constructor(config: QdrantConfig) {
     // ... existing Qdrant setup ...
   }
-  
+
   async initialize() {
     // Create embedding provider based on config
     this.embeddingProvider = await createEmbeddingProvider({
@@ -402,13 +402,13 @@ export class QdrantPersistence {
       modelName: process.env.EMBEDDING_MODEL,
       apiKey: process.env.OPENAI_API_KEY,
     });
-    
+
     // Update collection creation with dynamic dimensions
     const requiredVectorSize = this.embeddingProvider.getDimensions();
-    
+
     // ... rest of initialization ...
   }
-  
+
   private async generateEmbedding(text: string): Promise<number[]> {
     try {
       return await this.embeddingProvider.embed(text);
@@ -430,11 +430,11 @@ const envSchema = z.object({
   QDRANT_URL: z.string().default("http://localhost:6333"),
   QDRANT_API_KEY: z.string().optional(),
   QDRANT_COLLECTION_NAME: z.string(),
-  
+
   // Embedding configuration
   EMBEDDING_PROVIDER: z.enum(['openai', 'local']).default('openai'),
   EMBEDDING_MODEL: z.string().optional(),
-  
+
   // OpenAI (optional for local embeddings)
   OPENAI_API_KEY: z.string().optional(),
 });
@@ -442,12 +442,12 @@ const envSchema = z.object({
 // Validate based on provider
 export function validateConfig(env: any) {
   const config = envSchema.parse(env);
-  
+
   // Only require OpenAI key if using OpenAI provider
   if (config.EMBEDDING_PROVIDER === 'openai' && !config.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY required when using OpenAI provider');
   }
-  
+
   return config;
 }
 ```
@@ -488,35 +488,35 @@ from claude_indexer.embeddings.openai import OpenAIEmbedder
 
 def test_embedding_quality():
     """Compare local vs OpenAI embeddings."""
-    
+
     # Test texts
     test_texts = [
         "def calculate_fibonacci(n): return fibonacci sequence",
         "class UserAuthentication handles login and logout",
         "async function fetchDataFromAPI(endpoint) { ... }",
     ]
-    
+
     # Initialize embedders
     local = LocalEmbedder()
     # openai = OpenAIEmbedder(api_key="...")  # Optional comparison
-    
+
     # Test local embeddings
     print("Testing local embeddings...")
     start = time.time()
-    
+
     for text in test_texts:
         result = local.embed(text)
         print(f"Text: {text[:50]}...")
         print(f"Dimension: {len(result.embedding)}")
         print(f"Cost: ${result.total_cost}")
         print(f"Time: {time.time() - start:.2f}s\n")
-    
+
     # Test batch processing
     print("\nTesting batch processing...")
     start = time.time()
     results = local.embed_batch(test_texts * 10)
     print(f"Batch of {len(results)} embeddings in {time.time() - start:.2f}s")
-    
+
     # Test semantic similarity
     print("\nTesting semantic similarity...")
     similar_texts = [
@@ -524,11 +524,11 @@ def test_embedding_quality():
         ("class Car", "class Vehicle"),
         ("error handling", "exception management"),
     ]
-    
+
     for text1, text2 in similar_texts:
         emb1 = local.embed(text1).embedding
         emb2 = local.embed(text2).embedding
-        
+
         # Cosine similarity
         similarity = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
         print(f"{text1} <-> {text2}: {similarity:.3f}")

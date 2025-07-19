@@ -35,16 +35,16 @@ import jedi
 
 class ObservationExtractor:
     """Extract semantic observations from code elements."""
-    
+
     def extract_function_observations(
-        self, 
+        self,
         node: tree_sitter.Node,
         source_code: str,
         jedi_script: Optional[jedi.Script] = None
     ) -> List[str]:
         """Extract observations for function entities."""
         observations = []
-        
+
         # 1. Extract docstring
         docstring = self._extract_docstring(node, source_code)
         if docstring:
@@ -52,38 +52,38 @@ class ObservationExtractor:
             purpose = docstring.split('.')[0].strip()
             if purpose:
                 observations.append(f"Purpose: {purpose}")
-            
+
             # Look for specific patterns
             patterns = self._extract_docstring_patterns(docstring)
             observations.extend(patterns)
-        
+
         # 2. Extract function calls (behavior)
         calls = self._extract_function_calls(node, source_code)
         if calls:
             observations.append(f"Calls: {', '.join(calls[:5])}")
-        
+
         # 3. Extract exception handling
         exceptions = self._extract_exception_handling(node, source_code)
         if exceptions:
             observations.append(f"Handles: {', '.join(exceptions)}")
-        
+
         # 4. Extract return patterns
         return_info = self._extract_return_patterns(node, source_code)
         if return_info:
             observations.append(f"Returns: {return_info}")
-        
+
         # 5. Extract parameter patterns
         param_info = self._extract_parameter_patterns(node, source_code)
         if param_info:
             observations.append(f"Parameters: {param_info}")
-        
+
         # 6. Extract decorators (behavior modifiers)
         decorators = self._extract_decorators(node, source_code)
         for decorator in decorators:
             observations.append(f"Decorator: {decorator}")
-        
+
         return observations
-    
+
     def extract_class_observations(
         self,
         node: tree_sitter.Node,
@@ -92,40 +92,40 @@ class ObservationExtractor:
     ) -> List[str]:
         """Extract observations for class entities."""
         observations = []
-        
+
         # 1. Extract class docstring
         docstring = self._extract_docstring(node, source_code)
         if docstring:
             purpose = docstring.split('.')[0].strip()
             if purpose:
                 observations.append(f"Responsibility: {purpose}")
-        
+
         # 2. Extract key methods
         methods = self._extract_class_methods(node, source_code)
         if methods:
             observations.append(f"Key methods: {', '.join(methods[:5])}")
-        
+
         # 3. Extract patterns (singleton, factory, etc.)
         patterns = self._detect_design_patterns(node, source_code)
         observations.extend(patterns)
-        
+
         # 4. Extract dependencies
         deps = self._extract_class_dependencies(node, source_code)
         if deps:
             observations.append(f"Dependencies: {', '.join(deps[:3])}")
-        
+
         return observations
-    
+
     def _extract_docstring(self, node: tree_sitter.Node, source_code: str) -> Optional[str]:
         """Extract docstring from function or class node."""
         # Implementation details...
         pass
-    
+
     def _extract_function_calls(self, node: tree_sitter.Node, source_code: str) -> List[str]:
         """Extract function calls within a function body."""
         # Implementation details...
         pass
-    
+
     def _extract_exception_handling(self, node: tree_sitter.Node, source_code: str) -> List[str]:
         """Extract exception types that are caught."""
         # Implementation details...
@@ -139,26 +139,26 @@ class ObservationExtractor:
 ```python
 class PythonParser(CodeParser):
     """Enhanced Python parser with observation extraction."""
-    
+
     def __init__(self, project_path: Path):
         # ... existing init ...
         self.observation_extractor = ObservationExtractor()
-    
-    def _extract_named_entity(self, node: 'tree_sitter.Node', entity_type: 'EntityType', 
+
+    def _extract_named_entity(self, node: 'tree_sitter.Node', entity_type: 'EntityType',
                              file_path: Path, source_code: str) -> Optional['Entity']:
         """Extract named entity with rich observations."""
-        
+
         # ... existing name extraction ...
-        
+
         # Extract rich observations based on entity type
         observations = []
-        
+
         if entity_type == EntityType.FUNCTION:
             # Get function-specific observations
             func_observations = self.observation_extractor.extract_function_observations(
                 node, source_code, self._jedi_script
             )
-            
+
             return EntityFactory.create_function_entity(
                 name=entity_name,
                 file_path=file_path,
@@ -167,13 +167,13 @@ class PythonParser(CodeParser):
                 observations=func_observations,  # Pass custom observations
                 source="tree-sitter"
             )
-            
+
         elif entity_type == EntityType.CLASS:
             # Get class-specific observations
             class_observations = self.observation_extractor.extract_class_observations(
                 node, source_code, self._jedi_script
             )
-            
+
             return EntityFactory.create_class_entity(
                 name=entity_name,
                 file_path=file_path,
@@ -190,16 +190,16 @@ class PythonParser(CodeParser):
 ```python
 class JavaScriptObservationExtractor(ObservationExtractor):
     """JavaScript-specific observation extraction."""
-    
+
     def extract_function_observations(self, node, source_code):
         observations = super().extract_function_observations(node, source_code)
-        
+
         # Add JS-specific observations
         # - Async/await patterns
         # - Promise handling
         # - Event listeners
         # - Module exports
-        
+
         return observations
 ```
 
@@ -207,22 +207,22 @@ class JavaScriptObservationExtractor(ObservationExtractor):
 ```python
 class ConfigObservationExtractor:
     """Extract observations from configuration files."""
-    
+
     def extract_config_observations(self, data: dict, file_type: str) -> List[str]:
         observations = []
-        
+
         # Package.json specific
         if file_type == "package.json":
             if "scripts" in data:
                 observations.append(f"Scripts: {', '.join(list(data['scripts'].keys())[:5])}")
             if "dependencies" in data:
                 observations.append(f"Dependencies: {len(data['dependencies'])} packages")
-        
+
         # Docker-compose specific
         if file_type == "docker-compose":
             if "services" in data:
                 observations.append(f"Services: {', '.join(data['services'].keys())}")
-        
+
         return observations
 ```
 
@@ -248,13 +248,13 @@ def test_extract_function_observations():
     source = '''
     def authenticate_user(token: str) -> bool:
         """Validate JWT token and check permissions.
-        
+
         Args:
             token: JWT token to validate
-            
+
         Returns:
             bool: True if valid
-            
+
         Raises:
             TokenExpiredError: If token is expired
         """
@@ -266,10 +266,10 @@ def test_extract_function_observations():
             logger.error("Token expired")
             raise
     '''
-    
+
     # Parse and extract
     observations = extractor.extract_function_observations(node, source)
-    
+
     assert "Purpose: Validate JWT token and check permissions" in observations
     assert "Calls: jwt.decode, check_permissions" in observations
     assert "Handles: TokenExpiredError" in observations
@@ -286,15 +286,15 @@ def test_indexer_with_observations():
     test_file.write_text('''
     class AuthService:
         """Manages user authentication and sessions."""
-        
+
         def validate_token(self, token: str) -> bool:
             """Check if token is valid."""
             return jwt.verify(token, self.secret)
     ''')
-    
+
     # Index the file
     result = indexer.index_file(test_file)
-    
+
     # Check observations
     auth_class = next(e for e in result.entities if e.name == "AuthService")
     assert "Responsibility: Manages user authentication and sessions" in auth_class.observations
@@ -308,10 +308,10 @@ def test_semantic_search_with_observations():
     """Test that observations enable semantic search."""
     # Index test project
     indexer.index_project(test_project_path)
-    
+
     # Search by behavior
     results = store.search_similar("validate JWT tokens")
-    
+
     # Should find authenticate_user function
     assert any(r.entity_name == "authenticate_user" for r in results)
 ```

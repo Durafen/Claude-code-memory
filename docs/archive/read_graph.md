@@ -107,7 +107,7 @@ interface SmartGraph {
     }>,
     functions: Array<{
       name: string,
-      file: string, 
+      file: string,
       line: number,
       signature?: string,
       docstring?: string

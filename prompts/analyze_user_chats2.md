@@ -40,14 +40,14 @@ Task: Extract insights about what makes the user satisfied, what prevents bugs, 
    - Only extract and store NEW insights or significant updates to existing ones
    - Avoid duplicating patterns already well-documented in memory
 9. Extract insights from BOTH perspectives:
-   
+
    **From USER messages:**
    - How user asks for features
    - Testing preferences and quality expectations
    - Communication style and preferences
    - Project vision and priorities
    - Personal workflow patterns
-   
+
    **From ASSISTANT's valuable insights:**
    - Research findings and technical discoveries
    - Workflow optimizations suggested and accepted
@@ -152,7 +152,7 @@ Task: Extract insights about what makes the user satisfied, what prevents bugs, 
 - **CHAT PARSING**: Skip Claude's responses entirely unless user directly references them
 - **PREFERENCE DETECTION**: Look for:
   * Repeated requests or patterns
-  * Expressed frustrations or satisfactions  
+  * Expressed frustrations or satisfactions
   * Workflow descriptions or requirements
   * Quality standards or expectations
   * Personal anecdotes or context

@@ -8,7 +8,7 @@ Based on analysis of Claude Code workflows and the gh-util codebase, here are th
 
 ### 🥇 **Start Here: Method 6 - Local Vector Database (Highest Impact)**
 **Why for gh-util specifically:**
-- **Instant GitHub API pattern search** - "find functions that handle rate limiting"  
+- **Instant GitHub API pattern search** - "find functions that handle rate limiting"
 - **Command discovery** - Semantic search across all gh-util commands
 - **Error pattern memory** - Remembers GitHub API errors and solutions
 - **Cross-repo knowledge** - Links similar patterns from other GitHub tools
@@ -21,7 +21,7 @@ Based on analysis of Claude Code workflows and the gh-util codebase, here are th
 - Index all gh-util source files with sentence-transformers
 - Store embeddings locally for GitHub API patterns
 
-**Step 2: Semantic Search Integration** 
+**Step 2: Semantic Search Integration**
 - Add MCP integration for vector queries
 - Create search commands like "GitHub rate limiting patterns" or "API error handling"
 - Extend `TerminalDisplay` with search result formatting
@@ -35,7 +35,7 @@ Based on analysis of Claude Code workflows and the gh-util codebase, here are th
 
 **Step 4: Git Hooks for Evolution Tracking**
 - Add git hooks to gh-util repositories being tracked
-- Automatically index commit patterns and GitHub operations  
+- Automatically index commit patterns and GitHub operations
 - Track which GitHub features are used most frequently
 - Build predictive models for workflow optimization
 
@@ -48,7 +48,7 @@ Based on analysis of Claude Code workflows and the gh-util codebase, here are th
 ## Overview
 
 The goal is to combine the best of both worlds:
-- **Qdrant's scalable vector storage** (your existing setup)  
+- **Qdrant's scalable vector storage** (your existing setup)
 - **Custom auto-indexing logic** (like claude-memory-mcp)
 - **Knowledge graph structure** (entities/relations/observations)
 - **gh-util specific optimizations** for GitHub workflow intelligence
@@ -72,23 +72,23 @@ class ClaudeCodeMonitor(FileSystemEventHandler):
     def __init__(self, qdrant_memory_api):
         self.qdrant_api = qdrant_memory_api
         self.session_data = {}
-    
+
     def on_modified(self, event):
         if 'claude-code' in event.src_path or '.claude' in event.src_path:
             self.extract_conversation(event.src_path)
-    
+
     def on_created(self, event):
         if event.src_path.endswith(('.py', '.js', '.ts', '.md')):
             self.index_new_file(event.src_path)
-    
+
     def extract_conversation(self, log_path):
         # Parse Claude Code session logs
         with open(log_path, 'r') as f:
             session_data = f.read()
-        
+
         # Extract code snippets, commands used, files modified
         self.auto_index_session(session_data)
-    
+
     def index_new_file(self, file_path):
         # Automatically create entities for new code files
         file_content = Path(file_path).read_text()
@@ -128,10 +128,10 @@ class MCPInterceptor:
     def __init__(self, qdrant_memory_client):
         self.memory_client = qdrant_memory_client
         self.context_buffer = []
-    
+
     def intercept_tool_call(self, tool_name, args, result=None):
         """Main interception point for all MCP tool calls"""
-        
+
         if tool_name == 'edit_file':
             self.handle_file_edit(args)
         elif tool_name == 'create_file':
@@ -140,51 +140,51 @@ class MCPInterceptor:
             self.handle_command_execution(args)
         elif tool_name == 'grep' or tool_name == 'search':
             self.handle_search_patterns(args)
-    
+
     def handle_file_edit(self, args):
         """Process file edits to extract patterns"""
         file_path = args.get('file_path', '')
         old_content = args.get('old_string', '')
         new_content = args.get('new_string', '')
-        
+
         # Detect debugging patterns
         if any(debug_term in new_content for debug_term in ['print(', 'console.log(', 'logger.']):
             self.store_debug_pattern(file_path, new_content)
-        
+
         # Detect refactoring patterns
         if old_content and new_content:
             self.store_refactoring_pattern(old_content, new_content, file_path)
-        
+
         # Extract code entities
         if file_path.endswith(('.py', '.js', '.ts')):
             entities = self.extract_code_entities(new_content, file_path)
             self.store_entities(entities)
-    
+
     def handle_file_creation(self, args):
         """Process new file creation"""
         file_path = args.get('file_path', '')
         content = args.get('content', '')
-        
+
         # Detect file organization patterns
         self.learn_file_organization(file_path)
-        
+
         # Index new code structures
         if content:
             entities = self.extract_code_entities(content, file_path)
             self.store_entities(entities)
-    
+
     def handle_search_patterns(self, args):
         """Learn from search/grep patterns"""
         pattern = args.get('pattern', '')
         context = args.get('path', '')
-        
+
         # Remember search preferences
         self.store_search_preference(pattern, context)
-    
+
     def extract_code_entities(self, content, file_path):
         """Extract functions, classes, and other code entities"""
         entities = []
-        
+
         try:
             if file_path.endswith('.py'):
                 tree = ast.parse(content)
@@ -212,9 +212,9 @@ class MCPInterceptor:
         except Exception as e:
             # Handle parsing errors gracefully
             pass
-        
+
         return entities
-    
+
     def store_debug_pattern(self, file_path, content):
         """Store debugging patterns for future reference"""
         debug_methods = []
@@ -224,13 +224,13 @@ class MCPInterceptor:
             debug_methods.append('console.log')
         if 'logger.' in content:
             debug_methods.append('structured logging')
-        
+
         self.memory_client.create_entities([{
             "name": f"debug_pattern_{file_path}",
             "entityType": "debug_technique",
             "observations": [f"Uses {', '.join(debug_methods)} for debugging in {file_path}"]
         }])
-    
+
     def store_refactoring_pattern(self, old_code, new_code, file_path):
         """Learn from refactoring patterns"""
         self.memory_client.add_observations([{
@@ -335,7 +335,7 @@ POST /api/relations
     "relations": [
         {
             "from": "function_validate_email",
-            "to": "class_UserManager", 
+            "to": "class_UserManager",
             "relationType": "used_by"
         }
     ]
@@ -462,7 +462,7 @@ class ASTCodeAnalyzer:
             'decorator': ['wrapper', 'wrap', '@'],
             'strategy': ['execute', 'algorithm', 'strategy']
         }
-    
+
     def analyze_file(self, file_path: str, content: str):
         """Comprehensive AST analysis of a code file"""
         try:
@@ -479,7 +479,7 @@ class ASTCodeAnalyzer:
             return analysis
         except SyntaxError as e:
             self.store_syntax_error(file_path, str(e))
-    
+
     def extract_functions(self, tree: ast.AST, file_path: str) -> List[Dict]:
         """Extract detailed function information"""
         functions = []
@@ -497,19 +497,19 @@ class ASTCodeAnalyzer:
                         f"Async: {'Yes' if isinstance(node, ast.AsyncFunctionDef) else 'No'}"
                     ]
                 }
-                
+
                 # Analyze function complexity
                 complexity = self.calculate_function_complexity(node)
                 func_info["observations"].append(f"Cyclomatic complexity: {complexity}")
-                
+
                 # Detect function patterns
                 patterns = self.detect_function_patterns(node)
                 if patterns:
                     func_info["observations"].append(f"Patterns: {', '.join(patterns)}")
-                
+
                 functions.append(func_info)
         return functions
-    
+
     def extract_classes(self, tree: ast.AST, file_path: str) -> List[Dict]:
         """Extract detailed class information"""
         classes = []
@@ -528,37 +528,37 @@ class ASTCodeAnalyzer:
                         f"Docstring: {'Yes' if ast.get_docstring(node) else 'No'}"
                     ]
                 }
-                
+
                 # Detect design patterns
                 patterns = self.detect_class_patterns(node, methods)
                 if patterns:
                     class_info["observations"].append(f"Design patterns: {', '.join(patterns)}")
-                
+
                 classes.append(class_info)
         return classes
-    
+
     def detect_patterns(self, tree: ast.AST, content: str, file_path: str) -> List[str]:
         """Detect architectural and design patterns"""
         detected_patterns = []
-        
+
         for pattern_name, keywords in self.architectural_patterns.items():
             if any(keyword in content.lower() for keyword in keywords):
                 detected_patterns.append(pattern_name)
-        
+
         # Detect specific patterns through AST analysis
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
                 # Singleton pattern detection
                 if any(method.name == '__new__' for method in node.body if isinstance(method, ast.FunctionDef)):
                     detected_patterns.append('singleton')
-                
+
                 # Factory pattern detection
-                if any('create' in method.name.lower() or 'factory' in method.name.lower() 
+                if any('create' in method.name.lower() or 'factory' in method.name.lower()
                        for method in node.body if isinstance(method, ast.FunctionDef)):
                     detected_patterns.append('factory')
-        
+
         return list(set(detected_patterns))
-    
+
     def calculate_complexity(self, tree: ast.AST, file_path: str) -> Dict[str, int]:
         """Calculate various complexity metrics"""
         complexity_metrics = {
@@ -568,7 +568,7 @@ class ASTCodeAnalyzer:
             'functions': 0,
             'classes': 0
         }
-        
+
         for node in ast.walk(tree):
             if isinstance(node, (ast.If, ast.While, ast.For, ast.Try, ast.With)):
                 complexity_metrics['cyclomatic'] += 1
@@ -577,13 +577,13 @@ class ASTCodeAnalyzer:
                 complexity_metrics['cyclomatic'] += self.calculate_function_complexity(node)
             elif isinstance(node, ast.ClassDef):
                 complexity_metrics['classes'] += 1
-        
+
         return complexity_metrics
-    
+
     def extract_relationships(self, tree: ast.AST, file_path: str) -> List[Dict]:
         """Extract relationships between code elements"""
         relationships = []
-        
+
         # Function call relationships
         function_calls = defaultdict(list)
         for node in ast.walk(tree):
@@ -591,7 +591,7 @@ class ASTCodeAnalyzer:
                 caller = self.find_containing_function(tree, node)
                 if caller:
                     function_calls[caller].append(node.func.id)
-        
+
         for caller, callees in function_calls.items():
             for callee in callees:
                 relationships.append({
@@ -599,34 +599,34 @@ class ASTCodeAnalyzer:
                     "to": f"function_{callee}_{file_path}",
                     "relationType": "calls"
                 })
-        
+
         return relationships
-    
+
     def store_ast_analysis(self, analysis: Dict, file_path: str):
         """Store AST analysis results in Qdrant memory"""
         # Store functions
         if analysis['functions']:
             self.memory_client.create_entities(analysis['functions'])
-        
+
         # Store classes
         if analysis['classes']:
             self.memory_client.create_entities(analysis['classes'])
-        
+
         # Store relationships
         if analysis['relationships']:
             self.memory_client.create_relations(analysis['relationships'])
-        
+
         # Store patterns and complexity as observations
         if analysis['patterns'] or analysis['complexity']:
             file_entity = f"file_analysis_{file_path}"
             observations = []
-            
+
             if analysis['patterns']:
                 observations.append(f"Detected patterns: {', '.join(analysis['patterns'])}")
-            
+
             complexity = analysis['complexity']
             observations.append(f"Complexity metrics: {complexity}")
-            
+
             self.memory_client.add_observations([{
                 "entityName": file_entity,
                 "contents": observations
@@ -678,36 +678,36 @@ class GitHooksIntegrator:
             'docs': r'^(docs|documentation)',
             'test': r'^(test|spec)'
         }
-    
+
     def setup_git_hooks(self, repo_path: str):
         """Setup Git hooks for automatic memory capture"""
         hooks_dir = Path(repo_path) / ".git" / "hooks"
-        
+
         # Pre-commit hook
         pre_commit_script = """#!/bin/bash
 python /path/to/git_memory_indexer.py pre-commit
 """
         (hooks_dir / "pre-commit").write_text(pre_commit_script)
         (hooks_dir / "pre-commit").chmod(0o755)
-        
+
         # Post-commit hook
         post_commit_script = """#!/bin/bash
 python /path/to/git_memory_indexer.py post-commit
 """
         (hooks_dir / "post-commit").write_text(post_commit_script)
         (hooks_dir / "post-commit").chmod(0o755)
-    
+
     def analyze_commit(self, commit_hash: str = "HEAD"):
         """Analyze a specific commit for patterns"""
         # Get commit information
         commit_info = self.get_commit_info(commit_hash)
-        
+
         # Analyze commit message patterns
         message_analysis = self.analyze_commit_message(commit_info['message'])
-        
+
         # Analyze changed files
         file_changes = self.analyze_file_changes(commit_hash)
-        
+
         # Store commit patterns
         self.store_commit_analysis({
             'commit_hash': commit_hash,
@@ -716,15 +716,15 @@ python /path/to/git_memory_indexer.py post-commit
             'timestamp': commit_info['timestamp'],
             'author': commit_info['author']
         })
-    
+
     def get_commit_info(self, commit_hash: str) -> Dict:
         """Extract commit information using Git commands"""
         cmd = ["git", "show", "--format=%H|%an|%ae|%ct|%s", "--name-status", commit_hash]
         result = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         lines = result.stdout.strip().split('\n')
         commit_line = lines[0].split('|')
-        
+
         return {
             'hash': commit_line[0],
             'author': commit_line[1],
@@ -733,7 +733,7 @@ python /path/to/git_memory_indexer.py post-commit
             'message': commit_line[4],
             'changed_files': [line.split('\t') for line in lines[1:] if '\t' in line]
         }
-    
+
     def analyze_commit_message(self, message: str) -> Dict:
         """Analyze commit message for patterns and conventions"""
         analysis = {
@@ -743,44 +743,44 @@ python /path/to/git_memory_indexer.py post-commit
             'conventional': False,
             'sentiment': 'neutral'
         }
-        
+
         # Detect commit type
         for pattern_type, regex in self.commit_patterns.items():
             if re.match(regex, message.lower()):
                 analysis['type'] = pattern_type
                 break
-        
+
         # Check for conventional commits format
         conventional_regex = r'^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .+'
         if re.match(conventional_regex, message):
             analysis['conventional'] = True
-            
+
             # Extract scope
             scope_match = re.search(r'\((.+)\):', message)
             if scope_match:
                 analysis['scope'] = scope_match.group(1)
-        
+
         # Detect breaking changes
         if 'BREAKING CHANGE' in message or '!' in message:
             analysis['breaking_change'] = True
-        
+
         # Simple sentiment analysis
         negative_words = ['fix', 'bug', 'error', 'issue', 'problem', 'broken']
         positive_words = ['add', 'improve', 'enhance', 'optimize', 'feature']
-        
+
         message_lower = message.lower()
         if any(word in message_lower for word in negative_words):
             analysis['sentiment'] = 'negative'
         elif any(word in message_lower for word in positive_words):
             analysis['sentiment'] = 'positive'
-        
+
         return analysis
-    
+
     def analyze_file_changes(self, commit_hash: str) -> Dict:
         """Analyze what types of files were changed"""
         cmd = ["git", "diff", "--name-status", f"{commit_hash}~1", commit_hash]
         result = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         changes = {
             'added': [],
             'modified': [],
@@ -788,40 +788,40 @@ python /path/to/git_memory_indexer.py post-commit
             'file_types': defaultdict(int),
             'complexity_change': 0
         }
-        
+
         for line in result.stdout.strip().split('\n'):
             if '\t' in line:
                 status, file_path = line.split('\t', 1)
                 file_ext = Path(file_path).suffix
-                
+
                 changes['file_types'][file_ext] += 1
-                
+
                 if status == 'A':
                     changes['added'].append(file_path)
                 elif status == 'M':
                     changes['modified'].append(file_path)
                 elif status == 'D':
                     changes['deleted'].append(file_path)
-        
+
         return changes
-    
+
     def analyze_branch_patterns(self):
         """Analyze branching and workflow patterns"""
         # Get current branch
         current_branch = subprocess.run(
-            ["git", "branch", "--show-current"], 
+            ["git", "branch", "--show-current"],
             capture_output=True, text=True
         ).stdout.strip()
-        
+
         # Analyze branch naming patterns
         branch_analysis = self.analyze_branch_name(current_branch)
-        
+
         # Get recent branches
         recent_branches = subprocess.run(
             ["git", "for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", "refs/heads"],
             capture_output=True, text=True
         ).stdout.strip().split('\n')[:10]
-        
+
         # Store branch patterns
         self.store_branch_analysis({
             'current_branch': current_branch,
@@ -829,7 +829,7 @@ python /path/to/git_memory_indexer.py post-commit
             'recent_branches': recent_branches,
             'workflow_pattern': self.detect_workflow_pattern(recent_branches)
         })
-    
+
     def detect_workflow_pattern(self, branches: List[str]) -> str:
         """Detect Git workflow patterns (GitFlow, GitHub Flow, etc.)"""
         patterns = {
@@ -837,15 +837,15 @@ python /path/to/git_memory_indexer.py post-commit
             'github_flow': ['main', 'feature/', 'fix/'],
             'simple': ['main', 'master']
         }
-        
+
         branch_text = ' '.join(branches).lower()
-        
+
         for workflow, keywords in patterns.items():
             if all(keyword in branch_text for keyword in keywords[:2]):
                 return workflow
-        
+
         return 'custom'
-    
+
     def store_commit_analysis(self, analysis: Dict):
         """Store commit analysis in Qdrant memory"""
         commit_entity = {
@@ -861,27 +861,27 @@ python /path/to/git_memory_indexer.py post-commit
                 f"File types: {dict(analysis['file_changes']['file_types'])}"
             ]
         }
-        
+
         self.memory_client.create_entities([commit_entity])
 
 # Pre-commit hook script
 def pre_commit_hook():
     """Run before each commit"""
     git_integrator = GitHooksIntegrator(qdrant_memory_client)
-    
+
     # Analyze staged changes
     staged_files = subprocess.run(
         ["git", "diff", "--cached", "--name-only"],
         capture_output=True, text=True
     ).stdout.strip().split('\n')
-    
+
     # Index changes before commit
     for file_path in staged_files:
         if file_path.endswith('.py'):
             content = Path(file_path).read_text()
             ast_analyzer.analyze_file(file_path, content)
 
-# Post-commit hook script  
+# Post-commit hook script
 def post_commit_hook():
     """Run after each commit"""
     git_integrator = GitHooksIntegrator(qdrant_memory_client)
@@ -929,11 +929,11 @@ class LSPMemoryIntegrator:
         self.symbol_cache = {}
         self.navigation_patterns = defaultdict(list)
         self.refactoring_history = []
-    
+
     async def connect_to_lsp(self):
         """Connect to LSP server and initialize capabilities"""
         self.websocket = await websockets.connect(self.lsp_uri)
-        
+
         # Initialize LSP connection
         init_request = {
             "jsonrpc": "2.0",
@@ -952,16 +952,16 @@ class LSPMemoryIntegrator:
                 }
             }
         }
-        
+
         await self.websocket.send(json.dumps(init_request))
         response = await self.websocket.recv()
         return json.loads(response)
-    
+
     async def track_symbol_usage(self, file_path: str, line: int, character: int):
         """Track symbol usage patterns through LSP"""
         # Get symbol information at position
         symbol_info = await self.get_symbol_at_position(file_path, line, character)
-        
+
         if symbol_info:
             # Track navigation pattern
             self.navigation_patterns[symbol_info.name].append({
@@ -970,13 +970,13 @@ class LSPMemoryIntegrator:
                 'line': line,
                 'action': 'reference'
             })
-            
+
             # Get all references for this symbol
             references = await self.find_all_references(file_path, line, character)
-            
+
             # Store symbol relationship data
             await self.store_symbol_relationships(symbol_info, references)
-    
+
     async def get_symbol_at_position(self, file_path: str, line: int, character: int) -> Optional[LSPSymbol]:
         """Get symbol information at specific position"""
         hover_request = {
@@ -988,10 +988,10 @@ class LSPMemoryIntegrator:
                 "position": {"line": line, "character": character}
             }
         }
-        
+
         await self.websocket.send(json.dumps(hover_request))
         response = json.loads(await self.websocket.recv())
-        
+
         if response.get('result'):
             return LSPSymbol(
                 name=response['result'].get('contents', {}).get('value', 'unknown'),
@@ -1001,7 +1001,7 @@ class LSPMemoryIntegrator:
                 definition=None
             )
         return None
-    
+
     async def find_all_references(self, file_path: str, line: int, character: int) -> List[str]:
         """Find all references to symbol at position"""
         references_request = {
@@ -1014,24 +1014,24 @@ class LSPMemoryIntegrator:
                 "context": {"includeDeclaration": True}
             }
         }
-        
+
         await self.websocket.send(json.dumps(references_request))
         response = json.loads(await self.websocket.recv())
-        
+
         references = []
         if response.get('result'):
             for ref in response['result']:
                 uri = ref['uri']
                 line = ref['range']['start']['line']
                 references.append(f"{uri}:{line}")
-        
+
         return references
-    
+
     async def track_rename_operation(self, file_path: str, line: int, character: int, new_name: str):
         """Track rename refactoring patterns"""
         # Get current symbol info
         old_symbol = await self.get_symbol_at_position(file_path, line, character)
-        
+
         # Perform LSP rename
         rename_request = {
             "jsonrpc": "2.0",
@@ -1043,10 +1043,10 @@ class LSPMemoryIntegrator:
                 "newName": new_name
             }
         }
-        
+
         await self.websocket.send(json.dumps(rename_request))
         response = json.loads(await self.websocket.recv())
-        
+
         # Track refactoring pattern
         refactoring_data = {
             'type': 'rename',
@@ -1056,10 +1056,10 @@ class LSPMemoryIntegrator:
             'timestamp': datetime.now(),
             'affected_files': len(response.get('result', {}).get('changes', {}))
         }
-        
+
         self.refactoring_history.append(refactoring_data)
         await self.store_refactoring_pattern(refactoring_data)
-    
+
     async def analyze_code_completion_patterns(self, file_path: str, line: int, character: int):
         """Analyze code completion usage patterns"""
         completion_request = {
@@ -1071,13 +1071,13 @@ class LSPMemoryIntegrator:
                 "position": {"line": line, "character": character}
             }
         }
-        
+
         await self.websocket.send(json.dumps(completion_request))
         response = json.loads(await self.websocket.recv())
-        
+
         if response.get('result'):
             completions = response['result']
-            
+
             # Analyze completion preferences
             completion_analysis = {
                 'total_suggestions': len(completions),
@@ -1085,9 +1085,9 @@ class LSPMemoryIntegrator:
                 'context': f"{file_path}:{line}:{character}",
                 'timestamp': datetime.now()
             }
-            
+
             await self.store_completion_patterns(completion_analysis)
-    
+
     async def store_symbol_relationships(self, symbol: LSPSymbol, references: List[str]):
         """Store symbol relationship data in Qdrant"""
         symbol_entity = {
@@ -1101,9 +1101,9 @@ class LSPMemoryIntegrator:
                 f"Referenced in files: {len(set(ref.split(':')[0] for ref in references))}"
             ]
         }
-        
+
         self.memory_client.create_entities([symbol_entity])
-        
+
         # Create relationships between symbol and referencing locations
         for ref_location in references:
             relationship = {
@@ -1112,7 +1112,7 @@ class LSPMemoryIntegrator:
                 "relationType": "referenced_at"
             }
             self.memory_client.create_relations([relationship])
-    
+
     async def store_refactoring_pattern(self, refactoring_data: Dict):
         """Store refactoring patterns for learning"""
         refactoring_entity = {
@@ -1126,26 +1126,26 @@ class LSPMemoryIntegrator:
                 f"Affected files: {refactoring_data['affected_files']}"
             ]
         }
-        
+
         self.memory_client.create_entities([refactoring_entity])
 
 # Integration with Claude Code
 class ClaudeLSPIntegration:
     def __init__(self, lsp_integrator: LSPMemoryIntegrator):
         self.lsp = lsp_integrator
-    
+
     async def on_file_open(self, file_path: str):
         """Track file opening patterns"""
         await self.lsp.track_symbol_usage(file_path, 0, 0)
-    
+
     async def on_go_to_definition(self, file_path: str, line: int, character: int):
         """Track go-to-definition usage"""
         await self.lsp.track_symbol_usage(file_path, line, character)
-    
+
     async def on_find_references(self, file_path: str, line: int, character: int):
         """Track find-references usage"""
         references = await self.lsp.find_all_references(file_path, line, character)
-        
+
         # Learn reference search patterns
         search_pattern = {
             'action': 'find_references',
@@ -1154,7 +1154,7 @@ class ClaudeLSPIntegration:
             'reference_count': len(references),
             'timestamp': datetime.now()
         }
-        
+
         await self.lsp.store_completion_patterns(search_pattern)
 ```
 
@@ -1192,7 +1192,7 @@ class LocalVectorCodeSearch:
         self.model = SentenceTransformer(model_name)
         self.vector_db_path = "code_vectors.db"
         self.setup_local_db()
-    
+
     def setup_local_db(self):
         """Setup local SQLite database for vector storage"""
         self.conn = sqlite3.connect(self.vector_db_path)
@@ -1208,20 +1208,20 @@ class LocalVectorCodeSearch:
             )
         """)
         self.conn.commit()
-    
+
     def extract_code_chunks(self, file_path: str, content: str) -> List[Dict]:
         """Extract meaningful code chunks for embedding"""
         chunks = []
-        
+
         try:
             tree = ast.parse(content)
-            
+
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef):
                     # Extract function with context
                     func_lines = content.split('\n')[node.lineno-1:node.end_lineno]
                     func_code = '\n'.join(func_lines)
-                    
+
                     # Create comprehensive context
                     context = {
                         'type': 'function',
@@ -1232,7 +1232,7 @@ class LocalVectorCodeSearch:
                         'parameters': [arg.arg for arg in node.args.args],
                         'code': func_code
                     }
-                    
+
                     # Create searchable text combining code and context
                     searchable_text = f"""
                     Function: {node.name}
@@ -1241,20 +1241,20 @@ class LocalVectorCodeSearch:
                     Docstring: {context['docstring']}
                     Code: {func_code}
                     """
-                    
+
                     chunks.append({
                         'text': searchable_text.strip(),
                         'metadata': context,
                         'embedding': None  # Will be computed later
                     })
-                
+
                 elif isinstance(node, ast.ClassDef):
                     # Extract class with context
                     class_lines = content.split('\n')[node.lineno-1:node.end_lineno]
                     class_code = '\n'.join(class_lines)
-                    
+
                     methods = [n.name for n in node.body if isinstance(n, ast.FunctionDef)]
-                    
+
                     context = {
                         'type': 'class',
                         'name': node.name,
@@ -1264,7 +1264,7 @@ class LocalVectorCodeSearch:
                         'methods': methods,
                         'code': class_code
                     }
-                    
+
                     searchable_text = f"""
                     Class: {node.name}
                     File: {file_path}
@@ -1272,39 +1272,39 @@ class LocalVectorCodeSearch:
                     Docstring: {context['docstring']}
                     Code: {class_code}
                     """
-                    
+
                     chunks.append({
                         'text': searchable_text.strip(),
                         'metadata': context,
                         'embedding': None
                     })
-        
+
         except SyntaxError:
             # Handle non-Python files or syntax errors
             pass
-        
+
         return chunks
-    
+
     def compute_embeddings(self, chunks: List[Dict]) -> List[Dict]:
         """Compute embeddings for code chunks using local model"""
         texts = [chunk['text'] for chunk in chunks]
-        
+
         # Batch compute embeddings for efficiency
         embeddings = self.model.encode(texts, batch_size=32, show_progress_bar=True)
-        
+
         for i, chunk in enumerate(chunks):
             chunk['embedding'] = embeddings[i]
-        
+
         return chunks
-    
+
     def store_code_vectors(self, chunks: List[Dict]):
         """Store code vectors in local database"""
         for chunk in chunks:
             metadata = chunk['metadata']
             embedding_blob = pickle.dumps(chunk['embedding'])
-            
+
             self.conn.execute("""
-                INSERT INTO code_vectors 
+                INSERT INTO code_vectors
                 (file_path, function_name, code_snippet, embedding, metadata)
                 VALUES (?, ?, ?, ?, ?)
             """, (
@@ -1314,32 +1314,32 @@ class LocalVectorCodeSearch:
                 embedding_blob,
                 json.dumps(metadata)
             ))
-        
+
         self.conn.commit()
-    
+
     def semantic_search(self, query: str, top_k: int = 5) -> List[Dict]:
         """Perform semantic search over code vectors"""
         # Encode query
         query_embedding = self.model.encode([query])[0]
-        
+
         # Retrieve all vectors from database
         cursor = self.conn.execute("""
             SELECT file_path, function_name, code_snippet, embedding, metadata
             FROM code_vectors
         """)
-        
+
         results = []
         for row in cursor.fetchall():
             file_path, func_name, code_snippet, embedding_blob, metadata_json = row
-            
+
             # Deserialize embedding
             stored_embedding = pickle.loads(embedding_blob)
-            
+
             # Compute similarity
             similarity = np.dot(query_embedding, stored_embedding) / (
                 np.linalg.norm(query_embedding) * np.linalg.norm(stored_embedding)
             )
-            
+
             results.append({
                 'file_path': file_path,
                 'function_name': func_name,
@@ -1347,15 +1347,15 @@ class LocalVectorCodeSearch:
                 'metadata': json.loads(metadata_json),
                 'similarity': similarity
             })
-        
+
         # Sort by similarity and return top_k
         results.sort(key=lambda x: x['similarity'], reverse=True)
         return results[:top_k]
-    
+
     def index_codebase(self, codebase_path: str):
         """Index entire codebase for semantic search"""
         total_chunks = []
-        
+
         for file_path in Path(codebase_path).rglob("*.py"):
             try:
                 content = file_path.read_text(encoding='utf-8')
@@ -1363,27 +1363,27 @@ class LocalVectorCodeSearch:
                 total_chunks.extend(chunks)
             except Exception as e:
                 print(f"Error processing {file_path}: {e}")
-        
+
         print(f"Extracted {len(total_chunks)} code chunks")
-        
+
         # Compute embeddings in batches
         chunks_with_embeddings = self.compute_embeddings(total_chunks)
-        
+
         # Store in local vector database
         self.store_code_vectors(chunks_with_embeddings)
-        
+
         # Also store in Qdrant memory for integration
         self.integrate_with_qdrant_memory(chunks_with_embeddings)
-        
+
         print(f"Indexed {len(chunks_with_embeddings)} code chunks")
-    
+
     def integrate_with_qdrant_memory(self, chunks: List[Dict]):
         """Integrate local search results with Qdrant memory"""
         entities = []
-        
+
         for chunk in chunks:
             metadata = chunk['metadata']
-            
+
             entity = {
                 "name": f"{metadata['type']}_{metadata['name']}_{metadata['file']}",
                 "entityType": f"code_{metadata['type']}",
@@ -1395,14 +1395,14 @@ class LocalVectorCodeSearch:
                     f"Docstring available: {'Yes' if metadata.get('docstring') else 'No'}"
                 ]
             }
-            
+
             if metadata['type'] == 'function' and metadata.get('parameters'):
                 entity["observations"].append(f"Parameters: {', '.join(metadata['parameters'])}")
             elif metadata['type'] == 'class' and metadata.get('methods'):
                 entity["observations"].append(f"Methods: {', '.join(metadata['methods'][:5])}")
-            
+
             entities.append(entity)
-        
+
         # Store in Qdrant memory in batches
         batch_size = 100
         for i in range(0, len(entities), batch_size):
@@ -1447,7 +1447,7 @@ class ErrorPatternMiner:
     def __init__(self, qdrant_memory_client):
         self.memory_client = qdrant_memory_client
         self.error_patterns = defaultdict(list)
-    
+
     def capture_compile_error(self, error_output: str, file_path: str):
         """Capture and analyze compilation errors"""
         error_entity = {
@@ -1460,7 +1460,7 @@ class ErrorPatternMiner:
             ]
         }
         self.memory_client.create_entities([error_entity])
-    
+
     def track_debugging_session(self, debug_commands: List[str], resolution: str):
         """Track successful debugging workflows"""
         debug_entity = {
@@ -1484,21 +1484,21 @@ Combine code, comments, documentation, and issue tracking for comprehensive unde
 class MultiModalLearner:
     def __init__(self, qdrant_memory_client):
         self.memory_client = qdrant_memory_client
-    
+
     def correlate_code_and_docs(self, code_file: str, readme_content: str):
         """Find correlations between code and documentation"""
         # Extract topics from README
         doc_topics = self.extract_documentation_topics(readme_content)
-        
+
         # Extract code features
         code_features = self.extract_code_features(code_file)
-        
+
         # Find correlations
         correlations = self.find_correlations(doc_topics, code_features)
-        
+
         # Store correlation patterns
         self.store_correlations(correlations, code_file)
-    
+
     def integrate_issue_tracker(self, issues: List[Dict], code_changes: List[str]):
         """Link bug reports to code changes"""
         for issue in issues:
@@ -1517,12 +1517,12 @@ Focus on performance bottlenecks, hot paths, and optimization opportunities.
 class PerformanceIndexer:
     def __init__(self, qdrant_memory_client):
         self.memory_client = qdrant_memory_client
-    
+
     def analyze_profiler_data(self, profile_data: Dict):
         """Extract patterns from profiling data"""
         hot_functions = self.identify_hot_functions(profile_data)
         memory_bottlenecks = self.identify_memory_issues(profile_data)
-        
+
         # Store performance insights
         for func in hot_functions:
             perf_entity = {
@@ -1536,12 +1536,12 @@ class PerformanceIndexer:
                 ]
             }
             self.memory_client.create_entities([perf_entity])
-    
+
     def track_build_times(self, build_data: Dict):
         """Learn from build performance patterns"""
         # Identify slow compilation units
         slow_files = [f for f in build_data['files'] if f['compile_time'] > build_data['avg_time'] * 2]
-        
+
         for file_data in slow_files:
             build_entity = {
                 "name": f"build_bottleneck_{file_data['file']}",
@@ -1564,7 +1564,7 @@ Based on analysis of the gh-util codebase structure:
 
 **Core Components for Integration:**
 - `ParallelBaseProcessor` - Thread-safe foundation for `IndexingProcessor`
-- `GitHubFetcher` - Hook point for API call interception  
+- `GitHubFetcher` - Hook point for API call interception
 - `StateManager` - Extend with indexing state tracking
 - `TerminalDisplay` - Add vector search result formatting
 - `ConfigManager` - Add `[vector_db]` configuration section
@@ -1592,7 +1592,7 @@ class IndexingProcessor(ParallelBaseProcessor):
     def __init__(self, config_manager):
         super().__init__(config_manager)
         self.vector_search = LocalVectorCodeSearch(qdrant_memory_client)
-        
+
     def process_repository(self, repo_url, template):
         # Index GitHub API patterns in repository
         api_patterns = self.extract_github_patterns(repo_url)
@@ -1616,12 +1616,12 @@ def extract_github_patterns(self, repo_content):
 These nine methods provide comprehensive approaches to automatically capture and index development patterns for Claude Code integration. Each method serves different aspects of the development workflow:
 
 **Core Methods (1-2)**: Foundation monitoring and interception
-**Advanced Analysis (3-6)**: Deep code understanding and semantic search  
+**Advanced Analysis (3-6)**: Deep code understanding and semantic search
 **Experimental Methods (7-9)**: Cutting-edge learning from errors, documentation, and performance
 
 **Recommended Implementation Strategy for gh-util**:
 1. **Start with Method 6 (Local Vectors)** - Immediate GitHub API pattern search capability
-2. **Add Method 2 (MCP Interceptor)** - Learn user's GitHub workflow preferences  
+2. **Add Method 2 (MCP Interceptor)** - Learn user's GitHub workflow preferences
 3. **Integrate Method 4 (Git Hooks)** - Track GitHub operation evolution
 4. **Consider Method 3 (AST Analysis)** - Deep understanding of GitHub integration code
 

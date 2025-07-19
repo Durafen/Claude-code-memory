@@ -9,16 +9,13 @@ Provides test fixtures for:
 """
 
 import os
-import shutil
-import tempfile
+from collections.abc import Iterator
 from pathlib import Path
-from contextlib import contextmanager
-from typing import Iterator
 
-import pytest
 import numpy as np
+import pytest
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, CollectionInfo
+from qdrant_client.http.models import Distance, VectorParams
 
 # Import project components
 try:
@@ -36,11 +33,12 @@ except ImportError:
 # Temporary repository fixture
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def temp_repo(tmp_path_factory) -> Path:
     """Create a temporary repository with sample Python files for testing."""
     repo_path = tmp_path_factory.mktemp("sample_repo")
-    
+
     # Create sample Python files
     (repo_path / "foo.py").write_text('''"""Sample module with functions."""
 
@@ -50,12 +48,12 @@ def add(x, y):
 
 class Calculator:
     """Simple calculator class."""
-    
+
     def multiply(self, a, b):
         """Multiply two numbers."""
         return a * b
 ''')
-    
+
     (repo_path / "bar.py").write_text('''"""Module that imports and uses foo."""
 from foo import add, Calculator
 
@@ -69,7 +67,7 @@ def main():
 if __name__ == "__main__":
     main()
 ''')
-    
+
     # Create a subdirectory with more code
     subdir = repo_path / "utils"
     subdir.mkdir()
@@ -82,7 +80,7 @@ def format_output(value):
 
 LOG_LEVEL = "INFO"
 ''')
-    
+
     # Create a test file (will be excluded by default)
     test_dir = repo_path / "tests"
     test_dir.mkdir()
@@ -93,7 +91,7 @@ from foo import add
 def test_add():
     assert add(2, 3) == 5
 ''')
-    
+
     return repo_path
 
 
@@ -107,9 +105,11 @@ def empty_repo(tmp_path_factory) -> Path:
 # Test collection utilities
 # ---------------------------------------------------------------------------
 
+
 def get_test_collection_name(base_name: str = "test_collection") -> str:
     """Generate a unique test collection name with timestamp."""
     import time
+
     timestamp = int(time.time())
     return f"{base_name}_{timestamp}"
 
@@ -117,8 +117,10 @@ def get_test_collection_name(base_name: str = "test_collection") -> str:
 def is_production_collection(collection_name: str) -> bool:
     """Check if a collection name is a production collection that should never be deleted."""
     PRODUCTION_COLLECTIONS = {
-        'claude-memory-test', 'memory-project', 'general', 
-        'watcher-test'  # Add watcher-test as it's used for debugging
+        "claude-memory-test",
+        "memory-project",
+        "general",
+        "watcher-test",  # Add watcher-test as it's used for debugging
     }
     return collection_name in PRODUCTION_COLLECTIONS
 
@@ -127,23 +129,22 @@ def is_production_collection(collection_name: str) -> bool:
 # Qdrant test fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def qdrant_client() -> Iterator[QdrantClient]:
     """Create a Qdrant client for testing with session scope."""
     # Load config to get API key from settings.txt
     from claude_indexer.config import load_config
+
     config = load_config()
-    
+
     # Use authentication if available
     if config.qdrant_api_key and config.qdrant_api_key != "default-key":
-        client = QdrantClient(
-            url=config.qdrant_url,
-            api_key=config.qdrant_api_key
-        )
+        client = QdrantClient(url=config.qdrant_url, api_key=config.qdrant_api_key)
     else:
         # Fall back to unauthenticated for local testing
         client = QdrantClient("localhost", port=6333)
-    
+
     # Create test collection with timestamp to ensure uniqueness and easy cleanup
     collection_name = get_test_collection_name("test_collection")
     try:
@@ -152,27 +153,32 @@ def qdrant_client() -> Iterator[QdrantClient]:
             client.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
-                optimizers_config={
-                    "indexing_threshold": 1000
-                }
+                optimizers_config={"indexing_threshold": 1000},
             )
     except Exception as e:
         pytest.skip(f"Qdrant not available: {e}")
-    
+
     yield client
-    
+
     # Cleanup: Remove ONLY temporary test collections after test session
     try:
         collections = client.get_collections().collections
-        # Only cleanup collections that are clearly temporary test collections  
+        # Only cleanup collections that are clearly temporary test collections
         test_collections = [
-            c.name for c in collections 
-            if (c.name.startswith('test_') or  # test_ prefix
-                c.name.endswith('_test') or   # _test suffix  
-                'integration' in c.name.lower() or  # integration tests
-                'temp' in c.name.lower() or    # temporary collections
-                any(char.isdigit() for char in c.name)  # has numbers (likely timestamps)
-                ) and not is_production_collection(c.name)  # NEVER delete production collections
+            c.name
+            for c in collections
+            if (
+                c.name.startswith("test_")  # test_ prefix
+                or c.name.endswith("_test")  # _test suffix
+                or "integration" in c.name.lower()  # integration tests
+                or "temp" in c.name.lower()  # temporary collections
+                or any(
+                    char.isdigit() for char in c.name
+                )  # has numbers (likely timestamps)
+            )
+            and not is_production_collection(
+                c.name
+            )  # NEVER delete production collections
         ]
         for collection_name in test_collections:
             try:
@@ -189,19 +195,23 @@ def qdrant_store(qdrant_client) -> "QdrantStore":
     """Create a QdrantStore instance for testing."""
     if QdrantStore is None:
         pytest.skip("QdrantStore not available")
-    
-    # Load config to get API credentials 
+
+    # Load config to get API credentials
     from claude_indexer.config import load_config
+
     config = load_config()
-    
+
     store = QdrantStore(
         url=config.qdrant_url,
-        api_key=config.qdrant_api_key if config.qdrant_api_key != "default-key" else None
+        api_key=config.qdrant_api_key
+        if config.qdrant_api_key != "default-key"
+        else None,
     )
-    
+
     # Clean up any existing test data
     try:
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
         filter_obj = Filter(
             must=[FieldCondition(key="test", match=MatchValue(value=True))]
         )
@@ -211,7 +221,7 @@ def qdrant_store(qdrant_client) -> "QdrantStore":
     except Exception:
         # Skip cleanup if it fails
         pass
-    
+
     return store
 
 
@@ -219,50 +229,47 @@ def qdrant_store(qdrant_client) -> "QdrantStore":
 # Mock embedder fixtures
 # ---------------------------------------------------------------------------
 
+
 class DummyEmbedder:
     """Fast, deterministic embedder for testing."""
-    
+
     def __init__(self, dimension: int = 1536):
         self.dimension = dimension
-    
+
     def embed_text(self, text: str):
         """Generate embedding for single text - interface compatibility."""
         from claude_indexer.embeddings.base import EmbeddingResult
-        
+
         # Create deterministic but unique embedding
         seed = hash(text) % 10000
         np.random.seed(seed)
         embedding = np.random.rand(self.dimension).astype(np.float32).tolist()
-        
+
         return EmbeddingResult(
             text=text,
             embedding=embedding,
             model="dummy",
             token_count=len(text.split()),
-            processing_time=0.001
+            processing_time=0.001,
         )
-    
+
     def embed_batch(self, texts: list[str]):
         """Generate embeddings for multiple texts."""
         return [self.embed_text(text) for text in texts]
-    
+
     def get_model_info(self):
         """Get model information."""
-        return {
-            "model": "dummy",
-            "dimension": self.dimension,
-            "max_tokens": 8192
-        }
-    
+        return {"model": "dummy", "dimension": self.dimension, "max_tokens": 8192}
+
     def get_max_tokens(self):
         """Get maximum token limit."""
         return 8192
-    
+
     def embed_single(self, text: str) -> np.ndarray:
         """Legacy method for backward compatibility."""
         result = self.embed_text(text)
         return np.array(result.embedding, dtype=np.float32)
-    
+
     def embed(self, texts: list[str]) -> list[np.ndarray]:
         """Generate deterministic embeddings based on text hash."""
         embeddings = []
@@ -285,11 +292,11 @@ def dummy_embedder() -> DummyEmbedder:
 def mock_openai_embedder(monkeypatch) -> DummyEmbedder:
     """Mock OpenAI embedder with dummy implementation."""
     dummy = DummyEmbedder()
-    
+
     if OpenAIEmbedder is not None:
         monkeypatch.setattr(OpenAIEmbedder, "embed_text", dummy.embed_text)
         monkeypatch.setattr(OpenAIEmbedder, "embed_batch", dummy.embed_batch)
-    
+
     return dummy
 
 
@@ -297,16 +304,18 @@ def mock_openai_embedder(monkeypatch) -> DummyEmbedder:
 # Configuration fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def test_config(tmp_path) -> "IndexerConfig":
     """Create test configuration with temporary paths."""
     if IndexerConfig is None:
         pytest.skip("IndexerConfig class not available")
-    
+
     # Load real config from settings.txt and create test settings file
     from claude_indexer.config import load_config
+
     real_config = load_config()
-    
+
     settings_file = tmp_path / "test_settings.txt"
     settings_content = f"""
 openai_api_key={real_config.openai_api_key}
@@ -314,11 +323,11 @@ qdrant_api_key={real_config.qdrant_api_key}
 qdrant_url={real_config.qdrant_url}
 """
     settings_file.write_text(settings_content.strip())
-    
+
     # Create temporary state directory for test isolation
     state_dir = tmp_path / "state"
     state_dir.mkdir(exist_ok=True)
-    
+
     config = load_config(settings_file)
     config.state_directory = state_dir  # Override state directory for tests
     return config
@@ -328,6 +337,7 @@ qdrant_url={real_config.qdrant_url}
 # File system fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def sample_python_file(tmp_path) -> Path:
     """Create a single sample Python file for testing."""
@@ -336,10 +346,10 @@ def sample_python_file(tmp_path) -> Path:
 
 class SampleClass:
     """A sample class."""
-    
+
     def __init__(self, name: str):
         self.name = name
-    
+
     def greet(self) -> str:
         """Return a greeting."""
         return f"Hello, {self.name}!"
@@ -359,25 +369,25 @@ def sample_files_with_changes(tmp_path) -> tuple[Path, dict]:
     """Create sample files and return info about planned changes."""
     repo = tmp_path / "repo"
     repo.mkdir()
-    
+
     # Original file
     original = repo / "original.py"
     original.write_text('def old_func(): return "old"')
-    
+
     # File to be modified
     modified = repo / "modified.py"
-    modified.write_text('def func(): return 1')
-    
+    modified.write_text("def func(): return 1")
+
     # File to be deleted
     deleted = repo / "deleted.py"
     deleted.write_text('def func(): return "delete me"')
-    
+
     changes = {
-        "modify": (modified, 'def func(): return 2'),  # Changed return value
+        "modify": (modified, "def func(): return 2"),  # Changed return value
         "delete": deleted,
-        "add": (repo / "new.py", 'def new_func(): return "new"')
+        "add": (repo / "new.py", 'def new_func(): return "new"'),
     }
-    
+
     return repo, changes
 
 
@@ -385,10 +395,12 @@ def sample_files_with_changes(tmp_path) -> tuple[Path, dict]:
 # Async fixtures for file watching tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def event_loop():
     """Create an event loop for async tests."""
     import asyncio
+
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
@@ -398,19 +410,18 @@ def event_loop():
 # Marker decorators
 # ---------------------------------------------------------------------------
 
+
 def requires_qdrant(func):
     """Decorator to skip tests if Qdrant is not available."""
-    return pytest.mark.skipif(
-        not _qdrant_available(),
-        reason="Qdrant not available"
-    )(func)
+    return pytest.mark.skipif(not _qdrant_available(), reason="Qdrant not available")(
+        func
+    )
 
 
 def requires_openai(func):
     """Decorator to skip tests if OpenAI API key is not available."""
     return pytest.mark.skipif(
-        not os.getenv("OPENAI_API_KEY"),
-        reason="OpenAI API key not available"
+        not os.getenv("OPENAI_API_KEY"), reason="OpenAI API key not available"
     )(func)
 
 
@@ -419,18 +430,16 @@ def _qdrant_available() -> bool:
     try:
         # Load config to get API key from settings.txt
         from claude_indexer.config import load_config
+
         config = load_config()
-        
+
         # Use authentication if available
         if config.qdrant_api_key and config.qdrant_api_key != "default-key":
-            client = QdrantClient(
-                url=config.qdrant_url,
-                api_key=config.qdrant_api_key
-            )
+            client = QdrantClient(url=config.qdrant_url, api_key=config.qdrant_api_key)
         else:
             # Fall back to unauthenticated for local testing
             client = QdrantClient("localhost", port=6333)
-            
+
         client.get_collections()
         return True
     except Exception:
@@ -441,48 +450,58 @@ def _qdrant_available() -> bool:
 # Additional cleanup fixtures
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(autouse=False, scope="function")  # DISABLED - was deleting production collections
+
+@pytest.fixture(
+    autouse=False, scope="function"
+)  # DISABLED - was deleting production collections
 def cleanup_test_collections_on_failure():
     """Cleanup test collections after each test function to prevent accumulation."""
     yield  # Run the test
-    
+
     # Only perform cleanup if Qdrant is available
     if not _qdrant_available():
         return
-    
+
     # Cleanup any collections created during this test that match test patterns
     try:
         from claude_indexer.config import load_config
+
         config = load_config()
-        
+
         if config.qdrant_api_key and config.qdrant_api_key != "default-key":
-            client = QdrantClient(
-                url=config.qdrant_url,
-                api_key=config.qdrant_api_key
-            )
+            client = QdrantClient(url=config.qdrant_url, api_key=config.qdrant_api_key)
         else:
             client = QdrantClient("localhost", port=6333)
-        
+
         collections = client.get_collections().collections
         # Only cleanup collections that look like temporary test collections
         # PRODUCTION SAFEGUARD: Use centralized production collection check
         temp_test_collections = [
-            c.name for c in collections 
-            if (not is_production_collection(c.name) and 
-                ('test' in c.name.lower() and 
-                (any(char.isdigit() for char in c.name) or  # has numbers (likely timestamps)
-                 c.name.startswith('test_') or  # any test collection
-                 c.name.endswith('_test') or   # reverse pattern
-                 'integration' in c.name.lower() or  # integration tests
-                 'delete' in c.name.lower())))  # deletion tests
+            c.name
+            for c in collections
+            if (
+                not is_production_collection(c.name)
+                and (
+                    "test" in c.name.lower()
+                    and (
+                        any(
+                            char.isdigit() for char in c.name
+                        )  # has numbers (likely timestamps)
+                        or c.name.startswith("test_")  # any test collection
+                        or c.name.endswith("_test")  # reverse pattern
+                        or "integration" in c.name.lower()  # integration tests
+                        or "delete" in c.name.lower()
+                    )
+                )
+            )  # deletion tests
         ]
-        
+
         for collection_name in temp_test_collections:
             try:
                 client.delete_collection(collection_name)
             except Exception:
                 pass  # Ignore individual failures
-                
+
     except Exception:
         pass  # Ignore all cleanup failures to not interfere with test results
 
@@ -490,6 +509,7 @@ def cleanup_test_collections_on_failure():
 # ---------------------------------------------------------------------------
 # Utility functions for tests
 # ---------------------------------------------------------------------------
+
 
 def assert_valid_embedding(embedding: np.ndarray, expected_dim: int = 1536):
     """Assert that an embedding has the correct shape and type."""
@@ -512,11 +532,11 @@ def wait_for_eventual_consistency(
     initial_delay: float = 0.5,
     max_delay: float = 3.0,
     backoff_multiplier: float = 1.2,
-    verbose: bool = False
+    verbose: bool = False,
 ) -> bool:
     """
     Wait for Qdrant eventual consistency by retrying searches until entities are properly deleted.
-    
+
     Args:
         search_func: Function that returns search results (should return list/count)
         expected_count: Expected number of results after consistency (default: 0 for deletions)
@@ -525,66 +545,70 @@ def wait_for_eventual_consistency(
         max_delay: Maximum delay between retries
         backoff_multiplier: Multiplier for exponential backoff
         verbose: Print debug information
-        
+
     Returns:
         True if eventual consistency achieved, False if timeout
     """
     import time
-    
+
     start_time = time.time()
     delay = initial_delay
     attempt = 0
     last_results = None
-    
+
     # Start with a small initial delay to allow Qdrant to process the deletion
     time.sleep(0.2)
-    
+
     while time.time() - start_time < timeout:
         attempt += 1
-        
+
         try:
             results = search_func()
-            
+
             # Handle different return types
-            if hasattr(results, '__len__'):
+            if hasattr(results, "__len__"):
                 actual_count = len(results)
             elif isinstance(results, (int, float)):
                 actual_count = int(results)
             else:
                 actual_count = 1 if results else 0
-                
+
             if verbose:
-                print(f"Attempt {attempt}: Expected {expected_count}, got {actual_count}")
-                if hasattr(results, '__len__') and len(results) > 0 and verbose:
+                print(
+                    f"Attempt {attempt}: Expected {expected_count}, got {actual_count}"
+                )
+                if hasattr(results, "__len__") and len(results) > 0 and verbose:
                     # Show details of what's still being found
                     for i, result in enumerate(results[:3]):  # Show first 3 results
-                        if hasattr(result, 'payload'):
-                            name = result.payload.get('name', 'Unknown')
-                            file_path = result.payload.get('file_path', 'Unknown')
-                            print(f"  Still found #{i+1}: {name} in {file_path}")
+                        if hasattr(result, "payload"):
+                            name = result.payload.get("name", "Unknown")
+                            file_path = result.payload.get("file_path", "Unknown")
+                            print(f"  Still found #{i + 1}: {name} in {file_path}")
                         else:
-                            print(f"  Still found #{i+1}: {result}")
-                
+                            print(f"  Still found #{i + 1}: {result}")
+
             if actual_count == expected_count:
                 if verbose:
-                    print(f"Eventual consistency achieved after {time.time() - start_time:.2f}s")
+                    print(
+                        f"Eventual consistency achieved after {time.time() - start_time:.2f}s"
+                    )
                 return True
-                
+
             # If count hasn't changed for several attempts, try a longer delay
             if last_results is not None and actual_count == last_results:
                 delay = min(delay * 1.5, max_delay)
-            
+
             last_results = actual_count
-                
+
         except Exception as e:
             if verbose:
                 print(f"Search attempt {attempt} failed: {e}")
             # Continue retrying on search errors
-            
+
         # Wait before next attempt with exponential backoff
         time.sleep(delay)
         delay = min(delay * backoff_multiplier, max_delay)
-    
+
     if verbose:
         print(f"Timeout reached after {timeout}s, last count: {last_results}")
     return False
@@ -596,11 +620,11 @@ def wait_for_collection_ready(
     timeout: float = 15.0,
     initial_delay: float = 0.2,
     max_delay: float = 2.0,
-    verbose: bool = False
+    verbose: bool = False,
 ) -> bool:
     """
     Wait for a Qdrant collection to exist and be ready for operations.
-    
+
     Args:
         qdrant_store: QdrantStore instance
         collection_name: Name of collection to wait for
@@ -608,22 +632,22 @@ def wait_for_collection_ready(
         initial_delay: Initial delay between checks
         max_delay: Maximum delay between checks
         verbose: Print debug information
-        
+
     Returns:
         True if collection is ready, False if timeout
     """
     import time
-    
+
     start_time = time.time()
     delay = initial_delay
     attempt = 0
-    
+
     if verbose:
         print(f"Waiting for collection '{collection_name}' to be ready...")
-    
+
     while time.time() - start_time < timeout:
         attempt += 1
-        
+
         try:
             # Check if collection exists
             if qdrant_store.collection_exists(collection_name):
@@ -634,14 +658,14 @@ def wait_for_collection_ready(
                 return True
             elif verbose:
                 print(f"Attempt {attempt}: Collection '{collection_name}' not found")
-                
+
         except Exception as e:
             if verbose:
                 print(f"Attempt {attempt}: Collection check failed: {e}")
-        
+
         time.sleep(delay)
         delay = min(delay * 1.5, max_delay)
-    
+
     if verbose:
         print(f"Timeout: Collection '{collection_name}' not ready after {timeout}s")
     return False
@@ -654,11 +678,11 @@ def verify_entity_searchable(
     entity_name: str,
     timeout: float = 10.0,
     verbose: bool = False,
-    expected_count: int = 1
+    expected_count: int = 1,
 ) -> bool:
     """
     Verify that a specific entity is indexed and searchable.
-    
+
     Args:
         qdrant_store: QdrantStore instance
         dummy_embedder: Embedder for search queries
@@ -667,53 +691,64 @@ def verify_entity_searchable(
         timeout: Maximum time to wait
         verbose: Print debug information
         expected_count: Expected number of entities to find (default: 1)
-        
+
     Returns:
         True if entity is found, False if timeout
     """
+
     def search_for_entity():
         search_embedding = dummy_embedder.embed_single(entity_name)
         # Increase top_k to handle cases where target entity might not be in top 10
         # due to DummyEmbedder's deterministic but not perfect scoring
         hits = qdrant_store.search(collection_name, search_embedding, top_k=50)
         if verbose:
-            print(f"DEBUG: Searching for '{entity_name}' in collection '{collection_name}'")
+            print(
+                f"DEBUG: Searching for '{entity_name}' in collection '{collection_name}'"
+            )
             print(f"DEBUG: Found {len(hits)} total hits")
             for i, hit in enumerate(hits[:10]):
-                entity_name_field = hit.payload.get('entity_name', 'NO_NAME')
-                name_field = hit.payload.get('name', 'NO_NAME')
-                print(f"DEBUG: Hit {i}: entity_name='{entity_name_field}', name='{name_field}', score={hit.score}")
+                entity_name_field = hit.payload.get("entity_name", "NO_NAME")
+                name_field = hit.payload.get("name", "NO_NAME")
+                print(
+                    f"DEBUG: Hit {i}: entity_name='{entity_name_field}', name='{name_field}', score={hit.score}"
+                )
                 if entity_name in str(hit.payload):
-                    print(f"DEBUG: Hit {i} contains '{entity_name}' in payload: {hit.payload}")
+                    print(
+                        f"DEBUG: Hit {i} contains '{entity_name}' in payload: {hit.payload}"
+                    )
         # Enhanced matching logic for unique entity name matches only
         # Focus on entities that have the search term in their actual name
         # This provides more precise matching for test expectations
         unique_entity_names = set()
         matching_hits = []
-        
+
         for hit in hits:
             chunk_type = hit.payload.get("chunk_type", "")
             entity_name_field = hit.payload.get("entity_name", "")
-            
+
             # Skip relations and file paths
             if chunk_type == "relation" or entity_name_field.startswith("/"):
                 continue
-                
+
             # Only match if search term is in the entity name (not just content)
             if entity_name in entity_name_field:
                 if entity_name_field not in unique_entity_names:
                     unique_entity_names.add(entity_name_field)
                     matching_hits.append(hit)
                     if verbose:
-                        print(f"DEBUG: Unique entity match - entity_name='{entity_name_field}', chunk_type='{chunk_type}'")
-        
+                        print(
+                            f"DEBUG: Unique entity match - entity_name='{entity_name_field}', chunk_type='{chunk_type}'"
+                        )
+
         if verbose:
-            print(f"DEBUG: Found {len(matching_hits)} unique entity matches for '{entity_name}'")
+            print(
+                f"DEBUG: Found {len(matching_hits)} unique entity matches for '{entity_name}'"
+            )
         return matching_hits
-    
+
     return wait_for_eventual_consistency(
         search_for_entity,
         expected_count=expected_count,
         timeout=timeout,
-        verbose=verbose
+        verbose=verbose,
     )

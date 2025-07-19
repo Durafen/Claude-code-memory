@@ -17,7 +17,7 @@ Task: Maintain MANUAL memory entries only (not auto-indexed code) from memories.
 ## Workflow:
 1. Read memories.md file which contains all manual entries grouped by category
 2. Each entry has format: [ ] **Title** (ID: `number`) followed by description
-3. Identify 10 unprocessed entries (those without [X] mark) 
+3. Identify 10 unprocessed entries (those without [X] mark)
 4. Create TodoWrite list with all 10 entries as separate tasks using the title and ID
 5. Process each entry one by one, marking as in_progress when starting
 6. **For each entry, FIRST search for the specific entry by title/ID to get its full content and analyze the actual text content, THEN search for similar/duplicate/complementary entries using MCP search_similar and read their full content as well**
@@ -49,7 +49,7 @@ Task: Maintain MANUAL memory entries only (not auto-indexed code) from memories.
 
 ## Outdated Information Cleanup:
 - Delete resolved bugs and fixed issues (but NEVER delete "active_issue" or "ideas" category entries)
-- Remove deprecated API references  
+- Remove deprecated API references
 - Update version-specific information
 - Eliminate obsolete configurations
 - **Verify current accuracy against latest codebase using MCP memory tools**
@@ -126,9 +126,9 @@ For comprehensive guides, use clear sections:
 
 🎯 Comprehensive Guide Created:
    Title: [New comprehensive guide title]
-   
+
    PATTERN: [Description]
-   PROBLEM: [Issue context] 
+   PROBLEM: [Issue context]
    SOLUTION: [Implementation approach]
    RESULTS: [Quantified outcomes]
 

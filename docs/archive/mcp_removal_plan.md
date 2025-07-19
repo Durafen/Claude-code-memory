@@ -33,12 +33,12 @@ This plan outlines the elegant removal of MCP storage backend from claude_indexe
 #### 1.1 Storage Layer Cleanup
 - **Remove Files:**
   - `claude_indexer/storage/mcp.py` (entire file)
-  
+
 - **Modify `storage/registry.py`:**
   ```python
   # Remove imports
   - from .mcp import MCPStore, MCP_AVAILABLE
-  
+
   # Remove registration
   - if MCP_AVAILABLE:
   -     self.register("mcp", MCPStore)
@@ -53,7 +53,7 @@ This plan outlines the elegant removal of MCP storage backend from claude_indexe
   - `_fallback_print_commands()` method (lines 760-766)
   - MCP fallback logic in `index_project()` (lines 213-217)
   - MCP-related code in `_finalize_storage()` (lines 772-773)
-  
+
 - **Remove from `analysis/entities.py`:**
   - `to_mcp_dict()` method from Entity class (lines 70-72)
   - `to_mcp_dict()` method from Relation class (lines 115-117)
@@ -69,7 +69,7 @@ This plan outlines the elegant removal of MCP storage backend from claude_indexe
   - Dual-mode logic in `index` command
   - MCP fallback logic
   - Command file reporting logic
-  
+
 - **Simplify to:**
   ```python
   # Direct Qdrant mode only
@@ -79,7 +79,7 @@ This plan outlines the elegant removal of MCP storage backend from claude_indexe
       "model": "text-embedding-3-small",
       "enable_caching": True
   })
-  
+
   vector_store = create_store_from_config({
       "backend": "qdrant",
       "url": config_obj.qdrant_url,
@@ -107,24 +107,24 @@ This plan outlines the elegant removal of MCP storage backend from claude_indexe
      - Lines 730-758: `_call_mcp_api()` method
      - Lines 760-766: `_fallback_print_commands()` method
      - Lines 772-773: MCP finalization check
-   
+
    - `cli_full.py`:
      - Line 82-83: `--generate-commands` option
      - Lines 106-124: MCP mode initialization
      - Lines 145-160: MCP fallback
      - Lines 235-240: MCP output reporting
-   
+
    - `main.py`:
      - Lines 59-72: MCP fallback logic
-   
+
    - `analysis/entities.py`:
      - Lines 70-72: Entity `to_mcp_dict()` method
      - Lines 115-117: Relation `to_mcp_dict()` method
-   
+
    - `storage/registry.py`:
      - Line 6: Import of MCPStore
      - Lines 20-21: MCP registration
-   
+
    - `test_cli.py`:
      - Complete `test_index_project_with_generate_commands()` method
 

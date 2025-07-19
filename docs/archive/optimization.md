@@ -33,7 +33,7 @@ for func in file_entities:
             observations.append(f"Documentation: {jedi_func['docstring'][:200]}...")
         if jedi_func and jedi_func.get('full_name'):
             observations.append(f"Full name: {jedi_func['full_name']}")
-        
+
         mcp_entities.append({
             'name': f"{relative_path}:{func['name']}",
             'entityType': 'function',
@@ -52,7 +52,7 @@ for cls in file_entities:
             observations.append(f"Documentation: {jedi_cls['docstring'][:200]}...")
         if jedi_cls and jedi_cls.get('full_name'):
             observations.append(f"Full name: {jedi_cls['full_name']}")
-        
+
         mcp_entities.append({
             'name': f"{relative_path}:{cls['name']}",
             'entityType': 'class',
@@ -62,24 +62,24 @@ for cls in file_entities:
 
 **Optimized Solution:**
 ```python
-def _create_code_entity(self, entity: Dict[str, Any], entity_type: str, 
+def _create_code_entity(self, entity: Dict[str, Any], entity_type: str,
                        jedi_analysis: Dict[str, Any], relative_path: str) -> Dict[str, Any]:
     """Generic entity creation for functions and classes"""
     jedi_key = f"{entity_type}s"  # 'functions' or 'classes'
     jedi_items = jedi_analysis.get(jedi_key, [])
     jedi_item = next((item for item in jedi_items if item['name'] == entity['name']), None)
-    
+
     observations = [
         f"{entity_type.capitalize()} defined in {relative_path} at line {entity['start_line']}",
         f"Part of {self.collection_name} project"
     ]
-    
+
     if jedi_item:
         if jedi_item.get('docstring'):
             observations.append(f"Documentation: {jedi_item['docstring'][:200]}...")
         if jedi_item.get('full_name'):
             observations.append(f"Full name: {jedi_item['full_name']}")
-    
+
     return {
         'name': f"{relative_path}:{entity['name']}",
         'entityType': entity_type,
@@ -87,22 +87,22 @@ def _create_code_entity(self, entity: Dict[str, Any], entity_type: str,
     }
 
 # Updated create_mcp_entities method
-def create_mcp_entities(self, file_entities: List[Dict[str, Any]], 
+def create_mcp_entities(self, file_entities: List[Dict[str, Any]],
                        jedi_analysis: Dict[str, Any], file_path: Path) -> List[Dict[str, Any]]:
     """Create MCP entities from extracted information"""
     mcp_entities = []
     relative_path = str(file_path.relative_to(self.project_path))
-    
+
     # Create file entity
     file_entity = self._create_file_entity(file_entities, relative_path)
     mcp_entities.append(file_entity)
-    
+
     # Create entities for functions and classes using unified method
     for entity in file_entities:
         if entity['type'] in ['function', 'class']:
             code_entity = self._create_code_entity(entity, entity['type'], jedi_analysis, relative_path)
             mcp_entities.append(code_entity)
-    
+
     return mcp_entities
 ```
 
@@ -121,7 +121,7 @@ if node.type == 'function_definition':
         if child.type == 'identifier':
             func_name = child.text.decode('utf-8')
             break
-    
+
     if func_name:
         entities.append({
             'name': func_name,
@@ -139,7 +139,7 @@ elif node.type == 'class_definition':
         if child.type == 'identifier':
             class_name = child.text.decode('utf-8')
             break
-    
+
     if class_name:
         entities.append({
             'name': class_name,
@@ -153,7 +153,7 @@ elif node.type == 'class_definition':
 
 **Optimized Solution:**
 ```python
-def _extract_named_entity(self, node: tree_sitter.Node, entity_type: str, 
+def _extract_named_entity(self, node: tree_sitter.Node, entity_type: str,
                          file_path: Path) -> Optional[Dict[str, Any]]:
     """Extract named entity (function/class) from Tree-sitter node"""
     # Find identifier child
@@ -162,10 +162,10 @@ def _extract_named_entity(self, node: tree_sitter.Node, entity_type: str,
         if child.type == 'identifier':
             entity_name = child.text.decode('utf-8')
             break
-    
+
     if not entity_name:
         return None
-    
+
     return {
         'name': entity_name,
         'type': entity_type,
@@ -182,15 +182,15 @@ def traverse_node(node, depth=0):
         'function_definition': 'function',
         'class_definition': 'class'
     }
-    
+
     if node.type in entity_mapping:
         entity = self._extract_named_entity(node, entity_mapping[node.type], file_path)
         if entity:
             entities.append(entity)
-    
+
     elif node.type in ['import_statement', 'import_from_statement']:
         entities.append(self._extract_import_entity(node, file_path))
-    
+
     # Recursively process children
     for child in node.children:
         traverse_node(child, depth + 1)
@@ -209,19 +209,19 @@ def _send_entities_to_mcp(self, entities: List[Dict[str, Any]]) -> bool:
     try:
         batch_size = 50
         total_batches = (len(entities) + batch_size - 1) // batch_size
-        
+
         for i in range(0, len(entities), batch_size):
             batch = entities[i:i + batch_size]
             batch_num = (i // batch_size) + 1
-            
+
             self.log(f"Sending entity batch {batch_num}/{total_batches} ({len(batch)} entities)")
-            
+
             mcp_request = {"entities": batch}
-            
+
             if not self._call_mcp_api("create_entities", mcp_request):
                 self.log(f"Failed to send entity batch {batch_num}", "ERROR")
                 return False
-        
+
         return True
     except Exception as e:
         self.log(f"Error sending entities to MCP: {e}", "ERROR")
@@ -234,30 +234,30 @@ def _send_relations_to_mcp(self, relations: List[Dict[str, Any]]) -> bool:
 
 **Optimized Solution:**
 ```python
-def _send_batch_to_mcp(self, items: List[Dict[str, Any]], item_type: str, 
+def _send_batch_to_mcp(self, items: List[Dict[str, Any]], item_type: str,
                       api_method: str, batch_size: int = 50) -> bool:
     """Generic batch sender for entities and relations"""
     if not items:
         self.log(f"No {item_type} to send")
         return True
-    
+
     try:
         total_batches = (len(items) + batch_size - 1) // batch_size
-        
+
         for i in range(0, len(items), batch_size):
             batch = items[i:i + batch_size]
             batch_num = (i // batch_size) + 1
-            
+
             self.log(f"Sending {item_type} batch {batch_num}/{total_batches} ({len(batch)} {item_type})")
-            
+
             mcp_request = {item_type: batch}
-            
+
             if not self._call_mcp_api(api_method, mcp_request):
                 self.log(f"Failed to send {item_type} batch {batch_num}", "ERROR")
                 return False
-        
+
         return True
-        
+
     except Exception as e:
         self.log(f"Error sending {item_type} to MCP: {e}", "ERROR")
         return False
@@ -321,20 +321,20 @@ def _call_mcp_api(self, method: str, params: Dict[str, Any]) -> bool:
         import subprocess
         import tempfile
         import json
-        
+
         # Create temporary file with the request data
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             json.dump(params, f, indent=2)
             temp_file = f.name
-        
+
         # For now, we'll print the MCP commands that would need to be run
         # In a full implementation, this would integrate with the MCP client
-        
+
         self.log(f"MCP API call: {method} with {len(params.get('entities', params.get('relations', [])))} items")
-        
+
         # Clean up temp file
         os.unlink(temp_file)
-        
+
         # Return True for now - in real implementation, this would check the MCP response
         return True
 ```
@@ -345,16 +345,16 @@ def delete_entities_for_files(self, deleted_files: List[str]) -> bool:
     """Delete entities from MCP memory for removed files"""
     if not deleted_files:
         return True
-        
+
     try:
         # For now, we'll just log what would be deleted
         # In a full implementation, this would call MCP delete operations
         entities_to_delete = []
-        
+
         for file_path in deleted_files:
             entities_to_delete.append(file_path)
             self.log(f"Would delete entities for removed file: {file_path}")
-        
+
         self.log(f"Would delete {len(entities_to_delete)} entities for {len(deleted_files)} removed files")
         return True
 ```
@@ -408,31 +408,31 @@ def get_changed_files(self, current_files: List[Path], incremental: bool = False
     """Detect changed files and return their hashes"""
     if not incremental:
         return current_files, [], {}
-    
+
     self.previous_state = self.load_state_file()
     previous_files = self.previous_state.get("files", {})
-    
+
     changed_files = []
     deleted_files = []
     file_hashes = {}  # Cache hashes for later use
-    
+
     for file_path in current_files:
         relative_path = str(file_path.relative_to(self.project_path))
         current_hash = self.get_file_hash(file_path)
         file_hashes[relative_path] = current_hash  # Cache the hash
-        
+
         if relative_path not in previous_files:
             changed_files.append(file_path)
         elif previous_files[relative_path].get("hash") != current_hash:
             changed_files.append(file_path)
-    
+
     return changed_files, deleted_files, file_hashes
 
 # Updated index_project to use cached hashes
 def index_project(self, include_tests: bool = False, incremental: bool = False) -> bool:
     all_python_files = self.find_python_files(include_tests)
     files_to_process, deleted_files, cached_hashes = self.get_changed_files(all_python_files, incremental)
-    
+
     # Use cached hashes instead of recalculating
     for file_path in files_to_process:
         relative_path = str(file_path.relative_to(self.project_path))
@@ -511,13 +511,13 @@ def _truncate_docstring(docstring: str, max_length: int = 200) -> str:
     """Efficiently truncate docstring with proper word boundaries"""
     if not docstring or len(docstring) <= max_length:
         return docstring
-    
+
     truncated = docstring[:max_length]
     # Find last complete word
     last_space = truncated.rfind(' ')
     if last_space > max_length * 0.8:  # Only if we don't lose too much
         truncated = truncated[:last_space]
-    
+
     return f"{truncated}..."
 ```
 
@@ -585,7 +585,7 @@ class IndexerConfig:
     docstring_max_length: int = 200
     file_hash_cache_size: int = 1000
     jedi_cache_size: int = 100
-    
+
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> 'IndexerConfig':
         """Create config from command line arguments"""
@@ -599,7 +599,7 @@ class IndexerConfig:
 # Some methods return bool
 def process_file(self, file_path: Path, include_tests: bool = False) -> bool:
 
-# Others raise exceptions  
+# Others raise exceptions
 def get_file_hash(self, file_path: Path) -> str:
     try:
         # ...
@@ -648,10 +648,10 @@ def process_file(self, file_path: Path) -> ProcessResult:
 - **Estimated time:** 2 hours
 - **Lines reduced:** 45
 
-**Priority 2: Entity Creation Unification** 
+**Priority 2: Entity Creation Unification**
 - Create `_create_code_entity()` helper method
 - Refactor `create_mcp_entities()` to use unified approach
-- **Estimated time:** 4 hours  
+- **Estimated time:** 4 hours
 - **Lines reduced:** 41
 
 **Priority 3: Tree-sitter Parsing Consolidation**
@@ -696,7 +696,7 @@ def process_file(self, file_path: Path) -> ProcessResult:
 
 **Priority 3: Responsibility Separation**
 - Extract `CodeParser` class
-- Extract `StateManager` class  
+- Extract `StateManager` class
 - Refactor `UniversalIndexer` as orchestrator
 - **Estimated time:** 8 hours
 - **Maintainability:** Very high improvement
@@ -785,7 +785,7 @@ def process_file(self, file_path: Path) -> ProcessResult:
 ### Phase 1 Checklist
 - [ ] Create `_send_batch_to_mcp()` method
 - [ ] Update entity and relation senders
-- [ ] Create `_create_code_entity()` method  
+- [ ] Create `_create_code_entity()` method
 - [ ] Refactor entity creation logic
 - [ ] Create `_extract_named_entity()` method
 - [ ] Update Tree-sitter parsing

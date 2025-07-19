@@ -45,7 +45,8 @@
         ".claude/",
         "docs/archive/",
         "debug/",
-        "memories.md"
+        "memories.md",
+        "memory_guard_debug.txt"
       ]
     },
     "max_file_size": 1048576,

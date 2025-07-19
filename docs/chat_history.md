@@ -30,7 +30,7 @@ The implementation follows the existing modular architecture patterns:
 claude_indexer/
 ├── chat/                          # New module for chat-specific logic
 │   ├── __init__.py
-│   ├── parser.py                  # JSONL parser for Claude Code files  
+│   ├── parser.py                  # JSONL parser for Claude Code files
 │   ├── summarizer.py              # Chat summarization with OpenAI
 │   └── monitor.py                 # File monitoring for chat updates
 ├── analysis/
@@ -60,7 +60,7 @@ class ChatParser:
 ```python
 class ChatSummarizer:
     """Summarize conversations using OpenAI."""
-    
+
     def summarize_conversation(self, messages: List[Dict]) -> SummaryResult
     def categorize_content(self, summary: str) -> EntityType
     def extract_key_insights(self, messages: List[Dict]) -> List[str]
@@ -71,7 +71,7 @@ class ChatSummarizer:
 ```python
 class ChatMonitor:
     """Monitor chat files for changes."""
-    
+
     def watch_project_chats(self, project_path: Path) -> None
     def check_inactive_conversations(self, threshold_hours: int) -> List[Path]
     def trigger_summarization(self, file_path: Path) -> None
@@ -238,19 +238,19 @@ tests/e2e/
 ```python
 class DummyEmbedder:
     """Fast, deterministic embedder for testing - avoids API calls."""
-    
+
     def __init__(self, dimension: int = 1536):
         self.dimension = dimension
-    
+
     def embed_text(self, text: str):
         """Generate deterministic embedding based on text hash."""
         from claude_indexer.embeddings.base import EmbeddingResult
-        
+
         # Create unique but deterministic embedding
         seed = hash(text) % 10000
         np.random.seed(seed)
         embedding = np.random.rand(self.dimension).astype(np.float32).tolist()
-        
+
         return EmbeddingResult(
             text=text,
             embedding=embedding,
@@ -271,7 +271,7 @@ def mock_openai_embedder(monkeypatch):
         "authentication": [0.2] * 1536,
         "database connection": [0.3] * 1536
     }
-    
+
     def mock_create(**kwargs):
         text = kwargs.get('input', '')
         embedding = mock_responses.get(text, [0.5] * 1536)
@@ -279,7 +279,7 @@ def mock_openai_embedder(monkeypatch):
             "data": [{"embedding": embedding}],
             "usage": {"total_tokens": len(text.split()) * 2}
         }
-    
+
     monkeypatch.setattr("openai.embeddings.create", mock_create)
 ```
 
@@ -291,7 +291,7 @@ def mock_openai_embedder(monkeypatch):
 def generate_test_chat_jsonl(path: Path, num_conversations: int = 5):
     """Generate realistic test JSONL chat data."""
     conversations = []
-    
+
     for i in range(num_conversations):
         base_time = datetime.now() - timedelta(days=i)
         messages = [
@@ -302,18 +302,18 @@ def generate_test_chat_jsonl(path: Path, num_conversations: int = 5):
                 "content": f"How do I implement {['authentication', 'caching', 'routing'][i % 3]}?"
             },
             {
-                "id": f"msg-{i}-2", 
+                "id": f"msg-{i}-2",
                 "timestamp": (base_time + timedelta(minutes=1)).isoformat(),
                 "role": "assistant",
                 "content": f"Here's how to implement that feature: [detailed response]..."
             }
         ]
-        
+
         # Write each message as separate JSONL entry
         with open(path, 'a') as f:
             for msg in messages:
                 f.write(json.dumps(msg) + '\n')
-    
+
     return conversations
 ```
 
@@ -331,14 +331,14 @@ def jsonl_edge_cases(tmp_path):
             "content": "x" * 100000  # Test token limits
         }),
         "unicode.jsonl": json.dumps({
-            "id": "unicode-1", 
+            "id": "unicode-1",
             "content": "Test 中文 émojis 🚀 special chars"
         })
     }
-    
+
     for filename, content in edge_cases.items():
         (tmp_path / filename).write_text(content)
-    
+
     return tmp_path
 ```
 
@@ -349,7 +349,7 @@ def jsonl_edge_cases(tmp_path):
 ```python
 class TestChatIndexingPipeline:
     """Integration test for complete chat indexing flow."""
-    
+
     @pytest.fixture
     def test_pipeline(self, qdrant_store, dummy_embedder, temp_repo):
         """Setup complete test pipeline."""
@@ -358,29 +358,29 @@ class TestChatIndexingPipeline:
             'summarizer': ChatSummarizer(dummy_embedder),
             'store': ChatVectorStore(qdrant_store.client)
         }
-    
+
     def test_full_indexing_flow(self, test_pipeline, test_chat_data):
         """Test Parser → Summarizer → Storage flow."""
         # 1. Parse chat files
         conversations = test_pipeline['parser'].parse_directory(test_chat_data)
         assert len(conversations) > 0
-        
+
         # 2. Generate summaries
         summaries = []
         for conv in conversations:
             summary = test_pipeline['summarizer'].summarize(conv)
             summaries.append(summary)
-        
+
         # 3. Store in vector DB
         stored_ids = []
         for summary in summaries:
             point_id = test_pipeline['store'].add_summary(summary)
             stored_ids.append(point_id)
-        
+
         # 4. Verify searchability
         results = test_pipeline['store'].search("authentication")
         assert len(results) > 0
-        
+
         # 5. Verify metadata integrity
         for result in results:
             assert 'category' in result.payload
@@ -395,12 +395,12 @@ def test_incremental_chat_updates(indexer, test_repo, qdrant_store):
     # Initial indexing
     result1 = indexer.index_chat_history(test_repo, "test-collection")
     initial_count = result1.conversations_processed
-    
+
     # Modify one file
     chat_file = test_repo / "chats" / "day1.jsonl"
     with open(chat_file, 'a') as f:
         f.write(json.dumps({"id": "new-msg", "content": "New message"}) + '\n')
-    
+
     # Incremental update
     result2 = indexer.index_chat_history(test_repo, "test-collection")
     assert result2.files_processed == 1  # Only modified file
@@ -419,13 +419,13 @@ def benchmark(func):
         start = time.time()
         result = func(*args, **kwargs)
         elapsed = time.time() - start
-        
+
         # Performance assertions based on function
         if 'parse' in func.__name__:
             assert elapsed < 0.1, f"Parsing too slow: {elapsed:.3f}s"
         elif 'embed' in func.__name__:
             assert elapsed < 0.5, f"Embedding too slow: {elapsed:.3f}s"
-        
+
         return result
     return wrapper
 
@@ -444,18 +444,18 @@ def test_memory_efficient_parsing(huge_jsonl_file):
     """Verify streaming parser doesn't load entire file."""
     import psutil
     import os
-    
+
     process = psutil.Process(os.getpid())
     initial_memory = process.memory_info().rss / 1024 / 1024  # MB
-    
+
     parser = ChatParser()
     # Should use streaming, not load entire file
     for conversation in parser.parse_jsonl_stream(huge_jsonl_file):
         pass  # Process in chunks
-    
+
     final_memory = process.memory_info().rss / 1024 / 1024
     memory_increase = final_memory - initial_memory
-    
+
     # Should not load entire file into memory
     file_size_mb = huge_jsonl_file.stat().st_size / 1024 / 1024
     assert memory_increase < file_size_mb * 0.1  # Max 10% of file size
@@ -470,7 +470,7 @@ def test_memory_efficient_parsing(huge_jsonl_file):
 CHAT_TEST_SCENARIOS = [
     # (description, chat_files, expected_categories)
     ("coding_session", ["implement_auth.jsonl"], ["implementation_pattern"]),
-    ("debug_session", ["fix_memory_leak.jsonl"], ["debugging_pattern"]), 
+    ("debug_session", ["fix_memory_leak.jsonl"], ["debugging_pattern"]),
     ("research_session", ["explore_apis.jsonl"], ["knowledge_insight"]),
     ("mixed_session", ["various_topics.jsonl"], ["multiple_categories"])
 ]
@@ -492,11 +492,11 @@ chat_module_coverage:
   critical_paths:
     - module: claude_indexer.chat.parser
       min_coverage: 95%  # Critical parsing logic
-    - module: claude_indexer.chat.summarizer  
+    - module: claude_indexer.chat.summarizer
       min_coverage: 85%  # AI responses can vary
     - module: claude_indexer.chat.categorizer
       min_coverage: 90%  # Important for search
-    
+
   integration_tests:
     - test_chat_pipeline: "Must test all 7 categories"
     - test_incremental: "Must verify state persistence"
@@ -510,30 +510,30 @@ chat_module_coverage:
 ```python
 class TestTokenUsageTracking:
     """Verify accurate token counting and cost estimation."""
-    
+
     def test_token_counting_accuracy(self, chat_summarizer):
         """Ensure token counts match OpenAI's tokenizer."""
         test_text = "This is a test message for token counting."
-        
+
         # Our count
         our_count = chat_summarizer.estimate_tokens(test_text)
-        
+
         # OpenAI's tiktoken count
         import tiktoken
         encoder = tiktoken.encoding_for_model("gpt-3.5-turbo")
         actual_count = len(encoder.encode(test_text))
-        
+
         # Should be within 5% accuracy
         assert abs(our_count - actual_count) / actual_count < 0.05
-    
+
     def test_cost_tracking_aggregation(self, indexer):
         """Verify costs are tracked and reported correctly."""
         result = indexer.index_with_cost_tracking(test_repo)
-        
+
         assert result.total_cost > 0
         assert result.token_usage['prompt_tokens'] > 0
         assert result.token_usage['completion_tokens'] > 0
-        
+
         # Verify cost calculation
         expected_cost = (
             result.token_usage['prompt_tokens'] * 0.001 / 1000 +
@@ -551,20 +551,20 @@ def mock_cost_tracker():
     class MockCostTracker:
         def __init__(self):
             self.costs = []
-            
+
         def track_api_call(self, tokens_in, tokens_out, model="gpt-3.5-turbo"):
             cost = (tokens_in * 0.001 + tokens_out * 0.002) / 1000
             self.costs.append({
                 "tokens_in": tokens_in,
-                "tokens_out": tokens_out, 
+                "tokens_out": tokens_out,
                 "model": model,
                 "cost": cost
             })
             return cost
-            
+
         def get_total_cost(self):
             return sum(c['cost'] for c in self.costs)
-    
+
     return MockCostTracker()
 ```
 
@@ -577,7 +577,7 @@ def mock_cost_tracker():
 def chat_test_collection(qdrant_client):
     """Create isolated collection for chat tests."""
     collection_name = f"test_chat_{int(time.time())}"
-    
+
     # Create with chat-specific configuration
     qdrant_client.create_collection(
         collection_name=collection_name,
@@ -588,9 +588,9 @@ def chat_test_collection(qdrant_client):
         # Optimized for test performance
         optimizers_config={"indexing_threshold": 100}
     )
-    
+
     yield collection_name
-    
+
     # Cleanup
     qdrant_client.delete_collection(collection_name)
 ```
@@ -613,7 +613,7 @@ def seed_chat_test_data(qdrant_client, collection_name):
         },
         # Add more test data...
     ]
-    
+
     qdrant_client.upsert(
         collection_name=collection_name,
         points=test_summaries
@@ -627,21 +627,21 @@ def seed_chat_test_data(qdrant_client, collection_name):
 ```python
 def test_complete_chat_indexing_journey(cli_runner, temp_claude_projects):
     """Test realistic user workflow from setup to search."""
-    
+
     # 1. User sets up configuration
     result = cli_runner.invoke(["config", "set", "claude_projects_path", str(temp_claude_projects)])
     assert result.exit_code == 0
-    
+
     # 2. User indexes their chat history
     result = cli_runner.invoke(["index-chats", "-c", "test-collection"])
     assert "Indexed" in result.output
     assert "conversations" in result.output
-    
+
     # 3. User searches for past solutions
     result = cli_runner.invoke(["search", "memory leak", "--chat", "-c", "test-collection"])
     assert "debugging_pattern" in result.output
     assert result.exit_code == 0
-    
+
     # 4. User monitors for new chats
     result = cli_runner.invoke(["chat-monitor", "start", "-c", "test-collection"])
     assert "Monitoring started" in result.output
@@ -652,18 +652,18 @@ def test_complete_chat_indexing_journey(cli_runner, temp_claude_projects):
 ```python
 def test_graceful_error_handling(indexer, corrupted_chat_files):
     """Ensure system continues despite individual file errors."""
-    
+
     results = indexer.index_directory(corrupted_chat_files)
-    
+
     # Should process valid files despite errors
     assert results.successful_files > 0
     assert len(results.errors) > 0
-    
+
     # Errors should be informative
     for error in results.errors:
         assert "file" in error.lower()
         assert any(term in error.lower() for term in ["parse", "invalid", "corrupt"])
-    
+
     # Should not crash or lose partial results
     assert results.total_summaries > 0
 ```
@@ -719,8 +719,8 @@ enable_auto_summarization = true
 ```python
 class ChatDeduplicator:
     """Check and update existing entries instead of creating duplicates."""
-    
-    def find_existing_entry(self, collection: str, 
+
+    def find_existing_entry(self, collection: str,
                           conversation_id: str) -> Optional[Dict]:
         """Search for existing manual entry about this conversation."""
         # Search by conversation ID or summary content
@@ -730,25 +730,25 @@ class ChatDeduplicator:
             limit=5,
             filter={"entity_type": "chat_history"}
         )
-        
+
         for result in results:
             if result['score'] > 0.9:  # High similarity
                 return result
         return None
-    
+
     def update_or_create(self, summary: Dict, collection: str) -> str:
         """Update existing entry or create new one."""
         existing = self.find_existing_entry(
-            collection, 
+            collection,
             summary['conversation_id']
         )
-        
+
         if existing:
             # Preserve manual edits
             merged = {
                 **existing['payload'],
                 'observations': list(set(
-                    existing['payload']['observations'] + 
+                    existing['payload']['observations'] +
                     summary['observations']
                 )),
                 'last_updated': datetime.now().isoformat()
@@ -810,65 +810,65 @@ The chat parser needs to map project paths to Claude's encoded directory structu
 ```python
 class ChatDirectoryMapper:
     """Maps project paths to Claude Code chat directories."""
-    
+
     def __init__(self, claude_projects_root: Path = None):
         """Initialize mapper with Claude projects root.
-        
+
         Args:
             claude_projects_root: Override default ~/.claude/projects
         """
         if claude_projects_root is None:
             claude_projects_root = Path.home() / '.claude' / 'projects'
         self.projects_root = claude_projects_root
-    
+
     def get_project_chat_directory(self, project_path: Path) -> Path:
         """Get chat directory for a project path.
-        
+
         Args:
             project_path: Absolute path to project
-            
+
         Returns:
             Path to chat directory or None if not found
-            
+
         Example:
             /home/user/projects/myapp → ~/.claude/projects/-home-user-projects-myapp
         """
         # Normalize path to absolute
         project_path = Path(project_path).resolve()
-        
+
         # Encode path by replacing separators with dashes
         encoded_name = str(project_path).replace('/', '-')
-        
+
         # Handle Windows paths
         if os.name == 'nt':
             encoded_name = encoded_name.replace('\\', '-').replace(':', '')
-        
+
         chat_dir = self.projects_root / encoded_name
-        
+
         # Verify directory exists
         if not chat_dir.exists():
             logger.warning(f"Chat directory not found: {chat_dir}")
             return None
-            
+
         return chat_dir
-    
-    def list_chat_files(self, chat_dir: Path, 
+
+    def list_chat_files(self, chat_dir: Path,
                        min_age_hours: float = 0) -> List[Path]:
         """List JSONL chat files in directory.
-        
+
         Args:
             chat_dir: Chat directory path
             min_age_hours: Only include files older than this
-            
+
         Returns:
             List of JSONL file paths sorted by modification time
         """
         if not chat_dir or not chat_dir.exists():
             return []
-        
+
         current_time = time.time()
         min_age_seconds = min_age_hours * 3600
-        
+
         jsonl_files = []
         for file_path in chat_dir.glob('*.jsonl'):
             # Check age if threshold specified
@@ -876,9 +876,9 @@ class ChatDirectoryMapper:
                 file_age = current_time - file_path.stat().st_mtime
                 if file_age < min_age_seconds:
                     continue
-            
+
             jsonl_files.append(file_path)
-        
+
         # Sort by modification time (oldest first)
         return sorted(jsonl_files, key=lambda p: p.stat().st_mtime)
 ```
@@ -890,22 +890,22 @@ Stream large JSONL files to avoid memory issues:
 ```python
 class JSONLStreamParser:
     """Memory-efficient JSONL parser with error recovery."""
-    
+
     def __init__(self, max_messages_per_chunk: int = 100):
         """Initialize parser.
-        
+
         Args:
             max_messages_per_chunk: Max messages before yielding chunk
         """
         self.max_messages_per_chunk = max_messages_per_chunk
         self.logger = get_logger()
-    
+
     def parse_jsonl_stream(self, file_path: Path) -> Iterator[List[Dict]]:
         """Parse JSONL file in chunks.
-        
+
         Yields:
             Lists of parsed messages (up to max_messages_per_chunk)
-            
+
         Example:
             for message_chunk in parser.parse_jsonl_stream(path):
                 # Process chunk of messages
@@ -913,51 +913,51 @@ class JSONLStreamParser:
         """
         chunk = []
         line_num = 0
-        
+
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 for line in f:
                     line_num += 1
                     line = line.strip()
-                    
+
                     if not line:
                         continue
-                    
+
                     try:
                         message = json.loads(line)
                         chunk.append(message)
-                        
+
                         # Yield chunk if size reached
                         if len(chunk) >= self.max_messages_per_chunk:
                             yield chunk
                             chunk = []
-                            
+
                     except json.JSONDecodeError as e:
                         self.logger.warning(
                             f"Invalid JSON at {file_path}:{line_num} - {e}"
                         )
                         # Continue parsing remaining lines
                         continue
-                
+
                 # Yield final chunk
                 if chunk:
                     yield chunk
-                    
+
         except Exception as e:
             self.logger.error(f"Failed to read {file_path}: {e}")
             # Yield partial results if any
             if chunk:
                 yield chunk
-    
+
     def extract_conversation_metadata(self, messages: List[Dict]) -> Dict:
         """Extract metadata from conversation messages.
-        
+
         Returns:
             Dict with start_time, end_time, message_count, participants
         """
         if not messages:
             return {}
-        
+
         # Extract timestamps
         timestamps = []
         for msg in messages:
@@ -967,17 +967,17 @@ class JSONLStreamParser:
                     timestamps.append(ts)
                 except:
                     pass
-        
+
         metadata = {
             'message_count': len(messages),
             'participants': list({msg.get('type', 'unknown') for msg in messages}),
         }
-        
+
         if timestamps:
             metadata['start_time'] = min(timestamps).isoformat()
             metadata['end_time'] = max(timestamps).isoformat()
             metadata['duration_hours'] = (max(timestamps) - min(timestamps)).total_seconds() / 3600
-        
+
         return metadata
 ```
 
@@ -992,41 +992,41 @@ class ChatParserError(Exception):
 
 class ChatParser:
     """Main chat parser with comprehensive error handling."""
-    
+
     def __init__(self, config: IndexerConfig):
         self.config = config
         self.logger = get_logger()
         self.directory_mapper = ChatDirectoryMapper()
         self.jsonl_parser = JSONLStreamParser()
-        
+
         # Track errors for reporting
         self.errors = []
         self.warnings = []
-    
+
     def parse_project_chats(self, project_path: Path) -> ChatParsingResult:
         """Parse all chat files for a project.
-        
+
         Returns:
             ChatParsingResult with conversations and metrics
         """
         result = ChatParsingResult(project_path=project_path)
         start_time = time.time()
-        
+
         try:
             # Get chat directory
             chat_dir = self.directory_mapper.get_project_chat_directory(project_path)
             if not chat_dir:
                 result.errors.append(f"No chat directory found for {project_path}")
                 return result
-            
+
             # List chat files
             chat_files = self.directory_mapper.list_chat_files(
-                chat_dir, 
+                chat_dir,
                 min_age_hours=self.config.chat_inactivity_threshold
             )
-            
+
             self.logger.info(f"Found {len(chat_files)} chat files to process")
-            
+
             # Process each file
             for file_path in chat_files:
                 try:
@@ -1036,41 +1036,41 @@ class ChatParser:
                     result.failed_files.append(str(file_path))
                     result.errors.append(str(e))
                     # Continue with other files
-            
+
         except Exception as e:
             result.errors.append(f"Critical error: {e}")
             result.success = False
-        
+
         result.processing_time = time.time() - start_time
         return result
-    
+
     def _process_chat_file(self, file_path: Path, result: ChatParsingResult):
         """Process single chat file with error recovery."""
-        
+
         conversations = []
         total_messages = 0
-        
+
         try:
             # Parse in chunks to handle large files
             for message_chunk in self.jsonl_parser.parse_jsonl_stream(file_path):
                 total_messages += len(message_chunk)
-                
+
                 # Group into conversations by time gaps
                 conversations.extend(
                     self._group_into_conversations(message_chunk)
                 )
-            
+
             # Update result
             result.conversations.extend(conversations)
             result.files_processed += 1
             result.processed_files.append(str(file_path))
-            
+
             self.logger.debug(
                 f"Processed {file_path.name}: "
                 f"{total_messages} messages, "
                 f"{len(conversations)} conversations"
             )
-            
+
         except MemoryError:
             # Handle out of memory gracefully
             self.logger.error(f"Out of memory processing {file_path}")
@@ -1080,18 +1080,18 @@ class ChatParser:
             # Return partial results
             if conversations:
                 result.conversations.extend(conversations)
-    
-    def _group_into_conversations(self, messages: List[Dict], 
+
+    def _group_into_conversations(self, messages: List[Dict],
                                  gap_hours: float = 4) -> List[Conversation]:
         """Group messages into conversations by time gaps."""
-        
+
         if not messages:
             return []
-        
+
         conversations = []
         current_conv = []
         last_timestamp = None
-        
+
         for msg in messages:
             # Extract timestamp
             timestamp = None
@@ -1100,7 +1100,7 @@ class ChatParser:
                     timestamp = datetime.fromisoformat(msg['timestamp'])
                 except:
                     pass
-            
+
             # Check for conversation break
             if timestamp and last_timestamp:
                 gap = (timestamp - last_timestamp).total_seconds() / 3600
@@ -1109,14 +1109,14 @@ class ChatParser:
                     if current_conv:
                         conversations.append(Conversation(messages=current_conv))
                     current_conv = []
-            
+
             current_conv.append(msg)
             last_timestamp = timestamp
-        
+
         # Add final conversation
         if current_conv:
             conversations.append(Conversation(messages=current_conv))
-        
+
         return conversations
 ```
 
@@ -1127,25 +1127,25 @@ Optimize for large conversation histories:
 ```python
 class PerformanceOptimizedChatIndexer:
     """Chat indexer with performance optimizations."""
-    
-    def __init__(self, config: IndexerConfig, embedder: Embedder, 
+
+    def __init__(self, config: IndexerConfig, embedder: Embedder,
                  vector_store: VectorStore):
         self.config = config
         self.embedder = embedder
         self.vector_store = vector_store
         self.logger = get_logger()
-        
+
         # Performance settings
         self.batch_size = config.get('chat_batch_size', 10)
         self.max_concurrent_summaries = config.get('max_concurrent_summaries', 3)
         self.cache_embeddings = config.get('cache_chat_embeddings', True)
-        
+
         # Embedding cache
         self._embedding_cache = {}
-    
+
     async def index_chats_batch(self, conversations: List[Conversation]) -> IndexingResult:
         """Index conversations in optimized batches.
-        
+
         Key optimizations:
         1. Batch API calls to OpenAI
         2. Cache similar embeddings
@@ -1153,47 +1153,47 @@ class PerformanceOptimizedChatIndexer:
         4. Memory-mapped file handling
         """
         result = IndexingResult(operation="chat_indexing")
-        
+
         # Process in batches
         for i in range(0, len(conversations), self.batch_size):
             batch = conversations[i:i + self.batch_size]
-            
+
             try:
                 # Summarize batch concurrently
                 summaries = await self._summarize_batch_concurrent(batch)
-                
+
                 # Generate embeddings with caching
                 embeddings = await self._generate_embeddings_cached(summaries)
-                
+
                 # Store in vector database
                 await self._store_batch(summaries, embeddings)
-                
+
                 result.entities_created += len(summaries)
-                
+
             except Exception as e:
                 self.logger.error(f"Batch processing failed: {e}")
                 result.errors.append(str(e))
                 # Continue with next batch
-        
+
         return result
-    
+
     def _get_embedding_cache_key(self, text: str) -> str:
         """Generate cache key for embedding."""
         # Use first 100 chars + hash for cache key
         prefix = text[:100]
         text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
         return f"{prefix}_{text_hash}"
-    
+
     async def _generate_embeddings_cached(self, summaries: List[Summary]) -> List[List[float]]:
         """Generate embeddings with caching."""
-        
+
         embeddings = []
         texts_to_embed = []
         cache_indices = []
-        
+
         for i, summary in enumerate(summaries):
             cache_key = self._get_embedding_cache_key(summary.content)
-            
+
             if cache_key in self._embedding_cache:
                 # Use cached embedding
                 embeddings.append(self._embedding_cache[cache_key])
@@ -1202,24 +1202,24 @@ class PerformanceOptimizedChatIndexer:
                 texts_to_embed.append(summary.content)
                 cache_indices.append(i)
                 embeddings.append(None)  # Placeholder
-        
+
         # Generate new embeddings if needed
         if texts_to_embed:
             new_embeddings = await self.embedder.embed_batch(texts_to_embed)
-            
+
             # Fill in results and update cache
             for idx, embedding in zip(cache_indices, new_embeddings):
                 embeddings[idx] = embedding
                 cache_key = self._get_embedding_cache_key(summaries[idx].content)
                 self._embedding_cache[cache_key] = embedding
-        
+
         # Limit cache size
         if len(self._embedding_cache) > 1000:
             # Remove oldest entries (simple LRU)
             keys = list(self._embedding_cache.keys())
             for key in keys[:200]:  # Remove 20%
                 del self._embedding_cache[key]
-        
+
         return embeddings
 ```
 
@@ -1238,7 +1238,7 @@ class IncrementalChatParser:
     def parse_incremental(self, project_path: Path,
                           collection_name: str) -> ChatParsingResult:
         """Parse only new/modified chat files.
-        
+
         Uses file modification times and content hashes to detect changes.
         """
         # Load previous state
@@ -1442,7 +1442,7 @@ The chat summarizer leverages GPT-4o-mini for its balance of quality, speed, and
 ```python
 class OpenAISummarizer:
     """Summarize conversations using OpenAI GPT-4o-mini with retry logic."""
-    
+
     # Model configurations with 2025 pricing
     MODELS = {
         "gpt-4o-mini": {
@@ -1462,11 +1462,11 @@ class OpenAISummarizer:
             "tokens_per_minute": 600000
         }
     }
-    
+
     def __init__(self, api_key: str, model: str = "gpt-4o-mini",
                  max_retries: int = 3, base_delay: float = 1.0):
         """Initialize summarizer with OpenAI client and retry configuration.
-        
+
         Args:
             api_key: OpenAI API key
             model: Model to use (default: gpt-4o-mini)
@@ -1476,17 +1476,17 @@ class OpenAISummarizer:
         self.model = model
         self.model_config = self.MODELS[model]
         self.client = openai.OpenAI(api_key=api_key, timeout=30.0)
-        
+
         # Retry configuration
         self.max_retries = max_retries
         self.base_delay = base_delay
         self.max_delay = 60.0
         self.backoff_factor = 2.0
-        
+
         # Rate limiting tracking
         self._request_times: List[float] = []
         self._token_usage: List[tuple[float, int, int]] = []  # (time, input, output)
-        
+
         # Cost tracking
         self.total_cost = 0.0
         self.total_conversations = 0
@@ -1499,7 +1499,7 @@ Design prompts that extract maximum value while ensuring consistent categorizati
 ```python
 class PromptTemplates:
     """Carefully engineered prompts for different conversation types."""
-    
+
     # Main summarization prompt with JSON output
     SUMMARIZE_CONVERSATION = """Analyze this Claude Code conversation and extract actionable insights.
 
@@ -1575,18 +1575,18 @@ Extract:
 5. Best practices followed
 
 Output as JSON with emphasis on reusable implementation patterns."""
-    
+
     @classmethod
     def get_prompt_for_category_hint(cls, detected_keywords: List[str]) -> str:
         """Select specialized prompt based on detected keywords."""
         debugging_keywords = {'error', 'bug', 'fix', 'debug', 'issue', 'problem'}
         implementation_keywords = {'implement', 'create', 'build', 'develop', 'feature'}
-        
+
         if any(kw in detected_keywords for kw in debugging_keywords):
             return cls.SUMMARIZE_DEBUGGING
         elif any(kw in detected_keywords for kw in implementation_keywords):
             return cls.SUMMARIZE_IMPLEMENTATION
-        
+
         return cls.SUMMARIZE_CONVERSATION
 ```
 
@@ -1597,22 +1597,22 @@ Implement intelligent chunking to handle long conversations efficiently:
 ```python
 class TokenManager:
     """Manage tokens for optimal API usage and cost control."""
-    
+
     def __init__(self, model_config: Dict[str, Any]):
         self.max_input_tokens = model_config['max_input_tokens']
         self.max_output_tokens = model_config['max_output_tokens']
-        
+
         # Reserve tokens for system prompt and response
         self.reserved_input_tokens = 1000
         self.reserved_output_tokens = 500
-        
+
         # Token estimation (using tiktoken for accuracy)
         try:
             import tiktoken
             self.encoder = tiktoken.encoding_for_model("gpt-4")
         except:
             self.encoder = None
-    
+
     def estimate_tokens(self, text: str) -> int:
         """Estimate token count for text."""
         if self.encoder:
@@ -1620,64 +1620,64 @@ class TokenManager:
         else:
             # Fallback: ~4 characters per token
             return len(text) // 4
-    
-    def chunk_conversation(self, messages: List[Dict[str, str]], 
+
+    def chunk_conversation(self, messages: List[Dict[str, str]],
                           target_chunk_tokens: int = 4000) -> List[List[Dict[str, str]]]:
         """Split conversation into token-aware chunks.
-        
+
         Args:
             messages: List of message dictionaries
             target_chunk_tokens: Target tokens per chunk
-            
+
         Returns:
             List of message chunks
         """
         chunks = []
         current_chunk = []
         current_tokens = 0
-        
+
         for message in messages:
             message_text = f"{message.get('type', '')}: {message.get('content', '')}"
             message_tokens = self.estimate_tokens(message_text)
-            
+
             # Start new chunk if adding this message would exceed target
             if current_tokens + message_tokens > target_chunk_tokens and current_chunk:
                 chunks.append(current_chunk)
                 current_chunk = []
                 current_tokens = 0
-            
+
             current_chunk.append(message)
             current_tokens += message_tokens
-        
+
         # Add final chunk
         if current_chunk:
             chunks.append(current_chunk)
-        
+
         return chunks
-    
+
     def create_summary_context(self, chunks: List[List[Dict[str, str]]]) -> str:
         """Create context-aware summary from chunks."""
         if len(chunks) == 1:
             # Single chunk - full conversation
             return self._format_messages(chunks[0])
-        
+
         # Multiple chunks - need intelligent merging
         chunk_summaries = []
-        
+
         for i, chunk in enumerate(chunks):
             context = f"Part {i+1}/{len(chunks)}:\n"
             context += self._format_messages(chunk[:5])  # First 5 messages
-            
+
             if len(chunk) > 10:
                 context += f"\n... {len(chunk) - 10} messages omitted ...\n"
                 context += self._format_messages(chunk[-5:])  # Last 5 messages
             else:
                 context += self._format_messages(chunk[5:])
-            
+
             chunk_summaries.append(context)
-        
+
         return "\n\n---\n\n".join(chunk_summaries)
-    
+
     def _format_messages(self, messages: List[Dict[str, str]]) -> str:
         """Format messages for prompt."""
         formatted = []
@@ -1688,7 +1688,7 @@ class TokenManager:
             if len(content) > 1000:
                 content = content[:500] + "\n... content truncated ...\n" + content[-500:]
             formatted.append(f"{role}: {content}")
-        
+
         return "\n\n".join(formatted)
 ```
 
@@ -1699,37 +1699,37 @@ Implement robust retry logic following the existing OpenAI embedder patterns:
 ```python
 class OpenAISummarizer(RetryableSummarizer):
     """Full implementation with retry logic and rate limiting."""
-    
-    def summarize_conversation(self, messages: List[Dict[str, str]], 
+
+    def summarize_conversation(self, messages: List[Dict[str, str]],
                              metadata: Optional[Dict] = None) -> SummaryResult:
         """Summarize a conversation with automatic retry and rate limiting.
-        
+
         Args:
             messages: List of conversation messages
             metadata: Optional metadata about the conversation
-            
+
         Returns:
             SummaryResult with summary, category, and metadata
         """
         start_time = time.time()
-        
+
         # Token management
         token_manager = TokenManager(self.model_config)
         chunks = token_manager.chunk_conversation(messages)
-        
+
         # Detect keywords for prompt selection
         all_text = " ".join(msg.get('content', '') for msg in messages)
         detected_keywords = self._extract_keywords(all_text)
         prompt_template = PromptTemplates.get_prompt_for_category_hint(detected_keywords)
-        
+
         # Prepare conversation context
         conversation_text = token_manager.create_summary_context(chunks)
         estimated_tokens = token_manager.estimate_tokens(conversation_text)
-        
+
         def _summarize():
             # Check rate limits
             self._check_rate_limits(estimated_tokens)
-            
+
             # Make API call
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -1747,33 +1747,33 @@ class OpenAISummarizer(RetryableSummarizer):
                 temperature=0.3,  # Lower temperature for consistent categorization
                 max_tokens=self.reserved_output_tokens
             )
-            
+
             # Record usage
             current_time = time.time()
             self._request_times.append(current_time)
-            
+
             usage = response.usage
             self._token_usage.append((
                 current_time,
                 usage.prompt_tokens,
                 usage.completion_tokens
             ))
-            
+
             # Calculate cost
             input_cost = (usage.prompt_tokens / 1_000_000) * self.model_config['cost_per_1m_input']
             output_cost = (usage.completion_tokens / 1_000_000) * self.model_config['cost_per_1m_output']
             total_cost = input_cost + output_cost
-            
+
             self.total_cost += total_cost
             self.total_conversations += 1
-            
+
             # Parse response
             try:
                 result_data = json.loads(response.choices[0].message.content)
             except json.JSONDecodeError:
                 # Fallback parsing
                 result_data = self._parse_non_json_response(response.choices[0].message.content)
-            
+
             return SummaryResult(
                 summary=result_data.get('summary', ''),
                 category=result_data.get('category', 'knowledge_insight'),
@@ -1791,29 +1791,29 @@ class OpenAISummarizer(RetryableSummarizer):
                     **(metadata or {})
                 }
             )
-        
+
         try:
             return self._summarize_with_retry(_summarize)
         except Exception as e:
             self.logger.error(f"Summarization failed after retries: {e}")
             # Return fallback summary
             return self._create_fallback_summary(messages, error=str(e))
-    
+
     def _check_rate_limits(self, estimated_tokens: int):
         """Check and enforce rate limits."""
         current_time = time.time()
-        
+
         # Clean old entries
         self._request_times = [t for t in self._request_times if current_time - t < 60]
         self._token_usage = [(t, i, o) for t, i, o in self._token_usage if current_time - t < 60]
-        
+
         # Check request rate
         if len(self._request_times) >= self.model_config['requests_per_minute']:
             sleep_time = 60 - (current_time - self._request_times[0]) + 1
             if sleep_time > 0:
                 self.logger.info(f"Rate limit approaching. Sleeping {sleep_time:.1f}s...")
                 time.sleep(sleep_time)
-        
+
         # Check token rate
         total_tokens = sum(i + o for _, i, o in self._token_usage) + estimated_tokens
         if total_tokens >= self.model_config['tokens_per_minute']:
@@ -1821,17 +1821,17 @@ class OpenAISummarizer(RetryableSummarizer):
             if sleep_time > 0:
                 self.logger.info(f"Token limit approaching. Sleeping {sleep_time:.1f}s...")
                 time.sleep(sleep_time)
-    
+
     def _create_fallback_summary(self, messages: List[Dict], error: str) -> SummaryResult:
         """Create basic summary when API fails."""
         # Extract basic information
         message_count = len(messages)
         first_message = messages[0].get('content', '')[:100] if messages else ''
-        
+
         # Simple keyword-based categorization
         all_text = " ".join(msg.get('content', '')[:200] for msg in messages[:10])
         category = self._detect_category_keywords(all_text)
-        
+
         return SummaryResult(
             summary=f"Conversation with {message_count} messages. Started with: {first_message}...",
             category=category,
@@ -1853,30 +1853,30 @@ Optimize for processing multiple conversations efficiently:
 ```python
 class BatchConversationProcessor:
     """Process multiple conversations with optimal batching."""
-    
-    def __init__(self, summarizer: OpenAISummarizer, 
+
+    def __init__(self, summarizer: OpenAISummarizer,
                  max_concurrent: int = 3,
                  batch_size: int = 10):
         self.summarizer = summarizer
         self.max_concurrent = max_concurrent
         self.batch_size = batch_size
         self.logger = get_logger()
-    
-    async def process_conversations_async(self, 
+
+    async def process_conversations_async(self,
                                         conversations: List[Conversation],
                                         progress_callback: Optional[Callable] = None) -> List[SummaryResult]:
         """Process conversations concurrently with progress tracking.
-        
+
         Args:
             conversations: List of conversations to process
             progress_callback: Optional callback for progress updates
-            
+
         Returns:
             List of summary results
         """
         results = []
         semaphore = asyncio.Semaphore(self.max_concurrent)
-        
+
         async def process_single(conv: Conversation, index: int) -> SummaryResult:
             async with semaphore:
                 try:
@@ -1888,46 +1888,46 @@ class BatchConversationProcessor:
                         conv.messages,
                         {'conversation_id': conv.id, 'index': index}
                     )
-                    
+
                     if progress_callback:
                         progress_callback(index, len(conversations), result)
-                    
+
                     return result
-                    
+
                 except Exception as e:
                     self.logger.error(f"Failed to process conversation {index}: {e}")
                     return self.summarizer._create_fallback_summary(
-                        conv.messages, 
+                        conv.messages,
                         error=str(e)
                     )
-        
+
         # Process in batches to avoid overwhelming the API
         for i in range(0, len(conversations), self.batch_size):
             batch = conversations[i:i + self.batch_size]
             batch_tasks = [
-                process_single(conv, i + j) 
+                process_single(conv, i + j)
                 for j, conv in enumerate(batch)
             ]
-            
+
             batch_results = await asyncio.gather(*batch_tasks)
             results.extend(batch_results)
-            
+
             # Brief pause between batches
             if i + self.batch_size < len(conversations):
                 await asyncio.sleep(1.0)
-        
+
         return results
-    
+
     def process_conversations_sync(self, conversations: List[Conversation]) -> ProcessingReport:
         """Synchronous batch processing with detailed reporting."""
         report = ProcessingReport()
         report.start_time = time.time()
-        
+
         # Group by estimated processing time
         small_convs = []  # < 50 messages
         medium_convs = []  # 50-200 messages
         large_convs = []  # > 200 messages
-        
+
         for conv in conversations:
             msg_count = len(conv.messages)
             if msg_count < 50:
@@ -1936,19 +1936,19 @@ class BatchConversationProcessor:
                 medium_convs.append(conv)
             else:
                 large_convs.append(conv)
-        
+
         self.logger.info(
             f"Processing {len(conversations)} conversations: "
             f"{len(small_convs)} small, {len(medium_convs)} medium, {len(large_convs)} large"
         )
-        
+
         # Process each group
         results = []
-        
+
         # Small conversations can be processed more aggressively
         if small_convs:
             small_processor = BatchConversationProcessor(
-                self.summarizer, 
+                self.summarizer,
                 max_concurrent=5,
                 batch_size=20
             )
@@ -1957,7 +1957,7 @@ class BatchConversationProcessor:
             )
             results.extend(small_results)
             report.small_processed = len(small_results)
-        
+
         # Medium conversations with standard settings
         if medium_convs:
             medium_results = asyncio.run(
@@ -1965,7 +1965,7 @@ class BatchConversationProcessor:
             )
             results.extend(medium_results)
             report.medium_processed = len(medium_results)
-        
+
         # Large conversations processed carefully
         if large_convs:
             large_processor = BatchConversationProcessor(
@@ -1978,7 +1978,7 @@ class BatchConversationProcessor:
             )
             results.extend(large_results)
             report.large_processed = len(large_results)
-        
+
         # Generate report
         report.total_processed = len(results)
         report.successful = sum(1 for r in results if not r.metadata.get('error'))
@@ -1987,12 +1987,12 @@ class BatchConversationProcessor:
         report.total_tokens = sum(r.metadata.get('tokens_processed', 0) for r in results)
         report.processing_time = time.time() - report.start_time
         report.average_cost_per_conversation = report.total_cost / max(report.total_processed, 1)
-        
+
         self.logger.info(
             f"Batch processing complete: {report.successful} successful, "
             f"{report.failed} failed, ${report.total_cost:.4f} total cost"
         )
-        
+
         return report
 ```
 
@@ -2003,19 +2003,19 @@ Implement comprehensive cost tracking for budget management:
 ```python
 class CostTracker:
     """Track and report API usage costs."""
-    
+
     def __init__(self, budget_limit: Optional[float] = None):
         self.budget_limit = budget_limit
         self.usage_history: List[UsageRecord] = []
         self.daily_costs: Dict[str, float] = {}
         self.model_costs: Dict[str, ModelCost] = {}
-    
-    def record_usage(self, model: str, input_tokens: int, output_tokens: int, 
+
+    def record_usage(self, model: str, input_tokens: int, output_tokens: int,
                     cost: float, timestamp: Optional[datetime] = None):
         """Record API usage for cost tracking."""
         if timestamp is None:
             timestamp = datetime.now()
-        
+
         record = UsageRecord(
             timestamp=timestamp,
             model=model,
@@ -2023,62 +2023,62 @@ class CostTracker:
             output_tokens=output_tokens,
             cost=cost
         )
-        
+
         self.usage_history.append(record)
-        
+
         # Update daily costs
         date_key = timestamp.strftime("%Y-%m-%d")
         self.daily_costs[date_key] = self.daily_costs.get(date_key, 0) + cost
-        
+
         # Update model-specific costs
         if model not in self.model_costs:
             self.model_costs[model] = ModelCost(model=model)
-        
+
         model_cost = self.model_costs[model]
         model_cost.total_input_tokens += input_tokens
         model_cost.total_output_tokens += output_tokens
         model_cost.total_cost += cost
         model_cost.request_count += 1
-        
+
         # Check budget
         if self.budget_limit and self.get_total_cost() > self.budget_limit:
             self.logger.warning(
                 f"Budget limit exceeded! Total cost: ${self.get_total_cost():.2f}, "
                 f"Limit: ${self.budget_limit:.2f}"
             )
-    
+
     def get_cost_report(self, days: int = 30) -> CostReport:
         """Generate comprehensive cost report."""
         cutoff_date = datetime.now() - timedelta(days=days)
         recent_usage = [r for r in self.usage_history if r.timestamp > cutoff_date]
-        
+
         report = CostReport()
         report.period_days = days
         report.total_cost = sum(r.cost for r in recent_usage)
         report.total_requests = len(recent_usage)
         report.total_input_tokens = sum(r.input_tokens for r in recent_usage)
         report.total_output_tokens = sum(r.output_tokens for r in recent_usage)
-        
+
         # Daily breakdown
         daily_stats = {}
         for record in recent_usage:
             date_key = record.timestamp.strftime("%Y-%m-%d")
             if date_key not in daily_stats:
                 daily_stats[date_key] = {
-                    'cost': 0, 'requests': 0, 
+                    'cost': 0, 'requests': 0,
                     'input_tokens': 0, 'output_tokens': 0
                 }
-            
+
             stats = daily_stats[date_key]
             stats['cost'] += record.cost
             stats['requests'] += 1
             stats['input_tokens'] += record.input_tokens
             stats['output_tokens'] += record.output_tokens
-        
+
         report.daily_breakdown = daily_stats
         report.average_daily_cost = report.total_cost / max(len(daily_stats), 1)
         report.average_cost_per_request = report.total_cost / max(report.total_requests, 1)
-        
+
         # Model breakdown
         report.model_breakdown = {}
         for model, model_cost in self.model_costs.items():
@@ -2089,29 +2089,29 @@ class CostTracker:
                 'input_tokens': model_cost.total_input_tokens,
                 'output_tokens': model_cost.total_output_tokens
             }
-        
+
         # Projections
         if report.average_daily_cost > 0:
             report.projected_monthly_cost = report.average_daily_cost * 30
             report.projected_yearly_cost = report.average_daily_cost * 365
-        
+
         return report
-    
+
     def export_usage_csv(self, filepath: Path):
         """Export usage history to CSV for analysis."""
         import csv
-        
+
         with open(filepath, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
-                'Timestamp', 'Model', 'Input Tokens', 'Output Tokens', 
+                'Timestamp', 'Model', 'Input Tokens', 'Output Tokens',
                 'Cost', 'Cost per 1K Tokens'
             ])
-            
+
             for record in self.usage_history:
                 total_tokens = record.input_tokens + record.output_tokens
                 cost_per_1k = (record.cost / total_tokens * 1000) if total_tokens > 0 else 0
-                
+
                 writer.writerow([
                     record.timestamp.isoformat(),
                     record.model,
@@ -2129,14 +2129,14 @@ Ensure robust JSON parsing with fallback strategies:
 ```python
 class OutputValidator:
     """Validate and sanitize API outputs."""
-    
+
     @staticmethod
     def validate_summary_json(response_text: str) -> Dict[str, Any]:
         """Validate and parse summary JSON with fallbacks.
-        
+
         Args:
             response_text: Raw response from API
-            
+
         Returns:
             Validated dictionary with required fields
         """
@@ -2146,7 +2146,7 @@ class OutputValidator:
             return OutputValidator._validate_schema(data)
         except json.JSONDecodeError:
             pass
-        
+
         # Try extracting JSON from markdown code blocks
         json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
         if json_match:
@@ -2155,7 +2155,7 @@ class OutputValidator:
                 return OutputValidator._validate_schema(data)
             except:
                 pass
-        
+
         # Try finding JSON-like structure
         json_match = re.search(r'\{[^{}]*\}', response_text, re.DOTALL)
         if json_match:
@@ -2164,10 +2164,10 @@ class OutputValidator:
                 return OutputValidator._validate_schema(data)
             except:
                 pass
-        
+
         # Fallback: Extract key information using regex
         return OutputValidator._extract_fallback(response_text)
-    
+
     @staticmethod
     def _validate_schema(data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and fill missing fields."""
@@ -2180,14 +2180,14 @@ class OutputValidator:
             'technical_context': data.get('technical_context', {}),
             'tokens_saved': data.get('tokens_saved', 0)
         }
-        
+
         # Validate category
         valid_categories = {
             'debugging_pattern', 'implementation_pattern', 'integration_pattern',
             'configuration_pattern', 'architecture_pattern', 'performance_pattern',
             'knowledge_insight'
         }
-        
+
         if validated['category'] not in valid_categories:
             # Try to map common variations
             category_map = {
@@ -2199,23 +2199,23 @@ class OutputValidator:
                 'perform': 'performance_pattern',
                 'knowledge': 'knowledge_insight'
             }
-            
+
             for key, mapped in category_map.items():
                 if key in validated['category'].lower():
                     validated['category'] = mapped
                     break
             else:
                 validated['category'] = 'knowledge_insight'
-        
+
         # Ensure key_insights is a list
         if not isinstance(validated['key_insights'], list):
             validated['key_insights'] = [str(validated['key_insights'])]
-        
+
         # Validate confidence range
         validated['confidence'] = max(0.0, min(1.0, validated['confidence']))
-        
+
         return validated
-    
+
     @staticmethod
     def _extract_fallback(text: str) -> Dict[str, Any]:
         """Extract information using patterns when JSON parsing fails."""
@@ -2227,17 +2227,17 @@ class OutputValidator:
             'technical_context': {},
             'tokens_saved': 0
         }
-        
+
         # Extract summary
         summary_match = re.search(r'summary[:\s]+(.*?)(?:category|$)', text, re.IGNORECASE | re.DOTALL)
         if summary_match:
             result['summary'] = summary_match.group(1).strip()[:500]
-        
+
         # Extract category
         category_match = re.search(r'category[:\s]+(\w+_pattern|\w+_insight)', text, re.IGNORECASE)
         if category_match:
             result['category'] = category_match.group(1).lower()
-        
+
         # Extract insights
         insights_match = re.search(r'insights?[:\s]+(.*?)(?:technical|$)', text, re.IGNORECASE | re.DOTALL)
         if insights_match:
@@ -2245,7 +2245,7 @@ class OutputValidator:
             # Split by bullet points or numbers
             insights = re.split(r'[\n•\-\d]+\.?\s*', insights_text)
             result['key_insights'] = [i.strip() for i in insights if i.strip()][:5]
-        
+
         return result
 ```
 
@@ -2269,10 +2269,10 @@ class TrackedSummarizer(OpenAISummarizer):
     def __init__(self, *args, cost_tracker: CostTracker, **kwargs):
         super().__init__(*args, **kwargs)
         self.cost_tracker = cost_tracker
-    
+
     def summarize_conversation(self, messages, metadata=None):
         result = super().summarize_conversation(messages, metadata)
-        
+
         # Track costs
         if result.metadata.get('cost'):
             self.cost_tracker.record_usage(
@@ -2281,7 +2281,7 @@ class TrackedSummarizer(OpenAISummarizer):
                 output_tokens=500,  # Estimate
                 cost=result.metadata['cost']
             )
-        
+
         return result
 
 # Use the tracked summarizer
@@ -2312,15 +2312,15 @@ Extend the existing VectorStore base class to support chat summaries with specia
 ```python
 class ChatVectorStore(VectorStore):
     """Specialized vector store for chat summaries."""
-    
+
     def __init__(self, url: str, collection_name: str, api_key: Optional[str] = None,
                  grpc_port: int = 6334, prefer_grpc: bool = False, timeout: int = 30):
         """Initialize with chat-specific configurations.
-        
+
         Inherits all connection management from base VectorStore.
         """
         super().__init__(url, collection_name, api_key, grpc_port, prefer_grpc, timeout)
-        
+
         # Chat-specific configurations
         self.chat_entity_type = "chat_history"
         self.chat_metadata_schema = {
@@ -2331,29 +2331,29 @@ class ChatVectorStore(VectorStore):
             "project_path": str,
             "summary": str,
             "category": str,  # One of 7 categories
-            
+
             # Temporal metadata
             "start_time": str,  # ISO format
             "end_time": str,    # ISO format
             "duration_hours": float,
             "message_count": int,
-            
+
             # Technical context
             "languages": list,  # ["python", "javascript"]
             "frameworks": list,  # ["fastapi", "react"]
             "tools": list,      # ["docker", "git"]
             "error_types": list,  # ["ImportError", "SyntaxError"]
-            
+
             # Search optimization
             "key_insights": list,  # Extracted actionable insights
             "participants": list,  # ["human", "assistant"]
             "confidence": float,   # 0.0 - 1.0
-            
+
             # Cross-reference fields
             "related_files": list,  # Files mentioned in chat
             "related_functions": list,  # Functions discussed
             "related_classes": list,    # Classes referenced
-            
+
             # Processing metadata
             "indexed_at": str,     # When indexed
             "tokens_processed": int,
@@ -2361,15 +2361,15 @@ class ChatVectorStore(VectorStore):
             "processing_cost": float,
             "model_used": str
         }
-    
-    def store_chat_summary(self, summary_result: SummaryResult, 
+
+    def store_chat_summary(self, summary_result: SummaryResult,
                           embedder: Embedder) -> str:
         """Store a chat summary as a vector point.
-        
+
         Args:
             summary_result: Processed summary from ChatSummarizer
             embedder: Embedder instance for vector generation
-            
+
         Returns:
             Point ID of stored summary
         """
@@ -2377,13 +2377,13 @@ class ChatVectorStore(VectorStore):
         timestamp = summary_result.metadata.get('start_time', datetime.now().isoformat())
         content_hash = hashlib.md5(summary_result.summary.encode()).hexdigest()[:8]
         entity_name = f"chat_{timestamp}_{content_hash}"
-        
+
         # Prepare searchable content
         searchable_content = self._prepare_searchable_content(summary_result)
-        
+
         # Generate embedding
         embedding = embedder.embed(searchable_content)
-        
+
         # Prepare metadata payload
         metadata = {
             "entity_type": self.chat_entity_type,
@@ -2392,29 +2392,29 @@ class ChatVectorStore(VectorStore):
             "project_path": summary_result.metadata.get('project_path', ''),
             "summary": summary_result.summary,
             "category": summary_result.category,
-            
+
             # Temporal data
             "start_time": summary_result.metadata.get('start_time', ''),
             "end_time": summary_result.metadata.get('end_time', ''),
             "duration_hours": summary_result.metadata.get('duration_hours', 0),
             "message_count": summary_result.metadata.get('message_count', 0),
-            
+
             # Technical context
             "languages": summary_result.technical_context.get('languages', []),
             "frameworks": summary_result.technical_context.get('frameworks', []),
             "tools": summary_result.technical_context.get('tools', []),
             "error_types": summary_result.technical_context.get('error_types', []),
-            
+
             # Search optimization
             "key_insights": summary_result.key_insights,
             "participants": summary_result.metadata.get('participants', []),
             "confidence": summary_result.confidence,
-            
+
             # Cross-references (extracted during summarization)
             "related_files": self._extract_file_references(summary_result),
             "related_functions": self._extract_function_references(summary_result),
             "related_classes": self._extract_class_references(summary_result),
-            
+
             # Processing metadata
             "indexed_at": datetime.now().isoformat(),
             "tokens_processed": summary_result.metadata.get('tokens_processed', 0),
@@ -2422,35 +2422,35 @@ class ChatVectorStore(VectorStore):
             "processing_cost": summary_result.metadata.get('cost', 0),
             "model_used": summary_result.metadata.get('model', '')
         }
-        
+
         # Create vector point
         point = VectorPoint(
             id=str(uuid.uuid4()),
             vector=embedding,
             payload=metadata
         )
-        
+
         # Store using parent's optimized batch storage
         self._points_buffer.append(point)
         if len(self._points_buffer) >= self.batch_size:
             self.flush_points()
-        
+
         return point.id
-    
+
     def _prepare_searchable_content(self, summary_result: SummaryResult) -> str:
         """Prepare optimized content for embedding generation.
-        
+
         Combines summary, insights, and technical context for rich semantic search.
         """
         parts = [
             f"Category: {summary_result.category}",
             f"Summary: {summary_result.summary}",
         ]
-        
+
         if summary_result.key_insights:
             parts.append("Key Insights:")
             parts.extend(f"- {insight}" for insight in summary_result.key_insights)
-        
+
         # Add technical context for better search
         tech_context = summary_result.technical_context
         if tech_context.get('languages'):
@@ -2459,22 +2459,22 @@ class ChatVectorStore(VectorStore):
             parts.append(f"Frameworks: {', '.join(tech_context['frameworks'])}")
         if tech_context.get('error_types'):
             parts.append(f"Errors: {', '.join(tech_context['error_types'])}")
-        
+
         return "\n".join(parts)
-    
+
     def _extract_file_references(self, summary_result: SummaryResult) -> List[str]:
         """Extract file paths mentioned in the conversation."""
         # Look for common file patterns
         text = f"{summary_result.summary} {' '.join(summary_result.key_insights)}"
-        
+
         # Common patterns: .py, .js, .ts, .md, etc.
         file_pattern = r'[\w/\-\\.]+\.(?:py|js|ts|jsx|tsx|md|json|yaml|yml|txt|sh)'
         files = re.findall(file_pattern, text)
-        
+
         # Also look for module imports
         import_pattern = r'(?:from|import)\s+([\w\.]+)'
         imports = re.findall(import_pattern, text)
-        
+
         return list(set(files + [f"{imp}.py" for imp in imports]))
 ```
 
@@ -2485,16 +2485,16 @@ Implement a comprehensive metadata schema that enables multi-dimensional search:
 ```python
 class ChatMetadataBuilder:
     """Build rich metadata for chat summaries."""
-    
+
     def __init__(self, project_context: ProjectContext):
         """Initialize with project context for cross-referencing.
-        
+
         Args:
             project_context: Contains indexed code entities for the project
         """
         self.project_context = project_context
         self.entity_index = self._build_entity_index()
-    
+
     def _build_entity_index(self) -> Dict[str, Set[str]]:
         """Build lookup index for code entities."""
         index = {
@@ -2503,7 +2503,7 @@ class ChatMetadataBuilder:
             'files': set(),
             'modules': set()
         }
-        
+
         # Populate from project context
         for entity in self.project_context.entities:
             if entity.type == "FUNCTION":
@@ -2514,52 +2514,52 @@ class ChatMetadataBuilder:
                 index['files'].add(entity.path)
             elif entity.type == "MODULE":
                 index['modules'].add(entity.name)
-        
+
         return index
-    
-    def build_metadata(self, summary_result: SummaryResult, 
+
+    def build_metadata(self, summary_result: SummaryResult,
                       conversation: Conversation) -> Dict[str, Any]:
         """Build comprehensive metadata for storage.
-        
+
         Returns:
             Dictionary with all metadata fields populated
         """
         # Extract temporal metadata
         temporal_meta = self._extract_temporal_metadata(conversation)
-        
+
         # Extract technical context with validation
         tech_context = self._extract_technical_context(summary_result)
-        
+
         # Find cross-references to code entities
         cross_refs = self._find_cross_references(summary_result)
-        
+
         # Calculate search scores
         search_scores = self._calculate_search_scores(summary_result)
-        
+
         # Build complete metadata
         metadata = {
             **temporal_meta,
             **tech_context,
             **cross_refs,
             **search_scores,
-            
+
             # Core fields from summary
             "summary": summary_result.summary,
             "category": summary_result.category,
             "key_insights": summary_result.key_insights,
             "confidence": summary_result.confidence,
-            
+
             # Additional searchability fields
             "search_keywords": self._extract_search_keywords(summary_result),
             "problem_keywords": self._extract_problem_keywords(summary_result),
             "solution_keywords": self._extract_solution_keywords(summary_result),
-            
+
             # Faceted search support
             "facets": self._build_search_facets(summary_result, tech_context)
         }
-        
+
         return metadata
-    
+
     def _find_cross_references(self, summary_result: SummaryResult) -> Dict[str, List[str]]:
         """Find references to existing code entities."""
         text = f"{summary_result.summary} {' '.join(summary_result.key_insights)}"
@@ -2569,24 +2569,24 @@ class ChatMetadataBuilder:
             "related_files": [],
             "related_modules": []
         }
-        
+
         # Use word boundaries for accurate matching
         for func in self.entity_index['functions']:
             if re.search(rf'\b{re.escape(func)}\b', text):
                 references["related_functions"].append(func)
-        
+
         for cls in self.entity_index['classes']:
             if re.search(rf'\b{re.escape(cls)}\b', text):
                 references["related_classes"].append(cls)
-        
+
         # File references with path normalization
         for file_ref in self._extract_file_references(summary_result):
             normalized = os.path.normpath(file_ref)
             if any(normalized.endswith(f) for f in self.entity_index['files']):
                 references["related_files"].append(normalized)
-        
+
         return references
-    
+
     def _calculate_search_scores(self, summary_result: SummaryResult) -> Dict[str, float]:
         """Calculate relevance scores for different search types."""
         scores = {
@@ -2595,7 +2595,7 @@ class ChatMetadataBuilder:
             "implementation_score": 0.0,
             "learning_score": 0.0
         }
-        
+
         # Technical score based on technical context richness
         tech_items = sum([
             len(summary_result.technical_context.get('languages', [])),
@@ -2604,25 +2604,25 @@ class ChatMetadataBuilder:
             len(summary_result.technical_context.get('error_types', []))
         ])
         scores["technical_score"] = min(tech_items / 10.0, 1.0)
-        
+
         # Problem-solving score for debugging patterns
         if summary_result.category == "debugging_pattern":
             scores["problem_solving_score"] = 0.9
         elif "error" in summary_result.summary.lower() or "fix" in summary_result.summary.lower():
             scores["problem_solving_score"] = 0.7
-        
+
         # Implementation score
         if summary_result.category == "implementation_pattern":
             scores["implementation_score"] = 0.9
         elif any(kw in summary_result.summary.lower() for kw in ['implement', 'create', 'build']):
             scores["implementation_score"] = 0.7
-        
+
         # Learning score based on insights
         scores["learning_score"] = min(len(summary_result.key_insights) / 5.0, 1.0)
-        
+
         return scores
-    
-    def _build_search_facets(self, summary_result: SummaryResult, 
+
+    def _build_search_facets(self, summary_result: SummaryResult,
                            tech_context: Dict) -> Dict[str, List[str]]:
         """Build facets for faceted search functionality."""
         facets = {
@@ -2632,7 +2632,7 @@ class ChatMetadataBuilder:
             "problem_type": self._get_problem_type_facet(summary_result),
             "solution_type": self._get_solution_type_facet(summary_result)
         }
-        
+
         # Remove empty facets
         return {k: v for k, v in facets.items() if v}
 ```
@@ -2644,15 +2644,15 @@ Implement bidirectional linking between chat summaries and code entities:
 ```python
 class CrossReferenceManager:
     """Manage cross-references between chat summaries and code entities."""
-    
+
     def __init__(self, vector_store: VectorStore):
         self.vector_store = vector_store
         self.reference_cache = {}
-    
-    def create_cross_references(self, chat_point_id: str, 
+
+    def create_cross_references(self, chat_point_id: str,
                               references: Dict[str, List[str]]):
         """Create bidirectional references between chat and code.
-        
+
         Args:
             chat_point_id: ID of the chat summary point
             references: Dict with related_functions, related_classes, etc.
@@ -2665,21 +2665,21 @@ class CrossReferenceManager:
                 "files": references.get('related_files', [])
             }
         }
-        
+
         # Update chat point
         self.vector_store.set_payload(
             points=[chat_point_id],
             payload=chat_update
         )
-        
+
         # Update referenced code entities to point back to chat
         for entity_type, entity_names in references.items():
             for entity_name in entity_names:
                 self._add_chat_reference_to_entity(
                     entity_name, entity_type, chat_point_id
                 )
-    
-    def _add_chat_reference_to_entity(self, entity_name: str, 
+
+    def _add_chat_reference_to_entity(self, entity_name: str,
                                     entity_type: str, chat_point_id: str):
         """Add chat reference to a code entity."""
         # Find the code entity
@@ -2695,79 +2695,79 @@ class CrossReferenceManager:
                 )
             ]
         )
-        
+
         # Search for the entity
         results = self.vector_store.search(
             query_vector=[0] * 1536,  # Dummy vector for metadata search
             limit=1,
             query_filter=filter_condition
         )
-        
+
         if results:
             entity_point = results[0]
             # Get existing chat references
             chat_refs = entity_point.payload.get('chat_references', [])
-            
+
             # Add new reference if not already present
             if chat_point_id not in chat_refs:
                 chat_refs.append(chat_point_id)
-                
+
                 # Update entity with chat reference
                 self.vector_store.set_payload(
                     points=[entity_point.id],
                     payload={"chat_references": chat_refs}
                 )
-    
-    def get_related_chats(self, entity_name: str, 
+
+    def get_related_chats(self, entity_name: str,
                          entity_type: str) -> List[ChatSummary]:
         """Get all chat summaries related to a code entity."""
         # First get the entity
         entity = self._get_entity(entity_name, entity_type)
         if not entity:
             return []
-        
+
         # Get chat references
         chat_ids = entity.payload.get('chat_references', [])
         if not chat_ids:
             return []
-        
+
         # Retrieve chat summaries
         chat_summaries = []
         for chat_id in chat_ids:
             chat_point = self.vector_store.retrieve([chat_id])[0]
             if chat_point:
                 chat_summaries.append(self._point_to_chat_summary(chat_point))
-        
+
         return chat_summaries
-    
+
     def get_code_context_for_chat(self, chat_point_id: str) -> CodeContext:
         """Get all code entities referenced in a chat."""
         # Retrieve chat point
         chat_point = self.vector_store.retrieve([chat_point_id])[0]
         if not chat_point:
             return CodeContext()
-        
+
         # Extract cross-references
         cross_refs = chat_point.payload.get('cross_references', {})
-        
+
         context = CodeContext()
-        
+
         # Retrieve each referenced entity
         for func_name in cross_refs.get('functions', []):
             func_entity = self._get_entity(func_name, 'function')
             if func_entity:
                 context.functions.append(func_entity)
-        
+
         for class_name in cross_refs.get('classes', []):
             class_entity = self._get_entity(class_name, 'class')
             if class_entity:
                 context.classes.append(class_entity)
-        
+
         for file_path in cross_refs.get('files', []):
             file_entity = self._get_entity(file_path, 'file')
             if file_entity:
                 context.files.append(file_entity)
-        
+
         return context
 ```
 
@@ -2778,21 +2778,21 @@ Implement advanced search capabilities optimized for chat summaries:
 ```python
 class ChatSearchOptimizer:
     """Optimize search queries for chat summaries."""
-    
+
     def __init__(self, vector_store: ChatVectorStore, embedder: Embedder):
         self.vector_store = vector_store
         self.embedder = embedder
         self.query_cache = LRUCache(maxsize=1000)
-    
+
     def search(self, query: str, filters: Optional[SearchFilters] = None,
                limit: int = 10) -> List[SearchResult]:
         """Perform optimized search across chat summaries.
-        
+
         Args:
             query: Natural language search query
             filters: Optional filters for time, category, etc.
             limit: Maximum results to return
-            
+
         Returns:
             List of search results with relevance scores
         """
@@ -2800,16 +2800,16 @@ class ChatSearchOptimizer:
         cache_key = f"{query}:{str(filters)}:{limit}"
         if cache_key in self.query_cache:
             return self.query_cache[cache_key]
-        
+
         # Enhance query for chat context
         enhanced_query = self._enhance_query(query)
-        
+
         # Generate embedding
         query_embedding = self.embedder.embed(enhanced_query)
-        
+
         # Build filter conditions
         filter_conditions = self._build_filter_conditions(filters)
-        
+
         # Perform hybrid search
         results = self._hybrid_search(
             query_embedding=query_embedding,
@@ -2817,15 +2817,15 @@ class ChatSearchOptimizer:
             filter_conditions=filter_conditions,
             limit=limit * 2  # Over-fetch for re-ranking
         )
-        
+
         # Re-rank results
         ranked_results = self._rerank_results(results, query, limit)
-        
+
         # Cache results
         self.query_cache[cache_key] = ranked_results
-        
+
         return ranked_results
-    
+
     def _enhance_query(self, query: str) -> str:
         """Enhance query with chat-specific context."""
         # Add category hints based on keywords
@@ -2838,17 +2838,17 @@ class ChatSearchOptimizer:
             'optimize': 'performance_pattern speed memory efficiency',
             'learn': 'knowledge_insight research understand'
         }
-        
+
         enhanced_parts = [query]
-        
+
         for keyword, hint in category_hints.items():
             if keyword in query.lower():
                 enhanced_parts.append(hint)
-        
+
         return ' '.join(enhanced_parts)
-    
+
     def _hybrid_search(self, query_embedding: List[float], text_query: str,
-                      filter_conditions: Optional[models.Filter], 
+                      filter_conditions: Optional[models.Filter],
                       limit: int) -> List[ScoredPoint]:
         """Perform hybrid vector + text search."""
         # Vector search
@@ -2857,7 +2857,7 @@ class ChatSearchOptimizer:
             limit=limit,
             query_filter=filter_conditions
         )
-        
+
         # Text search on key fields
         text_conditions = self._build_text_search_conditions(text_query)
         if text_conditions and filter_conditions:
@@ -2866,7 +2866,7 @@ class ChatSearchOptimizer:
             )
         else:
             combined_filter = text_conditions or filter_conditions
-        
+
         text_results = self.vector_store.client.scroll(
             collection_name=self.vector_store.collection_name,
             scroll_filter=combined_filter,
@@ -2874,10 +2874,10 @@ class ChatSearchOptimizer:
             with_payload=True,
             with_vectors=False
         )[0]
-        
+
         # Combine results
         all_results = {}
-        
+
         # Add vector results with scores
         for result in vector_results:
             all_results[result.id] = {
@@ -2885,7 +2885,7 @@ class ChatSearchOptimizer:
                 'vector_score': result.score,
                 'text_score': 0.0
             }
-        
+
         # Add text results
         for point in text_results:
             if point.id in all_results:
@@ -2896,20 +2896,20 @@ class ChatSearchOptimizer:
                     'vector_score': 0.0,
                     'text_score': 1.0
                 }
-        
+
         return all_results
-    
+
     def _build_text_search_conditions(self, query: str) -> Optional[models.Filter]:
         """Build text search conditions for relevant fields."""
         # Extract meaningful terms
         terms = [term.lower() for term in query.split() if len(term) > 2]
         if not terms:
             return None
-        
+
         # Search in multiple fields
-        search_fields = ['summary', 'key_insights', 'search_keywords', 
+        search_fields = ['summary', 'key_insights', 'search_keywords',
                         'problem_keywords', 'solution_keywords']
-        
+
         conditions = []
         for field in search_fields:
             for term in terms:
@@ -2919,7 +2919,7 @@ class ChatSearchOptimizer:
                         match=models.MatchText(text=term)
                     )
                 )
-        
+
         # Use OR for text matching
         return models.Filter(should=conditions) if conditions else None
 ```
@@ -2931,10 +2931,10 @@ Implement sophisticated ranking algorithms for optimal result ordering:
 ```python
 class ChatResultRanker:
     """Rank and filter chat search results."""
-    
+
     def __init__(self, weight_config: Optional[Dict[str, float]] = None):
         """Initialize with customizable weight configuration.
-        
+
         Args:
             weight_config: Weights for different ranking factors
         """
@@ -2946,26 +2946,26 @@ class ChatResultRanker:
             'technical_relevance': 0.1,
             'cross_reference_bonus': 0.05
         }
-    
-    def rerank_results(self, results: Dict[str, Dict], query: str, 
+
+    def rerank_results(self, results: Dict[str, Dict], query: str,
                       user_context: Optional[UserContext] = None,
                       limit: int = 10) -> List[SearchResult]:
         """Rerank results based on multiple factors.
-        
+
         Args:
             results: Raw search results with scores
             query: Original search query
             user_context: Optional user context for personalization
             limit: Maximum results to return
-            
+
         Returns:
             Reranked and filtered results
         """
         ranked_results = []
-        
+
         for point_id, result_data in results.items():
             point = result_data['point']
-            
+
             # Calculate component scores
             scores = {
                 'vector_similarity': result_data['vector_score'],
@@ -2975,15 +2975,15 @@ class ChatResultRanker:
                 'technical_relevance': self._calculate_technical_relevance(point, query),
                 'cross_reference_bonus': self._calculate_cross_reference_bonus(point)
             }
-            
+
             # Apply user context adjustments if available
             if user_context:
                 scores = self._apply_user_context(scores, point, user_context)
-            
+
             # Calculate final score
-            final_score = sum(score * self.weights[factor] 
+            final_score = sum(score * self.weights[factor]
                             for factor, score in scores.items())
-            
+
             # Create search result
             search_result = SearchResult(
                 id=point_id,
@@ -2992,33 +2992,33 @@ class ChatResultRanker:
                 explanation=self._generate_explanation(scores),
                 highlights=self._extract_highlights(point, query)
             )
-            
+
             ranked_results.append(search_result)
-        
+
         # Sort by final score
         ranked_results.sort(key=lambda x: x.score, reverse=True)
-        
+
         # Apply filters and limit
         filtered_results = self._apply_post_filters(ranked_results)
-        
+
         return filtered_results[:limit]
-    
+
     def _calculate_recency_score(self, point: VectorPoint) -> float:
         """Calculate score based on recency of the chat."""
         try:
             indexed_at = datetime.fromisoformat(point.payload.get('indexed_at', ''))
             days_old = (datetime.now() - indexed_at).days
-            
+
             # Exponential decay with half-life of 30 days
             return math.exp(-days_old / 30)
         except:
             return 0.5  # Default for missing dates
-    
+
     def _calculate_category_match(self, point: VectorPoint, query: str) -> float:
         """Score based on category relevance to query."""
         category = point.payload.get('category', '')
         query_lower = query.lower()
-        
+
         # Direct category keyword matches
         category_keywords = {
             'debugging_pattern': ['debug', 'error', 'fix', 'troubleshoot'],
@@ -3029,63 +3029,63 @@ class ChatResultRanker:
             'performance_pattern': ['perform', 'optimize', 'speed', 'memory'],
             'knowledge_insight': ['learn', 'understand', 'research', 'insight']
         }
-        
+
         if category in category_keywords:
             keywords = category_keywords[category]
             matches = sum(1 for kw in keywords if kw in query_lower)
             return min(matches / len(keywords), 1.0)
-        
+
         return 0.0
-    
+
     def _calculate_technical_relevance(self, point: VectorPoint, query: str) -> float:
         """Score based on technical context matching."""
         query_lower = query.lower()
         score = 0.0
-        
+
         # Check language matches
         languages = point.payload.get('languages', [])
         for lang in languages:
             if lang.lower() in query_lower:
                 score += 0.3
-        
+
         # Check framework matches
         frameworks = point.payload.get('frameworks', [])
         for framework in frameworks:
             if framework.lower() in query_lower:
                 score += 0.3
-        
+
         # Check tool matches
         tools = point.payload.get('tools', [])
         for tool in tools:
             if tool.lower() in query_lower:
                 score += 0.2
-        
+
         # Check error type matches
         error_types = point.payload.get('error_types', [])
         for error in error_types:
             if error.lower() in query_lower:
                 score += 0.2
-        
+
         return min(score, 1.0)
-    
+
     def _calculate_cross_reference_bonus(self, point: VectorPoint) -> float:
         """Bonus score for chats with code cross-references."""
         cross_refs = point.payload.get('cross_references', {})
-        
+
         # Count total references
         total_refs = sum(len(refs) for refs in cross_refs.values())
-        
+
         # Logarithmic scaling to avoid over-weighting
         if total_refs > 0:
             return min(math.log(total_refs + 1) / 10, 1.0)
-        
+
         return 0.0
-    
+
     def _extract_highlights(self, point: VectorPoint, query: str) -> List[str]:
         """Extract relevant snippets to highlight."""
         highlights = []
         query_terms = query.lower().split()
-        
+
         # Check summary
         summary = point.payload.get('summary', '')
         for term in query_terms:
@@ -3096,13 +3096,13 @@ class ChatResultRanker:
                     if term in sentence.lower():
                         highlights.append(sentence.strip())
                         break
-        
+
         # Check key insights
         insights = point.payload.get('key_insights', [])
         for insight in insights:
             if any(term in insight.lower() for term in query_terms):
                 highlights.append(insight)
-        
+
         return highlights[:3]  # Limit to 3 highlights
 ```
 
@@ -3113,8 +3113,8 @@ Extend the CLI to seamlessly integrate chat search with code search:
 ```python
 class UnifiedSearchCommand:
     """Unified search across code and chat summaries."""
-    
-    def __init__(self, code_vector_store: VectorStore, 
+
+    def __init__(self, code_vector_store: VectorStore,
                  chat_vector_store: ChatVectorStore,
                  embedder: Embedder):
         self.code_store = code_vector_store
@@ -3122,22 +3122,22 @@ class UnifiedSearchCommand:
         self.embedder = embedder
         self.code_searcher = CodeSearcher(code_vector_store, embedder)
         self.chat_searcher = ChatSearchOptimizer(chat_vector_store, embedder)
-    
+
     def search(self, query: str, search_type: str = "all",
                filters: Optional[Dict] = None, limit: int = 20) -> SearchResults:
         """Perform unified search across code and chats.
-        
+
         Args:
             query: Search query
             search_type: "all", "code", "chat", or "cross-reference"
             filters: Optional filters
             limit: Maximum results
-            
+
         Returns:
             Combined search results
         """
         results = SearchResults()
-        
+
         if search_type in ["all", "code"]:
             # Search code entities
             code_results = self.code_searcher.search(
@@ -3146,7 +3146,7 @@ class UnifiedSearchCommand:
                 limit=limit if search_type == "code" else limit // 2
             )
             results.code_results = code_results
-        
+
         if search_type in ["all", "chat"]:
             # Search chat summaries
             chat_filters = SearchFilters(
@@ -3154,63 +3154,63 @@ class UnifiedSearchCommand:
                 time_range=filters.get('time_range') if filters else None,
                 min_confidence=filters.get('min_confidence', 0.7)
             )
-            
+
             chat_results = self.chat_searcher.search(
                 query=query,
                 filters=chat_filters,
                 limit=limit if search_type == "chat" else limit // 2
             )
             results.chat_results = chat_results
-        
+
         if search_type == "cross-reference":
             # Search for items with cross-references
             results = self._search_cross_references(query, filters, limit)
-        
+
         # Merge and rank combined results if searching all
         if search_type == "all":
             results = self._merge_results(results, limit)
-        
+
         return results
-    
+
     def _search_cross_references(self, query: str, filters: Optional[Dict],
                                limit: int) -> SearchResults:
         """Search specifically for cross-referenced items."""
         # First find relevant code entities
         code_results = self.code_searcher.search(query, limit=limit)
-        
+
         results = SearchResults()
         cross_ref_manager = CrossReferenceManager(self.chat_store)
-        
+
         # For each code result, find related chats
         for code_result in code_results[:10]:  # Limit to avoid explosion
             entity_name = code_result.payload.get('entity_name')
             entity_type = code_result.payload.get('entity_type')
-            
+
             related_chats = cross_ref_manager.get_related_chats(
                 entity_name, entity_type
             )
-            
+
             # Add to results with boosted scores
             for chat in related_chats:
                 chat.score *= 1.5  # Boost cross-referenced items
                 results.chat_results.append(chat)
-        
+
         # Deduplicate and sort
         seen = set()
         unique_results = []
-        for result in sorted(results.chat_results, 
+        for result in sorted(results.chat_results,
                            key=lambda x: x.score, reverse=True):
             if result.id not in seen:
                 seen.add(result.id)
                 unique_results.append(result)
-        
+
         results.chat_results = unique_results[:limit]
         return results
-    
+
     def _merge_results(self, results: SearchResults, limit: int) -> SearchResults:
         """Merge code and chat results with intelligent ranking."""
         merged = []
-        
+
         # Normalize scores across different result types
         for code_result in results.code_results:
             merged.append({
@@ -3218,20 +3218,20 @@ class UnifiedSearchCommand:
                 'result': code_result,
                 'normalized_score': code_result.score * 0.6  # Slight bias to code
             })
-        
+
         for chat_result in results.chat_results:
             merged.append({
                 'type': 'chat',
                 'result': chat_result,
                 'normalized_score': chat_result.score * 0.4
             })
-        
+
         # Sort by normalized score
         merged.sort(key=lambda x: x['normalized_score'], reverse=True)
-        
+
         # Ensure diversity in top results
         diverse_results = self._ensure_diversity(merged, limit)
-        
+
         # Rebuild SearchResults
         final_results = SearchResults()
         for item in diverse_results:
@@ -3239,7 +3239,7 @@ class UnifiedSearchCommand:
                 final_results.code_results.append(item['result'])
             else:
                 final_results.chat_results.append(item['result'])
-        
+
         return final_results
 ```
 
@@ -3276,26 +3276,26 @@ def search(
     # Setup stores
     config = IndexerConfig.from_file("settings.txt")
     embedder = OpenAIEmbedder(config.openai_api_key)
-    
+
     code_store = VectorStore(
         url=config.qdrant_url,
         collection_name=collection_name,
         api_key=config.qdrant_api_key
     )
-    
+
     chat_store = ChatVectorStore(
         url=config.qdrant_url,
         collection_name=collection_name,
         api_key=config.qdrant_api_key
     )
-    
+
     # Build filters
     filters = {}
     if category:
         filters['categories'] = [category]
     if entity_type:
         filters['entity_types'] = [entity_type]
-    
+
     # Perform search
     searcher = UnifiedSearchCommand(code_store, chat_store, embedder)
     results = searcher.search(
@@ -3304,10 +3304,10 @@ def search(
         filters=filters,
         limit=limit
     )
-    
+
     # Display results
     console = Console()
-    
+
     if results.code_results:
         console.print("\n[bold blue]Code Results:[/bold blue]")
         for i, result in enumerate(results.code_results, 1):
@@ -3315,7 +3315,7 @@ def search(
                          f"({result.payload['entity_type']})")
             console.print(f"   Score: {result.score:.3f}")
             console.print(f"   File: {result.payload.get('file_path', 'N/A')}")
-    
+
     if results.chat_results:
         console.print("\n[bold green]Chat Results:[/bold green]")
         for i, result in enumerate(results.chat_results, 1):
@@ -3323,13 +3323,13 @@ def search(
                          f"{result.payload.get('start_time', 'N/A')}")
             console.print(f"   Score: {result.score:.3f}")
             console.print(f"   Summary: {result.payload['summary'][:200]}...")
-            
+
             # Show highlights
             if result.highlights:
                 console.print("   [italic]Highlights:[/italic]")
                 for highlight in result.highlights:
                     console.print(f"   • {highlight}")
-    
+
     # Export if requested
     if export_json:
         results_dict = {
@@ -3337,18 +3337,18 @@ def search(
             "search_type": search_type,
             "timestamp": datetime.now().isoformat(),
             "code_results": [
-                {"score": r.score, "payload": r.payload} 
+                {"score": r.score, "payload": r.payload}
                 for r in results.code_results
             ],
             "chat_results": [
-                {"score": r.score, "payload": r.payload, "highlights": r.highlights} 
+                {"score": r.score, "payload": r.payload, "highlights": r.highlights}
                 for r in results.chat_results
             ]
         }
-        
+
         with open(export_json, 'w') as f:
             json.dump(results_dict, f, indent=2)
-        
+
         console.print(f"\n[green]Results exported to {export_json}[/green]")
 ```
 

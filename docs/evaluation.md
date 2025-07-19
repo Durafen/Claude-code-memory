@@ -120,4 +120,3 @@ Metrics can be pushed to Prometheus for historical dashboards. ([medium.com](htt
 ## 9 · Key Takeaways
 
 A vector database is only as useful as its retrieval quality. Systematic evaluation with **Recall\@K, MRR, and optional LLM judging** ensures that Claude Code sees the right context, directly boosting its bug‑fix suggestions and reducing developer friction.
-

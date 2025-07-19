@@ -198,4 +198,3 @@ Week 8‑9  |████ Cost optimization, polish & docs → Phase III done
 ---
 
 > **Next step**: Approve this plan in the weekly platform sync.  Once green‑lit, Phase I tickets will be created in Jira and assigned to the backend pod.
-

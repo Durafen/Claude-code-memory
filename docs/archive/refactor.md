@@ -126,4 +126,3 @@ claude_indexer/
 ## 8 · Outcome
 
 A lean, plugin‑oriented package that any team can install (`pip install claude‑indexer`) and extend, with separate modules for config, parsing, embeddings, storage, watching, and CLI orchestration.  This sets the groundwork for scaling to polyglot codebases and evolving vector‑store tech, while ensuring the codebase stays approachable for new contributors.
-

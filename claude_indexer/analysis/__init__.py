@@ -1,11 +1,11 @@
 """Code analysis package for parsing and extracting semantic information."""
 
-from .entities import Entity, Relation, EntityType, RelationType
+from .entities import Entity, EntityType, Relation, RelationType
 from .parser import CodeParser, ParserResult
 
 __all__ = [
     "Entity",
-    "Relation", 
+    "Relation",
     "EntityType",
     "RelationType",
     "CodeParser",

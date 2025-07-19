@@ -45,7 +45,7 @@ get_implementation(
 
 #### 2. **Logical Scope**
 - Returns: Entity + helper functions/classes from same file
-- Discovery Method: 
+- Discovery Method:
   - Analyze `semantic_metadata.calls` for local function calls
   - Filter by same `file_path`
   - Include private helper functions (prefix: `_`)
@@ -73,7 +73,7 @@ get_implementation(
   inputSchema: {
     type: "object",
     properties: {
-      entityName: { 
+      entityName: {
         type: "string",
         description: "Name of the entity to retrieve"
       },
@@ -97,12 +97,12 @@ export function validateGetImplementationRequest(args: Record<string, unknown>) 
   if (!entityName || typeof entityName !== 'string') {
     throw new Error('entityName is required and must be a string');
   }
-  
+
   const scope = args.scope || 'minimal';
   if (!['minimal', 'logical', 'dependencies'].includes(scope)) {
     throw new Error('Invalid scope. Must be: minimal, logical, or dependencies');
   }
-  
+
   return { entityName, scope };
 }
 ```
@@ -114,33 +114,33 @@ export function validateGetImplementationRequest(args: Record<string, unknown>) 
 
 ```typescript
 async getImplementationChunks(
-  entityName: string, 
+  entityName: string,
   scope: 'minimal' | 'logical' | 'dependencies' = 'minimal'
 ): Promise<SearchResult[]> {
   // Base implementation for minimal scope
   const baseResults = await this.getEntityImplementation(entityName);
-  
+
   if (scope === 'minimal') return baseResults;
-  
+
   // Extract semantic metadata for scope expansion
   const metadata = this.extractSemanticMetadata(baseResults);
-  
+
   if (scope === 'logical') {
     return this.expandLogicalScope(baseResults, metadata);
   }
-  
+
   if (scope === 'dependencies') {
     return this.expandDependencyScope(baseResults, metadata);
   }
 }
 
 private async expandLogicalScope(
-  baseResults: SearchResult[], 
+  baseResults: SearchResult[],
   metadata: SemanticMetadata
 ): Promise<SearchResult[]> {
   const filePath = baseResults[0]?.data.file_path;
   const calledFunctions = metadata.calls || [];
-  
+
   // Query for helper functions in same file
   const helperResults = await this.client.search(COLLECTION_NAME, {
     vector: new Array(this.vectorSize).fill(0),
@@ -153,17 +153,17 @@ private async expandLogicalScope(
       ]
     }
   });
-  
+
   return this.mergeAndDeduplicate([...baseResults, ...helperResults]);
 }
 
 private async expandDependencyScope(
-  baseResults: SearchResult[], 
+  baseResults: SearchResult[],
   metadata: SemanticMetadata
 ): Promise<SearchResult[]> {
   const imports = metadata.imports_used || [];
   const calls = metadata.calls || [];
-  
+
   // Query for imported dependencies
   const dependencyResults = await this.client.search(COLLECTION_NAME, {
     vector: new Array(this.vectorSize).fill(0),
@@ -178,7 +178,7 @@ private async expandDependencyScope(
       ]
     }
   });
-  
+
   return this.mergeAndDeduplicate([...baseResults, ...dependencyResults]);
 }
 ```
@@ -195,7 +195,7 @@ describe('get_implementation scope tests', () => {
     expect(result.length).toBe(1);
     expect(result[0].data.entity_name).toBe('parseAST');
   });
-  
+
   it('should include helper functions for logical scope', async () => {
     const result = await mcp.get_implementation('parseAST', 'logical');
     const entityNames = result.map(r => r.data.entity_name);
@@ -205,7 +205,7 @@ describe('get_implementation scope tests', () => {
     const filePaths = [...new Set(result.map(r => r.data.file_path))];
     expect(filePaths.length).toBe(1);
   });
-  
+
   it('should include dependencies for dependencies scope', async () => {
     const result = await mcp.get_implementation('parseAST', 'dependencies');
     const entityNames = result.map(r => r.data.entity_name);

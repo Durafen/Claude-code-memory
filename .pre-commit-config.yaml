@@ -1,0 +1,52 @@
+repos:
+  # Basic file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  # Modern Python linting and formatting with Ruff (2025 best practice)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.4
+    hooks:
+      - id: ruff-check
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Type checking with mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        args: [--ignore-missing-imports, --show-error-codes]
+        additional_dependencies: [types-requests, types-PyYAML]
+        exclude: ^(tests/|debug/)
+
+  # Security checks
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        args: [-r, ., -ll]
+        exclude: ^(tests/|debug/)
+        pass_filenames: false
+
+  # Local hooks for project-specific checks
+  - repo: local
+    hooks:
+      # Run quick tests
+      - id: pytest-check
+        name: pytest-check
+        entry: pytest
+        language: system
+        args: [--tb=short, -q, --maxfail=3]
+        types: [python]
+        pass_filenames: false
+        stages: [pre-commit]

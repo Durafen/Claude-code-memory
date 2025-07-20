@@ -3,6 +3,7 @@
 import hashlib
 import json
 import time
+import fnmatch
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -837,7 +838,11 @@ class CoreIndexer:
                         should_exclude = True
                         break
                 # Handle glob patterns and exact matches
-                elif relative_path.match(pattern) or relative_path.name.match(pattern) or pattern in relative_path.parts:
+                elif (
+                    fnmatch.fnmatch(str(relative_path), pattern)
+                    or fnmatch.fnmatch(relative_path.name, pattern)
+                    or any(fnmatch.fnmatch(part, pattern) for part in relative_path.parts)
+                ):
                     should_exclude = True
                     break
 
@@ -1327,8 +1332,9 @@ class CoreIndexer:
             logger.info(
                 f"💾 STORAGE START: {len(entities)} entities at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}"
             )
+            file_paths = {entity.file_path for entity in entities} if entities else {'none'}
             logger.info(
-                f"💾 Files being stored: {{{entity.file_path for entity in entities}} if entities else 'none'}"
+                f"💾 Files being stored: {file_paths}"
             )
 
         # Critical error check - vector store should always be available in production

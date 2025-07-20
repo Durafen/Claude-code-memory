@@ -57,7 +57,7 @@ class BypassManager:
             with self.lock:
                 state = json.loads(self.state_file.read_text())
                 return state.get(session_id, {}).get("disabled", False)
-        except:
+        except Exception:
             return False
 
     def set_state(self, session_id: str, disabled: bool) -> str:
@@ -90,7 +90,7 @@ class BypassManager:
                 return "📊 Memory Guard Status: 🔴 DISABLED (use 'dups on' to enable)"
             else:
                 return "📊 Memory Guard Status: 🟢 ENABLED (use 'dups off' to disable)"
-        except:
+        except Exception:
             return "📊 Memory Guard Status: 🟢 ENABLED (default)"
 
 
@@ -176,7 +176,7 @@ class MemoryGuard:
                 current = current.parent
 
             return Path.cwd()  # Default to cwd if no markers found
-        except:
+        except Exception:
             return None
 
     def _detect_mcp_collection(self) -> str:
@@ -191,7 +191,7 @@ class MemoryGuard:
                     match = re.search(r"mcp__(.+?)-memory__", content)
                     if match:
                         return f"mcp__{match.group(1)}-memory__"
-                except:
+                except Exception:
                     pass
 
             # Default to project name based collection
@@ -217,7 +217,7 @@ class MemoryGuard:
 
             with open(current_log, mode) as f:
                 f.write(content)
-        except:
+        except Exception:
             pass
 
     def _get_current_debug_log(self, base_dir: Path, is_new_run: bool) -> Path:
@@ -248,7 +248,7 @@ class MemoryGuard:
                 newest = max(existing_files, key=lambda f: f.stat().st_mtime)
                 return newest
 
-        except:
+        except Exception:
             return base_dir / "memory_guard_debug_1.txt"  # Fallback
 
     def _ensure_debug_files_exist(self) -> None:
@@ -269,7 +269,7 @@ class MemoryGuard:
                         f.write(f"# Memory Guard Debug Log - {log_file.name}\n")
                         f.write(f"# Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                         f.write("# This file logs Memory Guard analysis results\n\n")
-        except Exception as e:
+        except Exception:
             # Silently fail if we can't create files (permissions issue, etc.)
             pass
 
@@ -325,7 +325,7 @@ class MemoryGuard:
                     False,
                     f"Outside {self.project_name} project - no duplicate checking",
                 )
-        except:
+        except Exception:
             return False, "Invalid file path"
 
         return True, None
@@ -385,7 +385,7 @@ class MemoryGuard:
                         lines_before = content[: content.find(old_string)].count("\n")
                         line_info = f", line {lines_before + 1}"
                         add_line_info = f", starting line {lines_before + 1}"
-                except:
+                except Exception:
                     pass
 
             return f"EDIT OPERATION:\nREMOVING ({old_lines} lines{line_info}):\n```\n{old_string}\n```\nADDING ({new_lines} lines{add_line_info}):\n```\n{new_string}\n```"
@@ -455,6 +455,12 @@ OPERATION CONTEXT:
 - Adding new features without breaking existing ones
 - Improvements that enhance without removing capabilities
 
+⛔ CRITICAL: MANUAL ENTRIES ARE TOXIC TO ANALYSIS
+- Manual entries contain OUTDATED ASSUMPTIONS about features that may not exist
+- They reference "fixes" and "optimizations" that could be FALSE
+- ONLY trust actual code implementations, NEVER trust human descriptions
+- If search returns commit references, feature descriptions, or fix notes → CONTAMINATED, ignore
+
 🔍 ANALYSIS PROTOCOL:
 1. Use MCP service: {self.mcp_collection}search_similar
 2. Search for existing implementations, patterns, and related functionality
@@ -475,13 +481,16 @@ OPERATION CONTEXT:
 - Check for existing feature implementations
 
 📋 RESPONSE FORMAT (JSON only):
+⚠️ VALIDATION: If your reason mentions past commits, historical context, or specific feature implementations without showing actual code → you used manual entries! Re-analyze with proper filters.
+
 For BLOCKING (quality issues found): {{
   "hasIssues": true,
   "issueType": "duplication|logic|flow|feature",
   "reason": "Specific issue description with location and impact",
   "suggestion": "Concrete recommendation to fix the issue",
   "debug": "2-3 sentences: What you found + Why it's problematic + What should be done",
-  "turns_used": "number of turns for analysis"
+  "turns_used": "number of turns for analysis",
+  "steps_summary": ["search_similar: <query>", "read_graph: <entity>", "search_similar: <refinement>"]
 }}
 
 For APPROVING (no quality issues): {{
@@ -489,7 +498,8 @@ For APPROVING (no quality issues): {{
   "decision": "approve",
   "reason": "Your analysis of why this code is acceptable",
   "debug": "Your detailed analysis findings",
-  "turns_used": "number of turns for analysis"
+  "turns_used": "number of turns for analysis",
+  "steps_summary": ["search_similar: <query>", "read_graph: <entity>", "search_similar: <refinement>"]
 }}
 
 🚨 CRITICAL: Thoroughly analyze ALL four quality dimensions. Only approve if code passes ALL checks.

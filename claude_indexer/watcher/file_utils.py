@@ -64,6 +64,6 @@ def matches_patterns(text: str, patterns: list[str]) -> bool:
             if text.startswith(pattern) or f"/{pattern}" in f"/{text}":
                 return True
         # Handle glob patterns and exact matches
-        elif fnmatch.fnmatch(text, pattern) or fnmatch.fnmatch(file_path.name, pattern) or pattern in file_path.parts:
+        elif fnmatch.fnmatch(text, pattern) or fnmatch.fnmatch(file_path.name, pattern) or any(fnmatch.fnmatch(part, pattern) for part in file_path.parts):
             return True
     return False

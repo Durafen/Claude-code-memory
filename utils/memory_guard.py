@@ -48,50 +48,43 @@ class BypassManager:
         # Ensure .claude directory exists
         self.state_file.parent.mkdir(exist_ok=True)
 
-    def is_disabled(self, session_id: str) -> bool:
-        """Check if Memory Guard is disabled for the session."""
+
+    def set_global_state(self, disabled: bool) -> str:
+        """Enable or disable Memory Guard globally."""
+        try:
+            with self.lock:
+                state = {"global_disabled": disabled}
+                self.state_file.write_text(json.dumps(state, indent=2))
+                
+                if disabled:
+                    return "🔴 Memory Guard disabled globally"
+                else:
+                    return "🟢 Memory Guard enabled globally"
+        except Exception as e:
+            return f"❌ Error setting global guard state: {str(e)}"
+
+    def get_global_status(self) -> str:
+        """Get current global Memory Guard status."""
+        try:
+            is_disabled = self.is_global_disabled()
+            if is_disabled:
+                return "📊 Memory Guard Status: 🔴 DISABLED GLOBALLY (use 'dups on' to enable)"
+            else:
+                return "📊 Memory Guard Status: 🟢 ENABLED GLOBALLY (use 'dups off' to disable)"
+        except Exception:
+            return "📊 Memory Guard Status: 🟢 ENABLED (default)"
+
+    def is_global_disabled(self) -> bool:
+        """Check if Memory Guard is disabled globally."""
         try:
             if not self.state_file.exists():
                 return False
-
+            
             with self.lock:
                 state = json.loads(self.state_file.read_text())
-                return state.get(session_id, {}).get("disabled", False)
+                return state.get("global_disabled", False)
         except Exception:
             return False
-
-    def set_state(self, session_id: str, disabled: bool) -> str:
-        """Enable or disable Memory Guard for the session."""
-        try:
-            with self.lock:
-                state = {}
-                if self.state_file.exists():
-                    state = json.loads(self.state_file.read_text())
-
-                state[session_id] = {
-                    "disabled": disabled,
-                    "timestamp": datetime.now().isoformat(),
-                }
-
-                self.state_file.write_text(json.dumps(state, indent=2))
-
-                if disabled:
-                    return "🔴 Memory Guard disabled for this session"
-                else:
-                    return "🟢 Memory Guard enabled for this session"
-        except Exception as e:
-            return f"❌ Error setting guard state: {str(e)}"
-
-    def get_status(self, session_id: str) -> str:
-        """Get current Memory Guard status for the session."""
-        try:
-            is_disabled = self.is_disabled(session_id)
-            if is_disabled:
-                return "📊 Memory Guard Status: 🔴 DISABLED (use 'dups on' to enable)"
-            else:
-                return "📊 Memory Guard Status: 🟢 ENABLED (use 'dups off' to disable)"
-        except Exception:
-            return "📊 Memory Guard Status: 🟢 ENABLED (default)"
 
 
 class EntityExtractor:
@@ -277,10 +270,9 @@ class MemoryGuard:
 
     def should_process(self, hook_data: dict[str, Any]) -> tuple[bool, str | None]:
         """Determine if this hook event should be processed."""
-        # Check bypass state first
-        session_id = hook_data.get("session_id", "")
-        if self.bypass_manager.is_disabled(session_id):
-            return False, "🔴 Memory Guard bypass active (use 'dups on' to re-enable)"
+        # Check global bypass state first
+        if self.bypass_manager.is_global_disabled():
+            return False, "🔴 Memory Guard bypass active globally (use 'dups on' to re-enable)"
 
         tool_name = hook_data.get("tool_name", "")
         hook_event = hook_data.get("hook_event_name", "")

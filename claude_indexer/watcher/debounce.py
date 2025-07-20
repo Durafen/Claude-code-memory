@@ -153,7 +153,6 @@ class FileChangeCoalescer:
     def __init__(
         self, delay: float = 2.0, callback: Callable[[list[str]], None] | None = None
     ):
-        import threading
 
         self.delay = delay
         self.callback = callback
@@ -165,7 +164,6 @@ class FileChangeCoalescer:
 
     def _start_timer(self) -> None:
         """Start background timer thread to automatically process files."""
-        import threading
 
         if self._timer_thread is None or not self._timer_thread.is_alive():
             import threading

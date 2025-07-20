@@ -295,7 +295,7 @@ class HTMLParser(TreeSitterParser):
         return None
 
     def _create_html_chunks(
-        self, file_path: Path, root: Node, content: str
+        self, file_path: Path, _root: Node, content: str
     ) -> list[EntityChunk]:
         """Create searchable chunks from HTML content."""
         chunks = []

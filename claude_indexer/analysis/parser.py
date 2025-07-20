@@ -1806,7 +1806,7 @@ class ParserRegistry:
         except Exception as e:
             logger.debug(f"Failed to extract JSON parser config: {e}")
             json_config = {}
-            
+
         # Ensure json_config is always a dict
         if not isinstance(json_config, dict):
             json_config = {}

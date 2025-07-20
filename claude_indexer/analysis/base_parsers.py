@@ -87,10 +87,7 @@ class TreeSitterParser(CodeParser):
         def check_node_for_errors(node: Node) -> bool:
             if node.type == "ERROR":
                 return True
-            for child in node.children:
-                if check_node_for_errors(child):
-                    return True
-            return False
+            return any(check_node_for_errors(child) for child in node.children)
 
         return check_node_for_errors(tree.root_node)
 

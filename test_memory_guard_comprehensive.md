@@ -12,7 +12,7 @@ x = 1
 API_KEY = "secret"
 ```
 
-### JavaScript Trivial  
+### JavaScript Trivial
 ```javascript
 import React from 'react';
 const data = require('./data');
@@ -50,7 +50,7 @@ const handler = () => {
 };
 ```
 
-### TypeScript Definitions  
+### TypeScript Definitions
 ```typescript
 private filterData(items: Item[]): Item[] {
     return items.filter(item => item.active);
@@ -71,7 +71,7 @@ def hash_password_new(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 ```
 
-```javascript  
+```javascript
 // If codebase has existing validateEmail function
 function checkEmailValid(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -84,7 +84,7 @@ function checkEmailValid(email) {
 if user.is_authenticated():
     for item in cart.items:
         total += item.price * item.quantity
-        
+
 try:
     response = api.call(endpoint)
     data = json.loads(response.text)

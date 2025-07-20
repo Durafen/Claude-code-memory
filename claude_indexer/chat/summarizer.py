@@ -281,7 +281,7 @@ Respond in JSON format:
                 )
 
                 content = response.choices[0].message.content
-                
+
                 if not content:
                     return {"summary": "No content received", "key_insights": []}
 

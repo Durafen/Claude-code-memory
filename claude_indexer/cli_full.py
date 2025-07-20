@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import click
+
 from .config import load_config
 from .embeddings.registry import create_embedder_from_config
 from .indexer import CoreIndexer
@@ -415,7 +417,7 @@ else:
     )
     @click.option("-c", "--collection", required=True, help="Collection name")
     @click.option("--force", is_flag=True, help="Overwrite existing config")
-    def init(project_path: str, collection: str, force: bool):
+    def init(project_path: str, collection: str, force: bool) -> None:
         """Initialize project configuration."""
         from .config.project_config import ProjectConfigManager
 
@@ -451,7 +453,7 @@ else:
         type=click.Path(exists=True),
         help="Project directory path",
     )
-    def show_config(project_path: str):
+    def show_config(project_path: str) -> None:
         """Show effective configuration for project."""
         from .config.config_loader import ConfigLoader
 
@@ -479,7 +481,7 @@ else:
     @project_options
     @common_options
     @click.argument("file_path", type=click.Path(exists=True))
-    def file(project, collection, file_path, verbose, quiet, config):
+    def file(project, collection, file_path, verbose, quiet, config) -> None:
         """Index a single file."""
 
         try:
@@ -534,7 +536,7 @@ else:
             sys.exit(1)
 
     @cli.group()
-    def watch():
+    def watch() -> None:
         """File watching commands."""
         pass
 
@@ -772,7 +774,7 @@ else:
             sys.exit(1)
 
     @cli.group()
-    def service():
+    def service() -> None:
         """Background service commands."""
         pass
 

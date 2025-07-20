@@ -58,7 +58,7 @@ class JavaScriptParser(TreeSitterParser):
             return super().parse_tree(content)
 
     def parse(
-        self, file_path: Path, batch_callback=None, global_entity_names=None
+        self, file_path: Path, _batch_callback=None, global_entity_names=None
     ) -> ParserResult:
         """Extract functions, classes, imports with progressive disclosure."""
         start_time = time.time()
@@ -294,11 +294,10 @@ class JavaScriptParser(TreeSitterParser):
             return self.extract_node_text(name_node, content)
 
         # For arrow functions assigned to variables
-        if node.type == "arrow_function" and node.parent:
-            if node.parent.type == "variable_declarator":
-                id_node = node.parent.child_by_field_name("name")
-                if id_node:
-                    return self.extract_node_text(id_node, content)
+        if node.type == "arrow_function" and node.parent and node.parent.type == "variable_declarator":
+            id_node = node.parent.child_by_field_name("name")
+            if id_node:
+                return self.extract_node_text(id_node, content)
 
         return None
 
@@ -460,28 +459,25 @@ class JavaScriptParser(TreeSitterParser):
 
         # Skip external modules to avoid orphan relations
         # Relative imports (starting with ./ or ../) are always internal
-        if not module_name.startswith("./") and not module_name.startswith("../"):
-            # Skip common Node.js built-in modules and npm packages
-            if (
-                module_name.startswith("@")  # Scoped npm packages
-                or "/" not in module_name  # Top-level npm packages
-                or module_name
-                in {
-                    "fs",
-                    "path",
-                    "os",
-                    "crypto",
-                    "http",
-                    "https",
-                    "url",
-                    "child_process",
-                    "dotenv",
-                    "express",
-                    "react",
-                    "vue",
-                }
-            ):
-                return None
+        if (not module_name.startswith("./") and not module_name.startswith("../") and
+            (module_name.startswith("@")  # Scoped npm packages
+             or "/" not in module_name  # Top-level npm packages
+             or module_name
+             in {
+                 "fs",
+                 "path",
+                 "os",
+                 "crypto",
+                 "http",
+                 "https",
+                 "url",
+                 "child_process",
+                 "dotenv",
+                 "express",
+                 "react",
+                 "vue",
+             })):
+            return None
 
         return RelationFactory.create_imports_relation(
             importer=str(file_path), imported=module_name, import_type="module"
@@ -544,7 +540,7 @@ class JavaScriptParser(TreeSitterParser):
         return relations
 
     def _extract_string_from_call(
-        self, call_node: Node, content: str, function_name: str
+        self, call_node: Node, content: str, _function_name: str
     ) -> str | None:
         """Extract string argument from a function call."""
         # Find arguments node
@@ -592,7 +588,7 @@ class JavaScriptParser(TreeSitterParser):
         return relations
 
     def _extract_inheritance_relations(
-        self, root: Node, file_path: Path, content: str
+        self, root: Node, _file_path: Path, content: str
     ) -> list[Relation]:
         """Extract class inheritance relations (extends/implements)."""
         relations = []
@@ -665,7 +661,7 @@ class JavaScriptParser(TreeSitterParser):
         return relations
 
     def _extract_exception_relations(
-        self, root: Node, file_path: Path, content: str
+        self, root: Node, _file_path: Path, content: str
     ) -> list[Relation]:
         """Extract exception handling relations (try/catch/throw)."""
         relations = []
@@ -689,7 +685,7 @@ class JavaScriptParser(TreeSitterParser):
         return relations
 
     def _extract_decorator_relations(
-        self, root: Node, file_path: Path, content: str
+        self, root: Node, _file_path: Path, content: str
     ) -> list[Relation]:
         """Extract TypeScript decorator relations."""
         relations = []
@@ -880,29 +876,26 @@ class JavaScriptParser(TreeSitterParser):
             # Extract from assignment expressions (e.g., assigned = "value")
             elif node.type == "assignment_expression":
                 left_node = node.child_by_field_name("left")
-                if left_node and left_node.type == "identifier":
-                    # Only include module-level assignments
-                    if current_scope is None:  # Module level
-                        var_name = self.extract_node_text(left_node, content)
-                        if var_name and self._should_include_variable(
-                            var_name, current_scope
-                        ):
-                            if var_name not in seen_variables:
-                                seen_variables.add(var_name)
-                                entity = Entity(
-                                    name=var_name,
-                                    entity_type=EntityType.VARIABLE,
-                                    observations=[
-                                        f"Variable: {var_name}",
-                                        f"Defined in: {file_path}",
-                                        f"Line: {node.start_point[0] + 1}",
-                                        "Assignment expression",
-                                    ],
-                                    file_path=file_path,
-                                    line_number=node.start_point[0] + 1,
-                                    end_line_number=node.end_point[0] + 1,
-                                )
-                                variables.append(entity)
+                if (left_node and left_node.type == "identifier" and
+                    current_scope is None):  # Only module-level assignments
+                    var_name = self.extract_node_text(left_node, content)
+                    if (var_name and self._should_include_variable(var_name, current_scope) and
+                        var_name not in seen_variables):
+                        seen_variables.add(var_name)
+                        entity = Entity(
+                            name=var_name,
+                            entity_type=EntityType.VARIABLE,
+                            observations=[
+                                f"Variable: {var_name}",
+                                f"Defined in: {file_path}",
+                                f"Line: {node.start_point[0] + 1}",
+                                "Assignment expression",
+                            ],
+                            file_path=file_path,
+                            line_number=node.start_point[0] + 1,
+                            end_line_number=node.end_point[0] + 1,
+                        )
+                        variables.append(entity)
 
             # Recursively traverse children
             for child in node.children:
@@ -1138,34 +1131,10 @@ class JavaScriptParser(TreeSitterParser):
             return False
 
         # Skip very short variable names that are likely temporary, but allow common mathematical variables
-        if len(var_name) <= 1:
-            # Allow common mathematical/coordinate variables
-            if var_name not in [
-                "x",
-                "y",
-                "z",
-                "a",
-                "b",
-                "c",
-                "d",
-                "e",
-                "f",
-                "g",
-                "h",
-                "n",
-                "m",
-                "p",
-                "q",
-                "r",
-                "s",
-                "t",
-                "u",
-                "v",
-                "w",
-            ]:
-                return False
-
-        return True
+        return not (len(var_name) <= 1 and var_name not in [
+            "x", "y", "z", "a", "b", "c", "d", "e", "f", "g", "h",
+            "n", "m", "p", "q", "r", "s", "t", "u", "v", "w"
+        ])
 
     def _create_variable_entity(
         self, var_name: str, file_path: Path, declarator: Node, pattern_type: str

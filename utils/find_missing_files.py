@@ -228,7 +228,8 @@ def print_comparison_results(comparison: dict[str, list[str]]) -> None:
 
 def main() -> int:
     """Main function to find missing files."""
-    collection_name = "claude-memory-test"
+    import sys
+    collection_name = sys.argv[1] if len(sys.argv) > 1 else "claude-memory-test"
 
     try:
         # Load settings

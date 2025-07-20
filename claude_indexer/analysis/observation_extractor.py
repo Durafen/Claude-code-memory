@@ -226,8 +226,33 @@ class ObservationExtractor:
 
             return None
 
-        # Actually call the helper function (this was missing!)
-        return find_first_string_literal(node)
+        # Actually call the helper function and clean the result
+        raw_docstring = find_first_string_literal(node)
+        if not raw_docstring:
+            return None
+
+        # Enhanced docstring cleaning
+        docstring = raw_docstring.strip()
+
+        # Remove triple quotes
+        if (
+            docstring.startswith('"""')
+            and docstring.endswith('"""')
+            or docstring.startswith("'''")
+            and docstring.endswith("'''")
+        ):
+            docstring = docstring[3:-3]
+        # Remove single quotes
+        elif (
+            docstring.startswith('"')
+            and docstring.endswith('"')
+            or docstring.startswith("'")
+            and docstring.endswith("'")
+        ):
+            docstring = docstring[1:-1]
+
+        # Clean up whitespace and return
+        return docstring.strip() if docstring.strip() else None
 
     def _extract_jsdoc_comment(
         self, node: "tree_sitter.Node", source_code: str
@@ -279,35 +304,6 @@ class ObservationExtractor:
         except Exception as e:
             logger.debug(f"Error extracting JSDoc comment: {e}")
             return None
-
-        # Remove unreachable code - find_first_string_literal is not defined
-        # raw_docstring = find_first_string_literal(node)
-        # if not raw_docstring:
-        #     return None
-        return None
-
-        # Enhanced docstring cleaning
-        docstring = raw_docstring.strip()
-
-        # Remove triple quotes
-        if (
-            docstring.startswith('"""')
-            and docstring.endswith('"""')
-            or docstring.startswith("'''")
-            and docstring.endswith("'''")
-        ):
-            docstring = docstring[3:-3]
-        # Remove single quotes
-        elif (
-            docstring.startswith('"')
-            and docstring.endswith('"')
-            or docstring.startswith("'")
-            and docstring.endswith("'")
-        ):
-            docstring = docstring[1:-1]
-
-        # Clean up whitespace and return
-        return docstring.strip() if docstring.strip() else None
 
     def _extract_docstring_patterns(self, docstring: str) -> list[str]:
         """Extract meaningful patterns and content from docstring."""

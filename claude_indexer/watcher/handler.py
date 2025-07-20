@@ -47,7 +47,22 @@ class IndexingEventHandler(FileSystemEventHandler):
         # File filtering - use patterns from settings or fallback to defaults
         self.watch_patterns = self.settings.get("watch_patterns", ["*.py", "*.md"])
         self.ignore_patterns = self.settings.get(
-            "ignore_patterns", ["*.pyc", "__pycache__", ".git", ".venv", "node_modules"]
+            "ignore_patterns", [
+                "*.pyc",
+                "__pycache__/",
+                ".git/",
+                ".venv/",
+                "node_modules/",
+                ".mypy_cache/",
+                "qdrant_storage/",
+                "backups/",
+                "*.egg-info",
+                "settings.txt",
+                ".claude-indexer/",
+                ".claude/",
+                "memory_guard_debug.txt",
+                "memory_guard_debug_*.txt",
+            ]
         )
         self.max_file_size = self.settings.get("max_file_size", 1048576)  # 1MB
 

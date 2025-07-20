@@ -39,7 +39,7 @@
         "qdrant_storage/",
         "backups/",
         "chat_reports/",
-        "*.egg-info",
+        "*.egg-info/",
         "settings.txt",
         ".claude-indexer/",
         ".claude/",

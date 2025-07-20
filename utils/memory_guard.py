@@ -608,8 +608,17 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                 }
                 icon = issue_icons.get(issue_type, "⚠️")
                 reason = f"{icon} CODE QUALITY ISSUE DETECTED ({issue_type.upper()}):\n{response.get('reason', '')}"
+
+                # Add analysis steps if available
+                if response.get("steps_summary"):
+                    steps = response.get("steps_summary", [])
+                    if steps:
+                        reason += f"\n\n🔍 ANALYSIS STEPS:\n"
+                        for i, step in enumerate(steps, 1):
+                            reason += f"   {i}. {step}\n"
+
                 if response.get("suggestion"):
-                    reason += f"\n\n💡 SUGGESTION: {response.get('suggestion')}"
+                    reason += f"\n💡 SUGGESTION: {response.get('suggestion')}"
                 return True, reason, response
             else:
                 return (

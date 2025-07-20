@@ -284,7 +284,7 @@ class JSONParser(TreeSitterParser):
         return entities
 
     def _create_json_chunks(
-        self, file_path: Path, root: Node, content: str
+        self, file_path: Path, _root: Node, content: str
     ) -> list[EntityChunk]:
         """Create searchable chunks from JSON content."""
         chunks = []
@@ -336,7 +336,7 @@ class JSONParser(TreeSitterParser):
         return result
 
     def _extract_content_items(
-        self, file_path: Path, tree, content: str
+        self, file_path: Path, _tree, content: str
     ) -> ParserResult:
         """Enhanced content extraction: extract individual posts/articles as separate entities."""
         start_time = time.time()

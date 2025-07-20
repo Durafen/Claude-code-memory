@@ -248,7 +248,7 @@ class CSSParser(TreeSitterParser):
         return selectors
 
     def _create_css_chunks(
-        self, file_path: Path, root: Node, content: str
+        self, file_path: Path, _root: Node, content: str
     ) -> list[EntityChunk]:
         """Create searchable chunks from CSS content."""
         chunks = []

@@ -39,7 +39,11 @@ def should_process_file(
             return False
 
         # Check file size (for existing files)
-        return not (file_path.exists() and file_path.is_file() and file_path.stat().st_size > max_file_size)
+        return not (
+            file_path.exists()
+            and file_path.is_file()
+            and file_path.stat().st_size > max_file_size
+        )
 
     except Exception:
         return False
@@ -64,6 +68,10 @@ def matches_patterns(text: str, patterns: list[str]) -> bool:
             if text.startswith(pattern) or f"/{pattern}" in f"/{text}":
                 return True
         # Handle glob patterns and exact matches
-        elif fnmatch.fnmatch(text, pattern) or fnmatch.fnmatch(file_path.name, pattern) or any(fnmatch.fnmatch(part, pattern) for part in file_path.parts):
+        elif (
+            fnmatch.fnmatch(text, pattern)
+            or fnmatch.fnmatch(file_path.name, pattern)
+            or any(fnmatch.fnmatch(part, pattern) for part in file_path.parts)
+        ):
             return True
     return False

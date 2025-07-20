@@ -226,7 +226,7 @@ class MemoryGuard:
             log_files = [
                 base_dir / "memory_guard_debug_1.txt",
                 base_dir / "memory_guard_debug_2.txt",
-                base_dir / "memory_guard_debug_3.txt"
+                base_dir / "memory_guard_debug_3.txt",
             ]
 
             if is_new_run:
@@ -258,16 +258,18 @@ class MemoryGuard:
             log_files = [
                 base_dir / "memory_guard_debug_1.txt",
                 base_dir / "memory_guard_debug_2.txt",
-                base_dir / "memory_guard_debug_3.txt"
+                base_dir / "memory_guard_debug_3.txt",
             ]
 
             for log_file in log_files:
                 if not log_file.exists():
                     # Create the file with a header
                     log_file.touch()
-                    with open(log_file, 'w') as f:
+                    with open(log_file, "w") as f:
                         f.write(f"# Memory Guard Debug Log - {log_file.name}\n")
-                        f.write(f"# Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f.write(
+                            f"# Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        )
                         f.write("# This file logs Memory Guard analysis results\n\n")
         except Exception:
             # Silently fail if we can't create files (permissions issue, etc.)
@@ -602,7 +604,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                     "duplication": "🔄",
                     "logic": "🧠",
                     "flow": "🔗",
-                    "feature": "⚙️"
+                    "feature": "⚙️",
                 }
                 icon = issue_icons.get(issue_type, "⚠️")
                 reason = f"{icon} CODE QUALITY ISSUE DETECTED ({issue_type.upper()}):\n{response.get('reason', '')}"
@@ -641,8 +643,8 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             tool_name = hook_data.get("tool_name", "")
             tool_input = hook_data.get("tool_input", {})
 
-            # Extract entities
-            entities = self.extractor.extract_entities_from_operation(
+            # Extract entities (not used but required for analysis flow)
+            _ = self.extractor.extract_entities_from_operation(
                 tool_name, tool_input
             )
 

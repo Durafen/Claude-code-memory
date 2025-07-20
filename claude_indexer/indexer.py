@@ -1,9 +1,10 @@
 """Core indexing orchestrator - stateless domain service."""
 
+import contextlib
+import fnmatch
 import hashlib
 import json
 import time
-import fnmatch
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -178,23 +179,26 @@ class CoreIndexer:
             self.logger.debug(
                 f"🔍 Batch check for {file_path.name}: project_config type = {type(project_config)}"
             )
-            if (hasattr(project_config, "indexing") and project_config.indexing
+            if (
+                hasattr(project_config, "indexing")
+                and project_config.indexing
                 and hasattr(project_config.indexing, "parser_config")
-                and project_config.indexing.parser_config):
-                    parser_config = project_config.indexing.parser_config
-                    if isinstance(parser_config, dict):
-                        json_parser_config = parser_config.get("json", None)
-                    else:
-                        # Handle Pydantic model attributes
-                        json_parser_config = getattr(parser_config, "json", None)
-                    self.logger.debug(f"🔍 Found JSON config: {json_parser_config}")
-                    if json_parser_config and getattr(
-                        json_parser_config, "content_only", False
-                    ):
-                        self.logger.debug(
-                            f"✅ Batch processing enabled for {file_path.name}"
-                        )
-                        return True
+                and project_config.indexing.parser_config
+            ):
+                parser_config = project_config.indexing.parser_config
+                if isinstance(parser_config, dict):
+                    json_parser_config = parser_config.get("json", None)
+                else:
+                    # Handle Pydantic model attributes
+                    json_parser_config = getattr(parser_config, "json", None)
+                self.logger.debug(f"🔍 Found JSON config: {json_parser_config}")
+                if json_parser_config and getattr(
+                    json_parser_config, "content_only", False
+                ):
+                    self.logger.debug(
+                        f"✅ Batch processing enabled for {file_path.name}"
+                    )
+                    return True
 
             self.logger.debug(f"❌ Batch processing disabled for {file_path.name}")
             return False
@@ -284,9 +288,11 @@ class CoreIndexer:
         # Changed entity IDs computation (unified from both patterns)
         changed_entity_ids = (
             {
-                f"{entity.file_path}::{entity.name}"
-                if entity.file_path
-                else entity.name
+                (
+                    f"{entity.file_path}::{entity.name}"
+                    if entity.file_path
+                    else entity.name
+                )
                 for entity in entities
             }
             if entities
@@ -311,7 +317,7 @@ class CoreIndexer:
 
     def _inject_parser_configs(self) -> None:
         """Inject project-specific parser configurations."""
-        for parser in self.parser_registry._parsers:
+        for _parser in self.parser_registry._parsers:
             # TODO: Fix config_loader access - not available in current context
             # parser_name = parser.__class__.__name__.lower().replace("parser", "")
             # parser_config = self.config_loader.get_parser_config(parser_name)
@@ -841,7 +847,9 @@ class CoreIndexer:
                 elif (
                     fnmatch.fnmatch(str(relative_path), pattern)
                     or fnmatch.fnmatch(relative_path.name, pattern)
-                    or any(fnmatch.fnmatch(part, pattern) for part in relative_path.parts)
+                    or any(
+                        fnmatch.fnmatch(part, pattern) for part in relative_path.parts
+                    )
                 ):
                     should_exclude = True
                     break
@@ -989,7 +997,9 @@ class CoreIndexer:
 
         # Find deleted files
         current_keys = set(current_state.keys())
-        previous_keys = {k for k in previous_state if not k.startswith("_")}  # Exclude metadata
+        previous_keys = {
+            k for k in previous_state if not k.startswith("_")
+        }  # Exclude metadata
         deleted_keys = previous_keys - current_keys
         deleted_files.extend(deleted_keys)
 
@@ -1194,9 +1204,7 @@ class CoreIndexer:
                 collection_name=collection_name,
                 scroll_filter=Filter(
                     must_not=[
-                        FieldCondition(
-                            key="type", match=MatchValue(value="relation")
-                        )
+                        FieldCondition(key="type", match=MatchValue(value="relation"))
                     ]
                 ),
                 limit=1000,
@@ -1332,10 +1340,10 @@ class CoreIndexer:
             logger.info(
                 f"💾 STORAGE START: {len(entities)} entities at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}"
             )
-            file_paths = {entity.file_path for entity in entities} if entities else {'none'}
-            logger.info(
-                f"💾 Files being stored: {file_paths}"
+            file_paths = (
+                {entity.file_path for entity in entities} if entities else {"none"}
             )
+            logger.info(f"💾 Files being stored: {file_paths}")
 
         # Critical error check - vector store should always be available in production
         if not self.vector_store:
@@ -1506,10 +1514,8 @@ class CoreIndexer:
             # Clean up temp file if it exists
             temp_file = file_path.with_suffix(".tmp")
             if temp_file.exists():
-                try:
+                with contextlib.suppress(Exception):
                     temp_file.unlink()
-                except Exception:
-                    pass
             raise RuntimeError(f"Failed to atomically write {description}: {e}") from e
 
     def _save_statistics_to_state(self, collection_name: str, result: "IndexingResult"):
@@ -1629,9 +1635,9 @@ class CoreIndexer:
                 saved_state = json.load(f)
 
             if full_rebuild and len(saved_state) != len(new_files):
-                    raise ValueError(
-                        f"State validation failed: expected {len(new_files)} files, got {len(saved_state)}"
-                    )
+                raise ValueError(
+                    f"State validation failed: expected {len(new_files)} files, got {len(saved_state)}"
+                )
             # Note: For incremental updates, we cannot validate the final count
             # because it depends on both additions and deletions
 

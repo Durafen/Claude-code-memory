@@ -902,11 +902,14 @@ class CoreIndexer:
                 if state_file_path.startswith("_"):  # Skip metadata keys
                     continue
 
-                cached_mtime = metadata.get("mtime", 0)
-                if cached_mtime > since_time:
-                    path_obj = self.project_path / state_file_path
-                    if path_obj.exists():  # Verify file still exists
-                        candidates.append(path_obj)
+                path_obj = self.project_path / state_file_path
+                if path_obj.exists():  # Verify file still exists
+                    try:
+                        actual_mtime = path_obj.stat().st_mtime
+                        if actual_mtime > since_time:
+                            candidates.append(path_obj)
+                    except (OSError, FileNotFoundError):
+                        continue
 
             # Detect stale state cache: if no results but state exists, verify with filesystem
             if len(candidates) == 0 and len(state) > 3:

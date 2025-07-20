@@ -346,6 +346,18 @@ def run_indexing_with_specific_files(
         # The old brute-force cleanup loop has been removed to fix the bug and
         # allow the Git+Meta diffing to work as intended.
 
+        # RACE CONDITION FIX: Capture file state BEFORE processing for atomic consistency
+        pre_captured_states = None
+        if paths_to_process:
+            from datetime import datetime
+            logger.info(
+                f"🔒 PRE-CAPTURE: Taking atomic file state snapshot at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}"
+            )
+            pre_captured_states = indexer._get_current_state(paths_to_process)
+            logger.info(
+                f"🔒 PRE-CAPTURE: Captured {len(pre_captured_states)} file states for atomic consistency"
+            )
+
         # Process files directly using batch processing
         entities, relations, implementation_chunks, errors, actually_processed_files = (
             indexer._process_file_batch(paths_to_process, collection_name, verbose)
@@ -413,6 +425,7 @@ def run_indexing_with_specific_files(
                 verbose,
                 full_rebuild=False,
                 deleted_files=None,
+                pre_captured_state=pre_captured_states,
             )
 
             # Clean up orphaned relations after processing

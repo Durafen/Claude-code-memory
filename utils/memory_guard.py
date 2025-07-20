@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Memory Guard - Code Duplication Prevention Hook for Claude Code
-With entity extraction functionality.
+Memory Guard - Comprehensive Code Quality Gate for Claude Code
+Prevents duplication, ensures logic completeness, maintains flow integrity, and preserves features.
 
 Claude Code Hook Response Schema:
 {
@@ -137,7 +137,7 @@ class EntityExtractor:
 
 
 class MemoryGuard:
-    """Main Memory Guard functionality."""
+    """Comprehensive code quality gate - checks duplication, logic, flow integrity, and feature preservation."""
 
     def __init__(self):
         self.extractor = EntityExtractor()
@@ -199,7 +199,7 @@ class MemoryGuard:
     def save_debug_info(
         self, content: str, mode: str = "a", timestamp: bool = False
     ) -> None:
-        """Save debug information to file in project directory, optionally with timestamp."""
+        """Save debug information to last updated log file (keeps 3 files)."""
         if not DEBUG_ENABLED:
             return
         try:
@@ -207,16 +207,45 @@ class MemoryGuard:
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 content = f"[{ts}] {content}"
 
-            # Save in project root directory
-            debug_file = (
-                self.project_root / DEBUG_LOG_FILE
-                if self.project_root
-                else Path(DEBUG_LOG_FILE)
-            )
-            with open(debug_file, mode) as f:
+            # Find the most recently updated log file to use
+            base_dir = self.project_root if self.project_root else Path.cwd()
+            current_log = self._get_current_debug_log(base_dir, mode == "w")
+
+            with open(current_log, mode) as f:
                 f.write(content)
         except:
             pass
+
+    def _get_current_debug_log(self, base_dir: Path, is_new_run: bool) -> Path:
+        """Get the current debug log file to use."""
+        try:
+            log_files = [
+                base_dir / "memory_guard_debug_1.txt",
+                base_dir / "memory_guard_debug_2.txt",
+                base_dir / "memory_guard_debug_3.txt"
+            ]
+
+            if is_new_run:
+                # For new runs, find least recently updated file
+                existing_files = [f for f in log_files if f.exists()]
+                if not existing_files:
+                    return log_files[0]  # Use first file if none exist
+
+                # Find oldest file by modification time
+                oldest = min(existing_files, key=lambda f: f.stat().st_mtime)
+                return oldest
+            else:
+                # For same run, find most recently updated file
+                existing_files = [f for f in log_files if f.exists()]
+                if not existing_files:
+                    return log_files[0]  # Use first file if none exist
+
+                # Find newest file by modification time
+                newest = max(existing_files, key=lambda f: f.stat().st_mtime)
+                return newest
+
+        except:
+            return base_dir / "memory_guard_debug_1.txt"  # Fallback
 
     def should_process(self, hook_data: dict[str, Any]) -> tuple[bool, str | None]:
         """Determine if this hook event should be processed."""
@@ -353,8 +382,8 @@ class MemoryGuard:
     def build_memory_search_prompt(
         self, file_path: str, tool_name: str, code_info: str
     ) -> str:
-        """Build the prompt for Claude to check duplicates."""
-        return f"""You are a code duplication detector with access to MCP memory tools.
+        """Build the prompt for comprehensive code quality analysis."""
+        return f"""You are a comprehensive code quality gate with access to MCP memory tools.
 
 OPERATION CONTEXT:
 - Project: {self.project_name}
@@ -363,58 +392,85 @@ OPERATION CONTEXT:
 - Code changes:
 {code_info}
 
-CRITICAL DISTINCTION - WHAT TO BLOCK vs ALLOW:
+🔍 COMPREHENSIVE QUALITY ANALYSIS - CHECK ALL AREAS:
 
-❌ BLOCK ONLY:
-1. NEW FUNCTION/CLASS DEFINITIONS that duplicate existing functionality
-2. DUPLICATE CODE LOGIC/ALGORITHMS (same patterns, different locations)
-3. COPY-PASTE CODE with minor variations
-4. REDUNDANT IMPLEMENTATIONS of existing utility functions
-5. SIMILAR VALIDATION/PROCESSING patterns already in codebase
-   Examples: "def existing_function():", "class ExistingClass:", implementing same logic again
+❌ BLOCK FOR ANY OF THESE ISSUES:
 
-✅ ALWAYS ALLOW: FUNCTION CALLS, imports, variable assignments, using existing code
-   Examples: "result = existing_function()", "from module import function", "obj.method()"
+🔄 1. CODE DUPLICATION:
+- NEW function/class definitions that duplicate existing functionality
+- Copy-paste code with minor variations
+- Redundant implementations of existing utility functions
+- Similar validation/processing patterns already in codebase
 
-SEARCH PROTOCOL:
+🧠 2. LOGIC COMPLETENESS:
+- Missing critical error handling for expected failures
+- Incomplete input validation (missing edge cases, type checks)
+- Missing null/undefined/empty checks where needed
+- Incomplete transaction handling (missing rollback, cleanup)
+- Missing security validations (auth, permissions, sanitization)
+
+🔗 3. FLOW INTEGRITY:
+- Breaking existing API contracts or interfaces
+- Removing required parameters without backward compatibility
+- Changing function signatures that other code depends on
+- Disrupting established data flow patterns
+- Breaking existing error handling chains
+
+⚙️ 4. FEATURE PRESERVATION:
+- Disabling or removing existing functionality without replacement
+- Breaking existing workflows or user journeys
+- Removing configuration options that others depend on
+- Breaking existing integrations or dependencies
+- Removing accessibility features or degrading UX
+
+✅ ALWAYS ALLOW:
+- Function calls, imports, variable assignments, using existing code
+- Proper refactoring that maintains functionality
+- Adding new features without breaking existing ones
+- Improvements that enhance without removing capabilities
+
+🔍 ANALYSIS PROTOCOL:
 1. Use MCP service: {self.mcp_collection}search_similar
-2. Search for similar IMPLEMENTATIONS AND LOGIC PATTERNS in the codebase
-3. Check if the NEW code is DEFINING duplicate functions/classes/logic
-4. IGNORE function calls, imports, or usage of existing code (these are GOOD)
+2. Search for existing implementations, patterns, and related functionality
+3. Analyze completeness: missing error cases, validations, edge cases
+4. Check integration: dependencies, API contracts, data flows
+5. Verify preservation: ensure existing features remain functional
+6. EXCLUDE ALL MANUAL ENTRIES AND DOCUMENTATION:
+   - IGNORE: documentation files (.md, .txt, .markdown, .rst)
+   - IGNORE: manual entries (debugging_pattern, implementation_pattern, integration_pattern, configuration_pattern, architecture_pattern, performance_pattern, knowledge_insight, active_issue, ideas)
+   - IGNORE: any human-created analysis, notes, or patterns
+   - FOCUS ONLY ON: actual code implementations (functions, classes, interfaces)
 
-IMPORTANT: Only block if someone is creating a NEW implementation of existing functionality.
-Using/calling existing code is exactly what we want - NEVER block function calls.
+🎯 ANALYSIS STRATEGY:
+- Use entityTypes filters: ["metadata", "function", "class"] for overview
+- Use entityTypes=["implementation"] for detailed code analysis
+- Search for related patterns: error handling, validation, similar flows
+- Look for dependencies and integration points
+- Check for existing feature implementations
 
-ANALYSIS STRATEGY:
-- Use entityTypes filters for faster, more relevant results
-- Start with: entityTypes=["metadata", "function", "class"]
-- For detailed code: entityTypes=["implementation"]
-- Look for NEW function definitions (def keyword) or class definitions (class keyword)
-- Ignore function calls, method calls, imports, variable assignments
-
-RESPONSE FORMAT (JSON only):
-For BLOCKING (NEW duplicate implementation found): {{
-  "hasDuplicates": true,
-  "reason": "Found existing implementation: [name] at [location]. Consider using existing function instead of creating new one.",
-  "debug": "2 sentences: What duplicate IMPLEMENTATION you found + Why this is creating new duplicate logic",
-  "turns_used": "number of turns it took to complete this analysis"
+📋 RESPONSE FORMAT (JSON only):
+For BLOCKING (quality issues found): {{
+  "hasIssues": true,
+  "issueType": "duplication|logic|flow|feature",
+  "reason": "Specific issue description with location and impact",
+  "suggestion": "Concrete recommendation to fix the issue",
+  "debug": "2-3 sentences: What you found + Why it's problematic + What should be done",
+  "turns_used": "number of turns for analysis"
 }}
 
-For APPROVING (no duplicate implementations OR just using existing code): {{
-  "hasDuplicates": false,
+For APPROVING (no quality issues): {{
+  "hasIssues": false,
   "decision": "approve",
-  "reason": "No duplicate implementations detected - code is using existing functionality appropriately",
-  "debug": "2 sentences: What you found in search + Why this is acceptable (function call/import/usage vs new implementation)",
-  "turns_used": "number of turns it took to complete this analysis"
+  "reason": "Your analysis of why this code is acceptable",
+  "debug": "Your detailed analysis findings",
+  "turns_used": "number of turns for analysis"
 }}
 
-Only block NEW function/class definitions OR duplicate logic patterns that replicate existing implementations.
-NEVER block function calls, imports, or usage of existing code.
-
+🚨 CRITICAL: Thoroughly analyze ALL four quality dimensions. Only approve if code passes ALL checks.
 IMPORTANT: Return ONLY the JSON object, no explanatory text."""
 
     def call_claude_cli(self, prompt: str) -> tuple[bool, str, dict[str, Any]]:
-        """Call Claude CLI to check for duplicates with project mode."""
+        """Call Claude CLI for comprehensive code quality analysis."""
         try:
             # Use .claude directory for isolated sessions
             claude_dir = (
@@ -502,15 +558,25 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                 # Direct JSON response
                 response = json.loads(stdout)
 
-            # Process response
-            has_duplicates = response.get("hasDuplicates", False)
-            if has_duplicates:
-                reason = f"⚠️  POTENTIAL CODE DUPLICATION DETECTED:\n{response.get('reason', 'Similar code found in memory search')}"
+            # Process comprehensive quality analysis response
+            has_issues = response.get("hasIssues", False)
+            if has_issues:
+                issue_type = response.get("issueType", "unknown")
+                issue_icons = {
+                    "duplication": "🔄",
+                    "logic": "🧠",
+                    "flow": "🔗",
+                    "feature": "⚙️"
+                }
+                icon = issue_icons.get(issue_type, "⚠️")
+                reason = f"{icon} CODE QUALITY ISSUE DETECTED ({issue_type.upper()}):\n{response.get('reason', '')}"
+                if response.get("suggestion"):
+                    reason += f"\n\n💡 SUGGESTION: {response.get('suggestion')}"
                 return True, reason, response
             else:
                 return (
                     False,
-                    response.get("reason", "No code duplication detected"),
+                    response.get("reason", ""),
                     response,
                 )
 

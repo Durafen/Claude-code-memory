@@ -123,14 +123,20 @@ class CoreIndexer:
 
         # Initialize parser registry
         self.parser_registry = ParserRegistry(project_path)
-        
+
         # Initialize session cost tracking
-        self._session_cost_data: dict[str, int | float] = {"tokens": 0, "cost": 0.0, "requests": 0}
+        self._session_cost_data: dict[str, int | float] = {
+            "tokens": 0,
+            "cost": 0.0,
+            "requests": 0,
+        }
 
     def _create_batch_callback(self, collection_name: str) -> Any:
         """Create a callback function for batch processing during streaming."""
 
-        def batch_callback(entities: list[Entity], relations: list[Relation], chunks: list[EntityChunk]) -> bool:
+        def batch_callback(
+            entities: list[Entity], relations: list[Relation], chunks: list[EntityChunk]
+        ) -> bool:
             """Process a batch of entities, relations, and chunks immediately."""
             try:
                 # Use unified Git+Meta setup
@@ -591,7 +597,9 @@ class CoreIndexer:
             if hasattr(self, "_session_cost_data"):
                 result.total_tokens = int(self._session_cost_data.get("tokens", 0))
                 result.total_cost_estimate = self._session_cost_data.get("cost", 0.0)
-                result.embedding_requests = int(self._session_cost_data.get("requests", 0))
+                result.embedding_requests = int(
+                    self._session_cost_data.get("requests", 0)
+                )
                 # Reset for next operation
                 self._session_cost_data = {"tokens": 0, "cost": 0.0, "requests": 0}
 
@@ -756,7 +764,11 @@ class CoreIndexer:
                 filter_conditions=filter_conditions,
             )
 
-            return search_result.results if search_result.success and search_result.results else []
+            return (
+                search_result.results
+                if search_result.success and search_result.results
+                else []
+            )
 
         except Exception as e:
             logger.error(f"Search failed: {e}")
@@ -1178,58 +1190,32 @@ class CoreIndexer:
     def _get_all_entity_names(self, collection_name: str) -> set:
         """Get all entity names from vector store for global entity awareness."""
         try:
-            # Get Qdrant client from vector store
-            if hasattr(self.vector_store, "backend") and hasattr(
-                self.vector_store.backend, "client"
-            ):
-                qdrant_client = self.vector_store.backend.client
-            elif hasattr(self.vector_store, "client"):
-                qdrant_client = self.vector_store.client
-            else:
-                self.logger.warning(
-                    "Cannot access Qdrant client for global entity awareness"
-                )
-                return set()
+            from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+            # Use storage layer's _scroll_collection method which handles collection existence
+            points = self.vector_store._scroll_collection(
+                collection_name=collection_name,
+                scroll_filter=Filter(
+                    must_not=[
+                        FieldCondition(
+                            key="type", match=MatchValue(value="relation")
+                        )
+                    ]
+                ),
+                limit=1000,
+                with_vectors=False,
+                handle_pagination=True,
+            )
 
             entity_names = set()
-            next_page_offset = None
-
-            # Scroll through all entity points (not relations) to get entity names
-            while True:
-                from qdrant_client.models import FieldCondition, Filter, MatchValue
-
-                scroll_result = qdrant_client.scroll(
-                    collection_name=collection_name,
-                    offset=next_page_offset,
-                    limit=1000,
-                    with_payload=True,
-                    with_vectors=False,
-                    scroll_filter=Filter(
-                        must_not=[
-                            FieldCondition(
-                                key="type", match=MatchValue(value="relation")
-                            )
-                        ]
-                    ),
-                )
-
-                points, next_page_offset = scroll_result
-
-                if not points:
-                    break
-
-                # Extract entity names from payloads (both chunks and entities)
-                for point in points:
-                    payload = point.payload
-                    if payload:
-                        # Try entity_name first (chunks), then name (legacy entities)
-                        entity_name = payload.get("entity_name") or payload.get("name")
-                        if entity_name:
-                            entity_names.add(entity_name)
-
-                # Break if no more pages
-                if next_page_offset is None:
-                    break
+            # Extract entity names from payloads (both chunks and entities)
+            for point in points:
+                payload = point.payload
+                if payload:
+                    # Try entity_name first (chunks), then name (legacy entities)
+                    entity_name = payload.get("entity_name") or payload.get("name")
+                    if entity_name:
+                        entity_names.add(entity_name)
 
             self.logger.debug(
                 f"🌐 Retrieved {len(entity_names)} global entity names for entity-aware filtering"
@@ -1289,7 +1275,9 @@ class CoreIndexer:
                 )  # Empty entities just to trigger caching
 
                 # Use cached global entities with fallback to empty set
-                global_entity_names: set[str] = getattr(self, "_cached_global_entities", set())
+                global_entity_names: set[str] = getattr(
+                    self, "_cached_global_entities", set()
+                )
                 result = self.parser_registry.parse_file(
                     file_path, batch_callback, global_entity_names=global_entity_names
                 )
@@ -1450,12 +1438,10 @@ class CoreIndexer:
                     "mtime": file_path.stat().st_mtime,
                 }
             except (OSError, ValueError) as e:
-                logger = get_logger()
-                logger.warning(f"Failed to get state for file {file_path}: {e}")
+                self.logger.warning(f"Failed to get state for file {file_path}: {e}")
                 continue
             except Exception as e:
-                logger = get_logger()
-                logger.error(
+                self.logger.error(
                     f"Unexpected error getting state for file {file_path}: {e}"
                 )
                 continue
@@ -1468,12 +1454,10 @@ class CoreIndexer:
             with open(file_path, "rb") as f:
                 return hashlib.sha256(f.read()).hexdigest()
         except OSError as e:
-            logger = get_logger()
-            logger.warning(f"Failed to read file for hashing {file_path}: {e}")
+            self.logger.warning(f"Failed to read file for hashing {file_path}: {e}")
             return ""
         except Exception as e:
-            logger = get_logger()
-            logger.error(f"Unexpected error hashing file {file_path}: {e}")
+            self.logger.error(f"Unexpected error hashing file {file_path}: {e}")
             return ""
 
     def _load_state(self, collection_name: str) -> dict[str, dict[str, Any]]:
@@ -1484,13 +1468,11 @@ class CoreIndexer:
                 with open(state_file) as f:
                     return json.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            logger = get_logger()
-            logger.warning(
+            self.logger.warning(
                 f"Failed to load state for collection {collection_name}: {e}"
             )
         except Exception as e:
-            logger = get_logger()
-            logger.error(
+            self.logger.error(
                 f"Unexpected error loading state for collection {collection_name}: {e}"
             )
         return {}
@@ -1743,11 +1725,11 @@ class CoreIndexer:
             try:
                 temp_file.unlink()
             except OSError as e:
-                logger = get_logger()
-                logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
+                self.logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
             except Exception as e:
-                logger = get_logger()
-                logger.error(f"Unexpected error cleaning up temp file {temp_file}: {e}")
+                self.logger.error(
+                    f"Unexpected error cleaning up temp file {temp_file}: {e}"
+                )
 
     def _handle_deleted_files(
         self,

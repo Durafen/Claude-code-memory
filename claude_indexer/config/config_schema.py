@@ -100,6 +100,7 @@ class FilePatterns(BaseModel):
             ".claude-indexer/",
             ".claude/",
             "memory_guard_debug.txt",
+            "memory_guard_debug_*.txt",
         ]
     )
 

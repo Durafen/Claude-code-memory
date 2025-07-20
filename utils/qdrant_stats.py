@@ -12,7 +12,6 @@ Shows comprehensive statistics about Qdrant collections including:
 
 import argparse
 import json
-import logging
 import os
 import sys
 from collections import Counter
@@ -24,6 +23,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from claude_indexer.config import IndexerConfig
+from claude_indexer.indexer_logging import get_logger
 from claude_indexer.storage.registry import create_store_from_config
 
 
@@ -33,6 +33,7 @@ class QdrantStatsCollector:
     def __init__(self, config: IndexerConfig):
         self.config = config
         self.storage = create_store_from_config(config.model_dump())
+        self.logger = get_logger()
 
     def get_all_collections(self) -> list[str]:
         """Get list of all collections."""
@@ -64,9 +65,11 @@ class QdrantStatsCollector:
             if hasattr(collection_info, "config"):
                 raw_config = collection_info.config
         except (ConnectionError, TimeoutError) as e:
-            logging.error(f"Failed to get collection config for {collection_name}: {e}")
+            self.logger.error(
+                f"Failed to get collection config for {collection_name}: {e}"
+            )
         except Exception as e:
-            logging.error(
+            self.logger.error(
                 f"Unexpected error getting collection config for {collection_name}: {e}"
             )
 

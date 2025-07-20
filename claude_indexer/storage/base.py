@@ -398,6 +398,24 @@ class CachingVectorStore(VectorStore):
                 f"Backend {type(self.backend)} does not support _cleanup_orphaned_relations"
             )
 
+    def _scroll_collection(
+        self,
+        collection_name: str,
+        scroll_filter: Any = None,
+        limit: int = 1000,
+        with_vectors: bool = True,
+        handle_pagination: bool = False,
+    ) -> Any:
+        """Delegate scroll collection to backend."""
+        if hasattr(self.backend, "_scroll_collection"):
+            return self.backend._scroll_collection(
+                collection_name, scroll_filter, limit, with_vectors, handle_pagination
+            )
+        else:
+            raise AttributeError(
+                f"Backend {type(self.backend)} does not support _scroll_collection"
+            )
+
     @property
     def client(self) -> Any:
         """Delegate client access to backend for Git+Meta orphan cleanup compatibility."""

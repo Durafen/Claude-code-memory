@@ -58,6 +58,7 @@ docs/refactor.md
 
 # Memory Guard debug logs
 memory_guard_debug.txt
+memory_guard_debug_*.txt
 
 # Chat reports
 chat_reports/

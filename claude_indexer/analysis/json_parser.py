@@ -49,9 +49,9 @@ class JSONParser(TreeSitterParser):
 
             if use_content_extraction:
                 if use_streaming:
-                    import logging
+                    from ...indexer_logging import get_logger
 
-                    logger = logging.getLogger(__name__)
+                    logger = get_logger()
                     logger.info(
                         f"🚀 Using STREAMING parser for {file_path.name} ({file_size / 1024 / 1024:.1f} MB)"
                     )
@@ -72,9 +72,9 @@ class JSONParser(TreeSitterParser):
                         result.errors.append(f"JSON syntax errors in {file_path.name}")  # type: ignore[union-attr]
 
                     # Use traditional content extraction for smaller files
-                    import logging
+                    from ...indexer_logging import get_logger
 
-                    logger = logging.getLogger(__name__)
+                    logger = get_logger()
                     logger.info(
                         f"📄 Using CONTENT extraction for {file_path.name} ({file_size / 1024 / 1024:.1f} MB)"
                     )
@@ -629,11 +629,11 @@ class JSONParser(TreeSitterParser):
         result.file_hash = self._get_file_hash(file_path)
 
         try:
-            import logging
-
             import ijson
 
-            logger = logging.getLogger(__name__)
+            from ...indexer_logging import get_logger
+
+            logger = get_logger()
 
             # Batch processing variables
             current_batch_entities = []
@@ -744,9 +744,6 @@ class JSONParser(TreeSitterParser):
 
                 # Check if we've hit the limit
                 if max_items > 0 and processed_count >= max_items:
-                    import logging
-
-                    logger = logging.getLogger(__name__)
                     logger.info(
                         f"Reached max_content_items limit ({max_items}) for {file_path.name}"
                     )

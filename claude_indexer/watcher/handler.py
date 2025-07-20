@@ -144,7 +144,7 @@ class IndexingEventHandler(FileSystemEventHandler):
                 str(self.project_path),
                 self.collection_name,
                 [path],
-                quiet=not self.verbose,
+                quiet=False,  # Always show summary output, even in non-verbose mode
                 verbose=self.verbose,
             )
 
@@ -208,7 +208,7 @@ class IndexingEventHandler(FileSystemEventHandler):
                     str(self.project_path),
                     self.collection_name,
                     unique_existing_paths,
-                    quiet=not self.verbose,
+                    quiet=False,  # Always show summary output, even in non-verbose mode
                     verbose=self.verbose,
                 )
 
@@ -287,7 +287,7 @@ class IndexingEventHandler(FileSystemEventHandler):
                 project_path=str(self.project_path),
                 collection_name=self.collection_name,
                 deleted_file_path=str(path),
-                quiet=not self.verbose,
+                quiet=False,  # Always show summary output, even in non-verbose mode
                 verbose=self.verbose,
             )
 

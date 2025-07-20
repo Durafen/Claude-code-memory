@@ -1,10 +1,11 @@
 """Base classes and interfaces for text embedding generation."""
 
-import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, cast
+
+from ..indexer_logging import get_logger
 
 try:
     from tiktoken import Encoding
@@ -12,6 +13,7 @@ except ImportError:
     # Create a placeholder type for when tiktoken is not available
     class _EncodingFallback:
         pass
+
     Encoding = _EncodingFallback  # type: ignore
 
 
@@ -46,7 +48,7 @@ class TiktokenMixin:
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._tiktoken_encoder: Encoding | None = None
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = get_logger()
         self._init_tiktoken()
 
     def _init_tiktoken(self) -> None:
@@ -232,7 +234,9 @@ class RetryableEmbedder(Embedder):
                     time.sleep(delay)
 
         # If we get here, all retries failed
-        assert last_error is not None  # We must have caught an exception to reach this point
+        assert (
+            last_error is not None
+        )  # We must have caught an exception to reach this point
         raise last_error
 
 
@@ -287,7 +291,9 @@ class CachingEmbedder(Embedder):
             if cache_key in self._cache:
                 results.append(self._cache[cache_key])
             else:
-                results.append(cast(EmbeddingResult, None))  # Placeholder, will be replaced
+                results.append(
+                    cast(EmbeddingResult, None)
+                )  # Placeholder, will be replaced
                 uncached_texts.append(text)
                 uncached_indices.append(i)
 

@@ -46,7 +46,8 @@
         "docs/archive/",
         "debug/",
         "memories.md",
-        "memory_guard_debug.txt"
+        "memory_guard_debug.txt",
+        "memory_guard_debug_*.txt"
       ]
     },
     "max_file_size": 1048576,

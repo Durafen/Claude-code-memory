@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-**Approach:** Enhanced Singleton with dictConfig (Option 1)  
-**Timeline:** 6 hours total implementation + testing  
-**Risk Level:** LOW - Zero breaking changes  
-**Components Affected:** 27 files (all continue working unchanged)  
+**Approach:** Enhanced Singleton with dictConfig (Option 1)
+**Timeline:** 6 hours total implementation + testing
+**Risk Level:** LOW - Zero breaking changes
+**Components Affected:** 27 files (all continue working unchanged)
 
 This plan modernizes the logging system while maintaining 100% backward compatibility across all components.
 
-## Current Architecture Analysis 
+## Current Architecture Analysis
 
 ### Working System Features
 
@@ -24,7 +24,7 @@ This plan modernizes the logging system while maintaining 100% backward compatib
 
 ```
 CLI: cli_full.py, cli.py, main.py
-Core: indexer.py, service.py  
+Core: indexer.py, service.py
 Watcher: watcher/handler.py
 Config: config_loader.py, project_config.py, models.py, legacy.py
 Analysis: parser.py, entities.py, observation_extractor.py, javascript_parser.py
@@ -96,13 +96,13 @@ class LoggerManager:
     """Singleton logger manager with dictConfig."""
     _instance = None
     _configured = False
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    
-    def configure(self, 
+
+    def configure(self,
                  level: str = "INFO",
                  quiet: bool = False,
                  verbose: bool = False,
@@ -112,16 +112,16 @@ class LoggerManager:
         """Configure logging system once."""
         if self._configured:
             return
-            
+
         # Dynamic configuration based on parameters
         config = self._build_config(level, quiet, verbose, log_file, collection_name, project_path)
         logging.config.dictConfig(config)
         self._configured = True
-    
+
     def _build_config(self, level, quiet, verbose, log_file, collection_name, project_path):
         """Build dynamic configuration."""
         config = LOGGING_CONFIG.copy()
-        
+
         # Determine effective level
         if quiet:
             effective_level = "ERROR"
@@ -129,14 +129,14 @@ class LoggerManager:
             effective_level = "DEBUG"
         else:
             effective_level = level
-            
+
         # Update console handler
         if quiet:
             del config["handlers"]["console"]
             config["loggers"]["claude_indexer"]["handlers"] = ["file"]
         else:
             config["handlers"]["console"]["level"] = effective_level
-            
+
         # Update file handler with collection-specific path
         if log_file:
             config["handlers"]["file"]["filename"] = str(log_file)
@@ -146,9 +146,9 @@ class LoggerManager:
             default_file = get_default_log_file(collection_name, project_path)
             if default_file:
                 config["handlers"]["file"]["filename"] = str(default_file)
-                
+
         return config
-    
+
     def get_logger(self, name: str = "claude_indexer"):
         """Get configured logger."""
         self.configure()  # Ensure configured
@@ -200,7 +200,7 @@ logger = get_logger()
 ```
 
 **Entry Points Update** - Ensure `setup_logging()` calls in:
-- `claude_indexer/cli_full.py` - CLI commands  
+- `claude_indexer/cli_full.py` - CLI commands
 - `claude_indexer/main.py` - Main functions
 - `claude_indexer/service.py` - Service startup
 
@@ -221,31 +221,31 @@ def test_all_components_use_same_logger():
     from claude_indexer.indexer import CoreIndexer
     from claude_indexer.service import IndexingService
     from claude_indexer.watcher.handler import IndexingEventHandler
-    
+
     # Reset logging state
     logging.getLogger().handlers.clear()
-    
+
     # All should return same logger
     logger1 = get_logger()
-    logger2 = get_logger() 
+    logger2 = get_logger()
     assert logger1 is logger2
 
 def test_component_logging_integration():
     """Test logging works across all major components."""
     with tempfile.TemporaryDirectory() as tmpdir:
         log_file = Path(tmpdir) / "test.log"
-        
+
         # Setup logging
         from claude_indexer.indexer_logging import setup_logging
         setup_logging(level="DEBUG", log_file=log_file, verbose=True)
-        
+
         # Test each component logs correctly
         from claude_indexer.indexer_logging import get_logger
         logger = get_logger()
-        
+
         logger.info("Test message from unified system")
         assert log_file.exists()
-        
+
         content = log_file.read_text()
         assert "Test message from unified system" in content
 
@@ -254,13 +254,13 @@ def test_configuration_isolation():
     # Test collection-specific logging
     with tempfile.TemporaryDirectory() as tmpdir:
         from claude_indexer.indexer_logging import setup_logging
-        
+
         # Setup with collection name
         setup_logging(collection_name="test-collection", project_path=Path(tmpdir))
-        
+
         logger = get_logger()
         logger.info("Collection-specific test")
-        
+
         # Verify log file created in expected location
         # ... implementation ...
 
@@ -270,11 +270,11 @@ def test_backward_compatibility():
     from claude_indexer.indexer_logging import get_logger
     logger = get_logger()
     logger.info("CLI test")
-    
+
     # Test indexer pattern
     from claude_indexer.indexer import CoreIndexer
     # Verify CoreIndexer can still get logger
-    
+
     # Test watcher pattern
     from claude_indexer.watcher.handler import IndexingEventHandler
     # Verify watcher can still get logger
@@ -283,13 +283,13 @@ def test_quiet_mode():
     """Test quiet mode suppresses console output."""
     with tempfile.TemporaryDirectory() as tmpdir:
         log_file = Path(tmpdir) / "quiet_test.log"
-        
+
         from claude_indexer.indexer_logging import setup_logging
         setup_logging(quiet=True, log_file=log_file)
-        
+
         logger = get_logger()
         logger.info("This should only go to file")
-        
+
         # Verify message in file but not console
         assert log_file.exists()
         content = log_file.read_text()
@@ -299,13 +299,13 @@ def test_verbose_mode():
     """Test verbose mode enables debug level."""
     with tempfile.TemporaryDirectory() as tmpdir:
         log_file = Path(tmpdir) / "verbose_test.log"
-        
+
         from claude_indexer.indexer_logging import setup_logging
         setup_logging(verbose=True, log_file=log_file)
-        
+
         logger = get_logger()
         logger.debug("Debug message")
-        
+
         # Verify debug message captured
         content = log_file.read_text()
         assert "Debug message" in content
@@ -314,7 +314,7 @@ def test_log_rotation():
     """Test log rotation configuration."""
     # Test that rotating file handler is configured correctly
     from claude_indexer.logging_config import LOGGING_CONFIG
-    
+
     file_handler = LOGGING_CONFIG["handlers"]["file"]
     assert file_handler["class"] == "logging.handlers.RotatingFileHandler"
     assert file_handler["maxBytes"] == 10485760  # 10MB
@@ -327,7 +327,7 @@ def test_log_rotation():
 # Test CLI with new logging
 claude-indexer -p debug/small_project -c test-logging --verbose
 
-# Test watcher with new logging  
+# Test watcher with new logging
 claude-indexer watch start -p debug/small_project -c test-logging
 
 # Test service with new logging
@@ -395,7 +395,7 @@ rm claude_indexer/logging_config.py
 ### ✅ Advantages
 
 - **Minimal Risk** - No import changes across 27 components
-- **Modern Configuration** - dictConfig standard (2024 best practice)  
+- **Modern Configuration** - dictConfig standard (2024 best practice)
 - **Backward Compatible** - All existing `get_logger()` calls work
 - **Centralized Control** - Single configuration source
 - **Production Ready** - Proven patterns, no experimental features
@@ -412,8 +412,8 @@ rm claude_indexer/logging_config.py
 
 ## MVP Scope - Essential Only
 
-**Phase 1 Only:** Replace logging infrastructure, keep all interfaces  
-**Skip:** Component-specific loggers, async logging, performance optimization  
+**Phase 1 Only:** Replace logging infrastructure, keep all interfaces
+**Skip:** Component-specific loggers, async logging, performance optimization
 **Focus:** Stable foundation with modern configuration
 
 ## Files Modified Summary
@@ -443,12 +443,12 @@ Component → get_logger() → LoggerManager → dictConfig → RotatingFileHand
 
 ### Unit Tests
 - Logger singleton behavior
-- Configuration parameter handling  
+- Configuration parameter handling
 - Quiet/verbose mode functionality
 - File path resolution
 - Backward compatibility
 
-### Integration Tests  
+### Integration Tests
 - CLI logging across all commands
 - Watcher file event logging
 - Service startup and management logging
@@ -463,7 +463,7 @@ Component → get_logger() → LoggerManager → dictConfig → RotatingFileHand
 
 ## Implementation Timeline
 
-| Phase | Duration | Activities | 
+| Phase | Duration | Activities |
 |-------|----------|------------|
 | 1 | 2 hours | Create logging_config.py, modify indexer_logging.py |
 | 2 | 1 hour | Verify entry points, test basic functionality |
@@ -491,7 +491,7 @@ Component → get_logger() → LoggerManager → dictConfig → RotatingFileHand
 ### Functional Requirements
 - [ ] All 27 components continue logging without changes
 - [ ] CLI commands log with correct verbosity levels
-- [ ] Watcher events logged properly  
+- [ ] Watcher events logged properly
 - [ ] Service management logged correctly
 - [ ] Collection-specific log files created
 - [ ] Log rotation works as configured
@@ -508,7 +508,7 @@ Component → get_logger() → LoggerManager → dictConfig → RotatingFileHand
 ```python
 # Future: Component isolation
 logger = get_logger("indexer")
-logger = get_logger("watcher") 
+logger = get_logger("watcher")
 logger = get_logger("service")
 ```
 

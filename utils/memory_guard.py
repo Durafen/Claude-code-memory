@@ -147,6 +147,10 @@ class MemoryGuard:
         self.bypass_manager = BypassManager(self.project_root)
         self.code_analyzer = CodeAnalyzer()
 
+        # Ensure all three debug log files exist (only if debug is enabled)
+        if DEBUG_ENABLED:
+            self._ensure_debug_files_exist()
+
     def _detect_project_root(self) -> Path | None:
         """Detect the project root directory."""
         try:
@@ -246,6 +250,28 @@ class MemoryGuard:
 
         except:
             return base_dir / "memory_guard_debug_1.txt"  # Fallback
+
+    def _ensure_debug_files_exist(self) -> None:
+        """Create all three debug log files if they don't exist."""
+        try:
+            base_dir = self.project_root if self.project_root else Path.cwd()
+            log_files = [
+                base_dir / "memory_guard_debug_1.txt",
+                base_dir / "memory_guard_debug_2.txt",
+                base_dir / "memory_guard_debug_3.txt"
+            ]
+
+            for log_file in log_files:
+                if not log_file.exists():
+                    # Create the file with a header
+                    log_file.touch()
+                    with open(log_file, 'w') as f:
+                        f.write(f"# Memory Guard Debug Log - {log_file.name}\n")
+                        f.write(f"# Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f.write("# This file logs Memory Guard analysis results\n\n")
+        except Exception as e:
+            # Silently fail if we can't create files (permissions issue, etc.)
+            pass
 
     def should_process(self, hook_data: dict[str, Any]) -> tuple[bool, str | None]:
         """Determine if this hook event should be processed."""

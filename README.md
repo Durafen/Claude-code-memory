@@ -16,42 +16,54 @@
 - ⚡ "Found 5 instances of this pattern. Want me to refactor them all?"
 - 🚀 Starts coding immediately with full context
 
-## 🛡️ Memory Guard - Your AI Senior Architect That Never Lets You Duplicate Code
+## 🛡️ Memory Guard - Your AI Code Quality Gate That Prevents All Bad Code
 
-**The Problem:** Even with perfect memory, Claude Code sometimes recreates existing functions
-**The Solution:** Memory Guard makes Claude remember every pattern it's ever written and actively prevents duplication
+**The Evolution:** Memory Guard has transformed from simple duplicate detection into a comprehensive code quality gate
+**The Solution:** Memory Guard now analyzes 4 critical dimensions before allowing any code changes
+
+### 🎯 The 4 Quality Dimensions Memory Guard Checks:
+
+**🔄 1. Code Duplication (Primary Focus)**
+- Detects duplicate functions, classes, and logic patterns
+- Finds copy-paste code with minor variations
+- Identifies redundant utility implementations
+
+**🧠 2. Logic Completeness**
+- Catches missing error handling and edge cases
+- Identifies SQL injection vulnerabilities
+- Flags incomplete input validation and security checks
+
+**🔗 3. Flow Integrity**
+- Prevents breaking API contracts and interfaces
+- Catches dangerous parameter removals
+- Identifies breaking changes to function signatures
+
+**⚙️ 4. Feature Preservation**
+- Prevents removal of existing functionality
+- Protects against breaking user workflows
+- Ensures backward compatibility
 
 ### Watch Memory Guard in Action:
 
-**Claude thinks:** "I should write a hash function for passwords"
-**Memory Guard:** "Wait! You already have `hashPassword()` in auth.utils:45 with bcrypt"
-**Claude:** "Right! Let me import and use that instead"
+**Claude tries:** "Let me simplify this authentication function"
+**Memory Guard:** "🔗 FLOW INTEGRITY ISSUE: Removing 'fallback_config' parameter breaks 8+ files!"
+**Claude:** "You're right! I'll maintain backward compatibility"
 
-### Real Examples:
+### Real-World Protection Examples:
 
-**✅ APPROVED - Unique Implementation:**
-```
-✅ APPROVED: calculate_matrix_determinant function
-🔍 ANALYSIS: Searched memory for matrix operations - found only generic math functions
-⚡ RESULT: Unique mathematical algorithm approved for implementation
-```
-
-**❌ BLOCKED - Duplicate Detected:**
-```
-❌ BLOCKED: EntityExtractor class creation
-🎯 DETECTED: Identical class exists in memory_guard.py:13-50 with same methods
-🔍 ANALYSIS: extract_entities_from_operation + _extract_python_entities already implemented
-⚡ RESULT: Claude redirected to use existing implementation
-```
+**🔄 Code Duplication:** Prevents recreating existing functions
+**🧠 Logic Completeness:** Catches SQL injection and missing validation
+**🔗 Flow Integrity:** Stops breaking API changes
+**⚙️ Feature Preservation:** Protects existing functionality
 
 ### Technical Magic Behind Memory Guard:
 
 **🔍 How It Actually Works:**
-1. **Intercepts Every Write/Edit** - PreToolUse hook catches all file modifications before they happen
-2. **Calls Claude CLI with MCP** - Spawns separate Claude instance with memory access (10-turn analysis)
-3. **Semantic Code Search** - Uses your project's MCP memory to find similar implementations
-4. **Smart Decision Making** - Blocks only NEW duplicate functions/classes, allows imports and function calls
-5. **Project-Aware** - Automatically detects your project collection from CLAUDE.md
+1. **Intercepts Every Write/Edit** - PreToolUse hook catches all file modifications
+2. **Comprehensive Analysis** - Checks all 4 quality dimensions in parallel
+3. **Semantic Code Search** - Uses MCP memory to find patterns and vulnerabilities
+4. **Smart Decision Making** - Returns specific issue type with actionable suggestions
+5. **Manual Entry Exclusion** - Ignores documentation and human notes, focuses on code only
 
 **🧠 The Tech Stack:**
 - **Hook System**: `settings.json` → PreToolUse → `memory_guard.py` → Claude CLI

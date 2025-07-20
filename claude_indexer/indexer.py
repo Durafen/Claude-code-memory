@@ -177,11 +177,9 @@ class CoreIndexer:
             self.logger.debug(
                 f"🔍 Batch check for {file_path.name}: project_config type = {type(project_config)}"
             )
-            if hasattr(project_config, "indexing") and project_config.indexing:
-                if (
-                    hasattr(project_config.indexing, "parser_config")
-                    and project_config.indexing.parser_config
-                ):
+            if (hasattr(project_config, "indexing") and project_config.indexing
+                and hasattr(project_config.indexing, "parser_config")
+                and project_config.indexing.parser_config):
                     parser_config = project_config.indexing.parser_config
                     if isinstance(parser_config, dict):
                         json_parser_config = parser_config.get("json", None)
@@ -313,12 +311,12 @@ class CoreIndexer:
     def _inject_parser_configs(self) -> None:
         """Inject project-specific parser configurations."""
         for parser in self.parser_registry._parsers:
-            parser_name = parser.__class__.__name__.lower().replace("parser", "")
             # TODO: Fix config_loader access - not available in current context
+            # parser_name = parser.__class__.__name__.lower().replace("parser", "")
             # parser_config = self.config_loader.get_parser_config(parser_name)
-            parser_config = None
             # if parser_config and hasattr(parser, "update_config"):
             #     parser.update_config(parser_config)
+            pass
 
     def _get_state_directory(self) -> Path:
         """Get state directory (configurable for test isolation)."""
@@ -800,7 +798,7 @@ class CoreIndexer:
             logger.error(f"Failed to clear collection: {e}")
             return False
 
-    def _find_all_files(self, include_tests: bool = False) -> list[Path]:
+    def _find_all_files(self, _include_tests: bool = False) -> list[Path]:
         """Find all files matching project patterns."""
         files = set()  # Use set to prevent duplicates
 
@@ -815,10 +813,7 @@ class CoreIndexer:
         # Find files matching include patterns
         for pattern in include_patterns:
             # Handle patterns that already include ** vs those that don't
-            if pattern.startswith("**/"):
-                glob_pattern = pattern
-            else:
-                glob_pattern = f"**/{pattern}"
+            glob_pattern = pattern if pattern.startswith("**/") else f"**/{pattern}"
 
             found = list(self.project_path.glob(glob_pattern))
             files.update(found)  # Use update instead of extend to prevent duplicates
@@ -835,7 +830,6 @@ class CoreIndexer:
                 # Handle directory patterns (ending with /)
                 if pattern.endswith("/"):
                     # Check if pattern appears anywhere in the path (for nested directories)
-                    pattern_name = pattern.rstrip("/")
                     if (
                         relative_str.startswith(pattern)
                         or f"/{pattern}" in f"/{relative_str}"
@@ -843,7 +837,7 @@ class CoreIndexer:
                         should_exclude = True
                         break
                 # Handle glob patterns and exact matches
-                elif relative_path.match(pattern) or pattern in relative_path.parts:
+                elif relative_path.match(pattern) or relative_path.name.match(pattern) or pattern in relative_path.parts:
                     should_exclude = True
                     break
 
@@ -990,9 +984,7 @@ class CoreIndexer:
 
         # Find deleted files
         current_keys = set(current_state.keys())
-        previous_keys = set(
-            k for k in previous_state.keys() if not k.startswith("_")
-        )  # Exclude metadata
+        previous_keys = {k for k in previous_state if not k.startswith("_")}  # Exclude metadata
         deleted_keys = previous_keys - current_keys
         deleted_files.extend(deleted_keys)
 
@@ -1227,7 +1219,7 @@ class CoreIndexer:
             return set()
 
     def _process_file_batch(
-        self, files: list[Path], collection_name: str, verbose: bool = False
+        self, files: list[Path], collection_name: str, _verbose: bool = False
     ) -> tuple[list[Entity], list[Relation], list[EntityChunk], list[str], list[Path]]:
         """Process a batch of files with progressive disclosure support.
 
@@ -1270,7 +1262,7 @@ class CoreIndexer:
 
                 # Get global entity names for entity-aware filtering (use unified Git+Meta setup)
                 # This ensures global entities are cached consistently across all flows
-                git_meta_temp = self._prepare_git_meta_context(
+                self._prepare_git_meta_context(
                     collection_name, []
                 )  # Empty entities just to trigger caching
 
@@ -1336,7 +1328,7 @@ class CoreIndexer:
                 f"💾 STORAGE START: {len(entities)} entities at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}"
             )
             logger.info(
-                f"💾 Files being stored: {set(entity.file_path for entity in entities) if entities else 'none'}"
+                f"💾 Files being stored: {{{entity.file_path for entity in entities}} if entities else 'none'}"
             )
 
         # Critical error check - vector store should always be available in production
@@ -1510,7 +1502,7 @@ class CoreIndexer:
             if temp_file.exists():
                 try:
                     temp_file.unlink()
-                except:
+                except Exception:
                     pass
             raise RuntimeError(f"Failed to atomically write {description}: {e}") from e
 
@@ -1630,8 +1622,7 @@ class CoreIndexer:
             with open(state_file) as f:
                 saved_state = json.load(f)
 
-            if full_rebuild:
-                if len(saved_state) != len(new_files):
+            if full_rebuild and len(saved_state) != len(new_files):
                     raise ValueError(
                         f"State validation failed: expected {len(new_files)} files, got {len(saved_state)}"
                     )
@@ -1854,6 +1845,6 @@ class CoreIndexer:
         except Exception as e:
             logger.error(f"Error handling deleted files: {e}")
 
-    def _is_test_file(self, file_path: Path) -> bool:
+    def _is_test_file(self, _file_path: Path) -> bool:
         """Check if a file is a test file - DISABLED."""
         return False

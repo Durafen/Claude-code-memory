@@ -80,3 +80,4 @@ backups/
 dist/
 build/chats.md
 claude_code_collaboration_tips.md
+docs/logging.md

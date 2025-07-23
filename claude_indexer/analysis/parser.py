@@ -1602,7 +1602,8 @@ class MarkdownParser(CodeParser):
                 if line.startswith("#"):
                     level = len(line) - len(line.lstrip("#"))
                     header_text = line.lstrip("#").strip()
-                    if header_text:
+                    # Only process headers that have corresponding entities (h1, h2 only)
+                    if header_text and level <= 2:
                         headers.append(
                             {"text": header_text, "level": level, "line_num": line_num}
                         )
@@ -1611,11 +1612,15 @@ class MarkdownParser(CodeParser):
             for i, header in enumerate(headers):
                 # Determine section bounds
                 start_line = int(header["line_num"]) + 1 if isinstance(header["line_num"], int | str) else 1
-                if i + 1 < len(headers):
-                    next_header_line = headers[i + 1]["line_num"]
-                    end_line = int(next_header_line) if isinstance(next_header_line, int | str) else len(lines)
-                else:
-                    end_line = len(lines)
+                
+                # Find next header at same level or higher (lower level number)
+                end_line = len(lines)
+                current_level = header["level"]
+                for j in range(i + 1, len(headers)):
+                    next_header = headers[j]
+                    if next_header["level"] <= current_level:
+                        end_line = int(next_header["line_num"]) if isinstance(next_header["line_num"], int | str) else len(lines)
+                        break
 
                 # Extract section content
                 section_lines = lines[start_line:end_line]
@@ -1672,11 +1677,11 @@ class MarkdownParser(CodeParser):
                         f"{metadata_base_id}::{metadata_unique_hash}"
                     )
 
-                    # FIX: Create implementation chunk since this contains full section content
-                    implementation_chunk = EntityChunk(
+                    # FIX: Create metadata chunk for progressive disclosure
+                    metadata_chunk = EntityChunk(
                         id=collision_resistant_metadata_id,
                         entity_name=str(header["text"]),
-                        chunk_type="implementation",  # FIXED: Was "metadata", now "implementation"
+                        chunk_type="metadata",  # FIXED: Should be metadata for progressive disclosure
                         content=section_content,  # Use full section content
                         metadata={
                             "entity_type": "documentation",
@@ -1689,7 +1694,7 @@ class MarkdownParser(CodeParser):
                             "line_count": line_count,
                         },
                     )
-                    chunks.append(implementation_chunk)
+                    chunks.append(metadata_chunk)
 
         except Exception as e:
             # Graceful fallback - implementation chunks are optional

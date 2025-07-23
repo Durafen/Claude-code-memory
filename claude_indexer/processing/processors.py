@@ -28,6 +28,11 @@ class EntityProcessor(ContentProcessor):
         # Phase 1: Create metadata chunks with implementation flags
         chunks_to_process = []
         for entity in entities:
+            # Skip creating old-style metadata chunks for markdown documentation entities
+            # since markdown parser now creates better progressive disclosure metadata chunks
+            if (entity.file_path and str(entity.file_path).endswith('.md') and 
+                entity.entity_type.value == 'documentation'):
+                continue
 
             has_implementation = entity.name in context.implementation_entity_names
             from ..analysis.entities import EntityChunk

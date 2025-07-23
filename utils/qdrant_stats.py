@@ -256,10 +256,8 @@ class QdrantStatsCollector:
 
             manual_count = 0
             for point in all_points:
-                if hasattr(point, "payload") and point.payload:
-                    # Use same logic as backup script
-                    if self._is_truly_manual_entry(point.payload):
-                        manual_count += 1
+                if hasattr(point, "payload") and point.payload and self._is_truly_manual_entry(point.payload):
+                    manual_count += 1
 
             return manual_count
 

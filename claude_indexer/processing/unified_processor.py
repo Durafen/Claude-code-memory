@@ -267,7 +267,7 @@ class UnifiedContentProcessor:
 
             if self.logger:
                 self.logger.debug("🗑️ DEBUG: Converted to integer IDs:")
-                for i, (str_id, int_id) in enumerate(zip(entity_ids[:5], integer_ids[:5], strict=False)):
+                for _i, (str_id, int_id) in enumerate(zip(entity_ids[:5], integer_ids[:5], strict=False)):
                     self.logger.debug(f"🗑️ DEBUG: {str_id} → {int_id}")
 
             from qdrant_client.models import PointIdsList

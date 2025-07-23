@@ -192,14 +192,16 @@ class TestCLIEndToEnd:
                     ],
                 )
 
-                assert result.exit_code == 0
-                assert "test_function" in result.output
-                assert mock_indexer.search_similar.called
+            assert result.exit_code == 0
+            assert "test_function" in result.output
+            assert mock_indexer.search_similar.called
 
     def test_cli_config_validation(self, temp_repo):
         """Test CLI configuration validation."""
         try:
-            import click
+            import importlib.util
+            if importlib.util.find_spec("click") is None:
+                pytest.skip("Click not available for CLI testing")
             from click.testing import CliRunner
         except ImportError:
             pytest.skip("Click not available for CLI testing")
@@ -483,7 +485,9 @@ class TestCLIIntegrationScenarios:
     def test_cli_with_configuration_file(self, temp_repo, tmp_path):
         """Test CLI with custom configuration file."""
         try:
-            import click
+            import importlib.util
+            if importlib.util.find_spec("click") is None:
+                pytest.skip("Click not available for CLI testing")
             from click.testing import CliRunner
         except ImportError:
             pytest.skip("Click not available for CLI testing")
@@ -583,7 +587,9 @@ class TestCLIIntegrationScenarios:
     def test_cli_quiet_and_verbose_modes(self, temp_repo):
         """Test CLI output modes."""
         try:
-            import click
+            import importlib.util
+            if importlib.util.find_spec("click") is None:
+                pytest.skip("Click not available for CLI testing")
             from click.testing import CliRunner
         except ImportError:
             pytest.skip("Click not available for CLI testing")
@@ -683,7 +689,9 @@ class TestCLIIntegrationScenarios:
     def test_cli_error_handling(self, temp_repo):
         """Test CLI error handling and user-friendly error messages."""
         try:
-            import click
+            import importlib.util
+            if importlib.util.find_spec("click") is None:
+                pytest.skip("Click not available for CLI testing")
             from click.testing import CliRunner
         except ImportError:
             pytest.skip("Click not available for CLI testing")

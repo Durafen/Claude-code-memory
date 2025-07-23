@@ -1,10 +1,26 @@
-integration/__pycache__/test_index_check_complete.cpython-312-pytest-8.4.1.pyc
-integration/__pycache__/test_index_check_complete.cpython-312-pytest-8.4.1.pyc
-integration
-memory_guard_debug_3.txt
-memory_guard_debug_2.txt
-memory_guard_debug_1.txt
-logs
-unit
-unit/.claude-indexer
-unit/logs
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Test logs and debug files
+logs/
+*.log
+memory_guard_debug_*.txt
+
+# Claude indexer temporary files
+.claude-indexer/
+unit/.claude-indexer/
+unit/logs/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

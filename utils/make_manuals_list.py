@@ -56,7 +56,8 @@ def is_manual_entry(payload: dict[str, Any]) -> bool:
     return not any(field in payload for field in auto_only_fields)
 
 
-from claude_indexer.config.config_loader import ConfigLoader
+# Import after sys.path modification
+from claude_indexer.config.config_loader import ConfigLoader  # noqa: E402
 
 
 async def find_all_manual_entries(collection_name: str) -> list[dict[str, Any]]:

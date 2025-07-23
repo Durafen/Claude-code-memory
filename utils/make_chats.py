@@ -13,7 +13,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from claude_indexer.chat.parser import ChatConversation, ChatParser
+# Import after sys.path modification
+from claude_indexer.chat.parser import ChatConversation, ChatParser  # noqa: E402
 
 
 def load_existing_chats(chats_file: Path) -> set[str]:
@@ -27,8 +28,7 @@ def load_existing_chats(chats_file: Path) -> set[str]:
         for line in f:
             # Extract session ID from markdown format
             # Format: - [ ] **Session ID**: abc123...
-            if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]"):
-                if "**Session ID**:" in line:
+            if (line.strip().startswith("- [ ]") or line.strip().startswith("- [x]")) and "**Session ID**:" in line:
                     parts = line.split("**Session ID**:", 1)
                     if len(parts) > 1:
                         session_id = parts[1].strip().split()[0]

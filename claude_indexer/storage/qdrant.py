@@ -9,7 +9,7 @@ from ..indexer_logging import get_logger
 from .base import ManagedVectorStore, StorageResult, VectorPoint
 
 if TYPE_CHECKING:
-    from ..analysis.entities import EntityChunk, RelationChunk
+    from ..analysis.entities import EntityChunk, Relation, RelationChunk
     from ..chat.parser import ChatChunk
 
 logger = get_logger()
@@ -286,7 +286,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
 
                 # Show entity details for this colliding ID
                 colliding_points = [p for p in qdrant_points if p.id == chunk_id]
-                for i, point in enumerate(
+                for _i, point in enumerate(
                     colliding_points[:3]
                 ):  # Limit to first 3 examples
                     entity_name = point.payload.get("entity_name", "unknown")
@@ -1271,6 +1271,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             current_time = time.time()
             elapsed_minutes = (current_time - last_cleanup) / 60
 
+            interval_minutes = 1  # Default cleanup interval
             return elapsed_minutes >= interval_minutes
 
         except Exception as e:

@@ -28,6 +28,7 @@ settings.txt
 
 # Temporary files
 *.log
+logs/
 *.tmp
 .coverage
 *.backup

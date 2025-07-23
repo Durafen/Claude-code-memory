@@ -1626,7 +1626,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     elapsed = current_time - start_time
                     rate = idx / elapsed if elapsed > 0 else 0
                     eta = (len(relations) - idx) / rate if rate > 0 else 0
-                    logger.info(
+                    logger.debug(
                         f"   ⏳ Progress: {idx}/{len(relations)} relations ({idx / len(relations) * 100:.1f}%) - "
                         f"{rate:.0f} relations/sec - ETA: {eta:.0f}s - resolve_calls: {resolve_call_count}"
                     )

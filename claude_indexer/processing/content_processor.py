@@ -65,16 +65,16 @@ class ContentProcessor(ContentHashMixin, ABC):
                     self.logger.debug(f"🔍 DEBUG: Entity ID: {eid}")
             return entity_ids
         return []
-    
+
     def _should_replace_file_entities(self, entity_file_path: str, context: "ProcessingContext") -> bool:
         """Determine if file entities should be replaced."""
         from pathlib import Path
-        
+
         # Convert string path to Path for comparison since files_being_processed contains Path objects
         entity_path = Path(entity_file_path)
-        
+
         return (
-            context.replacement_mode and 
+            context.replacement_mode and
             entity_path in context.files_being_processed
         )
 

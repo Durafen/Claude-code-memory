@@ -11,7 +11,7 @@ def cli():
     """Claude Code Memory Indexer - Universal semantic indexing for codebases."""
     try:
         # Try to import Click and the full CLI
-        import click
+        import click  # noqa: F401
 
         from . import cli_full
 

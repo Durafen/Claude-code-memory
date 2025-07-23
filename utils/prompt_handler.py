@@ -1,6 +1,6 @@
-from pathlib import Path
-import sys
 import os
+import sys
+from pathlib import Path
 
 # Add parent directory to path for imports when run as standalone script
 if __name__ == "__main__":
@@ -35,8 +35,8 @@ class PromptHandler:
 
         if command_info:
             action = command_info.get("action")
-            session_id = hook_data.get("session_id", "default")
-            
+            hook_data.get("session_id", "default")
+
             if action == "disable":
                 message = self.bypass_manager.set_global_state(True)
                 return {"continue": True, "notification": message}
@@ -53,33 +53,33 @@ class PromptHandler:
 if __name__ == "__main__":
     import json
     import sys
-    
+
     try:
         # Read hook data from stdin
         hook_data = json.loads(sys.stdin.read())
-        
+
         # Debug log the received data
         with open("/Users/Duracula 1/Python-Projects/memory/debug/hook_debug.log", "a") as f:
             f.write(f"HOOK RECEIVED: {json.dumps(hook_data)}\n")
-        
+
         # Initialize handler
         handler = PromptHandler()
-        
+
         # Process hook
         result = handler.process_hook(hook_data)
-        
+
         # Debug log the result
         with open("/Users/Duracula 1/Python-Projects/memory/debug/hook_debug.log", "a") as f:
             f.write(f"HOOK RESULT: {json.dumps(result)}\n")
-        
+
         # Output result
         print(json.dumps(result))
-        
+
         # Display notification in UI using stderr + exit code 2
         if "notification" in result:
             print(result["notification"], file=sys.stderr)
             sys.exit(2)
-        
+
     except Exception as e:
         # Fallback error handling
         result = {

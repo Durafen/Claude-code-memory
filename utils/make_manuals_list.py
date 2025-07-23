@@ -53,10 +53,7 @@ def is_manual_entry(payload: dict[str, Any]) -> bool:
 
     # Additional v2.4 validation - manual entries shouldn't have certain auto fields
     auto_only_fields = {"file_hash", "parser_version", "indexed_at"}
-    if any(field in payload for field in auto_only_fields):
-        return False
-
-    return True
+    return not any(field in payload for field in auto_only_fields)
 
 
 from claude_indexer.config.config_loader import ConfigLoader

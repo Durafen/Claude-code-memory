@@ -125,7 +125,7 @@ class ObservationExtractor:
         self,
         node: "tree_sitter.Node",
         source_code: str,
-        jedi_script: Optional["jedi.Script"] = None,
+        jedi_script: Optional["jedi.Script"] = None,  # noqa: ARG002
     ) -> list[str]:
         """Extract observations for class entities."""
         observations = []
@@ -186,7 +186,7 @@ class ObservationExtractor:
             return self._extract_python_docstring(node, source_code)
 
     def _extract_python_docstring(
-        self, node: "tree_sitter.Node", source_code: str
+        self, node: "tree_sitter.Node", source_code: str  # noqa: ARG002
     ) -> str | None:
         """Extract Python docstring from function or class node."""
 
@@ -380,7 +380,7 @@ class ObservationExtractor:
         return patterns
 
     def _extract_function_calls(
-        self, node: "tree_sitter.Node", source_code: str
+        self, node: "tree_sitter.Node", source_code: str  # noqa: ARG002
     ) -> set[str]:
         """Extract meaningful function calls using AST structural heuristics."""
         calls = set()
@@ -462,11 +462,7 @@ class ObservationExtractor:
             return True
 
         # CamelCase indicates class/constructor patterns
-        if func_name[0].isupper() and any(c.isupper() for c in func_name[1:]):
-            return True
-
-        # Short names are usually noise
-        return False
+        return func_name[0].isupper() and any(c.isupper() for c in func_name[1:])
 
     def _extract_exception_handling(
         self, node: "tree_sitter.Node", source_code: str
@@ -545,7 +541,7 @@ class ObservationExtractor:
         return exceptions
 
     def _extract_return_patterns(
-        self, node: "tree_sitter.Node", source_code: str
+        self, node: "tree_sitter.Node", source_code: str  # noqa: ARG002
     ) -> str | None:
         """Extract return patterns from function."""
         returns = set()
@@ -583,7 +579,7 @@ class ObservationExtractor:
             for child in node.children:
                 if child.type in ["parameters", "formal_parameters"]:
                     param_names = []
-                    
+
                     # Process all parameter children
                     for param_child in child.children:
                         if param_child.type == "identifier":
@@ -598,7 +594,7 @@ class ObservationExtractor:
                             # Parameter with type annotation and default value (like 'db_path: str = None')
                             param_full = source_code[param_child.start_byte : param_child.end_byte]
                             param_names.append(param_full)
-                    
+
                     if param_names:
                         param_count = len(param_names)
                         return f"{param_count} parameters: {', '.join(param_names)}"
@@ -621,7 +617,7 @@ class ObservationExtractor:
             return None
 
     def _extract_decorators(
-        self, node: "tree_sitter.Node", source_code: str
+        self, node: "tree_sitter.Node", source_code: str  # noqa: ARG002
     ) -> list[str]:
         """Extract decorators from function or class."""
         decorators = []
@@ -640,7 +636,7 @@ class ObservationExtractor:
         return decorators
 
     def _extract_class_methods(
-        self, node: "tree_sitter.Node", source_code: str
+        self, node: "tree_sitter.Node", source_code: str  # noqa: ARG002
     ) -> set[str]:
         """Extract method names from class body."""
         methods = set()
@@ -666,7 +662,7 @@ class ObservationExtractor:
         return methods
 
     def _extract_inheritance_info(
-        self, node: "tree_sitter.Node", source_code: str
+        self, node: "tree_sitter.Node", source_code: str  # noqa: ARG002
     ) -> list[str]:
         """Extract inheritance information from class definition."""
         inheritance = []
@@ -717,7 +713,7 @@ class ObservationExtractor:
         return patterns
 
     def _extract_class_attributes(
-        self, node: "tree_sitter.Node", source_code: str
+        self, node: "tree_sitter.Node", source_code: str  # noqa: ARG002
     ) -> set[str]:
         """Extract class attributes."""
         attributes = set()
@@ -738,7 +734,7 @@ class ObservationExtractor:
         find_attributes(node)
         return attributes
 
-    def _calculate_complexity(self, node: "tree_sitter.Node", source_code: str) -> int:
+    def _calculate_complexity(self, node: "tree_sitter.Node", source_code: str) -> int:  # noqa: ARG002
         """Calculate complexity based on control flow statements."""
         complexity = 1  # Base complexity
 
@@ -819,7 +815,7 @@ class ObservationExtractor:
         return func_name in builtins or len(func_name) <= 2
 
     def _get_jedi_docstring(
-        self, node: "tree_sitter.Node", jedi_script: "jedi.Script", source_code: str
+        self, node: "tree_sitter.Node", jedi_script: "jedi.Script", source_code: str  # noqa: ARG002
     ) -> str | None:
         """Get enhanced docstring from Jedi analysis."""
         try:
@@ -850,7 +846,7 @@ class ObservationExtractor:
             return None
 
     def _extract_jedi_type_info(
-        self, node: "tree_sitter.Node", jedi_script: "jedi.Script", source_code: str
+        self, node: "tree_sitter.Node", jedi_script: "jedi.Script", source_code: str  # noqa: ARG002
     ) -> list[str]:
         """Extract type information from Jedi analysis."""
         type_observations: list[str] = []

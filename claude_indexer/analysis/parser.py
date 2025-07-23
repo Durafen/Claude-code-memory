@@ -140,7 +140,7 @@ class PythonParser(CodeParser):
             self._observation_extractor = ObservationExtractor(self.project_path)
 
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize Python parser: {e}")
+            raise RuntimeError(f"Failed to initialize Python parser: {e}") from e
 
     def can_parse(self, file_path: Path) -> bool:
         """Check if this is a Python file."""
@@ -151,7 +151,7 @@ class PythonParser(CodeParser):
         return [".py"]
 
     def parse(
-        self, file_path: Path, batch_callback: Any = None, global_entity_names: set[str] | None = None
+        self, file_path: Path, batch_callback: Any = None, global_entity_names: set[str] | None = None  # noqa: ARG002
     ) -> ParserResult:
         """Parse Python file using Tree-sitter and Jedi."""
         import time
@@ -167,9 +167,8 @@ class PythonParser(CodeParser):
             tree = self._parse_with_tree_sitter(file_path)
             if tree:
                 # Check for syntax errors in the parse tree
-                if self._has_syntax_errors(tree):
-                    if result.errors is not None:
-                        result.errors.append(f"Syntax errors detected in {file_path.name}")
+                if self._has_syntax_errors(tree) and result.errors is not None:
+                    result.errors.append(f"Syntax errors detected in {file_path.name}")
 
                 ts_entities = self._extract_tree_sitter_entities(tree, file_path)
                 result.entities.extend(ts_entities)
@@ -277,10 +276,7 @@ class PythonParser(CodeParser):
             if node.type == "ERROR":
                 return True
             # Recursively check children
-            for child in node.children:
-                if check_node_for_errors(child):
-                    return True
-            return False
+            return any(check_node_for_errors(child) for child in node.children)
 
         return check_node_for_errors(tree.root_node)
 
@@ -345,13 +341,12 @@ class PythonParser(CodeParser):
                 # that shouldn't be indexed as entities (e.g., 'e' from 'except ... as e:')
                 pass
 
-            elif node.type == "named_expression":
+            elif node.type == "named_expression" and current_context != "function_definition":
                 # Extract walrus operator variables
-                if current_context != "function_definition":
-                    walrus_variables = self._extract_variables_from_walrus(
-                        node, file_path
-                    )
-                    entities.extend(walrus_variables)
+                walrus_variables = self._extract_variables_from_walrus(
+                    node, file_path
+                )
+                entities.extend(walrus_variables)
 
             # Recursively traverse children with context
             for child in node.children:
@@ -609,7 +604,7 @@ class PythonParser(CodeParser):
 # Note: Context manager variables are now properly excluded from indexing
     # as they are temporary local variables that shouldn't be indexed as entities
 
-# Note: Exception handler variables (e.g., 'e' from 'except ... as e:') are now 
+# Note: Exception handler variables (e.g., 'e' from 'except ... as e:') are now
 # correctly excluded from indexing as they are temporary local variables
 
     def _extract_variables_from_walrus(
@@ -641,7 +636,7 @@ class PythonParser(CodeParser):
         return variables
 
     def _extract_inheritance_relations(
-        self, class_node: "tree_sitter.Node", file_path: Path
+        self, class_node: "tree_sitter.Node", file_path: Path  # noqa: ARG002
     ) -> list["Relation"]:
         """Extract inheritance relations from a class definition node."""
         relations: list[Relation] = []
@@ -739,20 +734,19 @@ class PythonParser(CodeParser):
                         module_name = dots
                     break
 
-            if module_name:
+            if module_name and (module_name.startswith(".") or self._is_internal_import(
+                module_name, file_path, project_root
+            )):
                 # Only create relations for relative imports or project-internal modules
-                if module_name.startswith(".") or self._is_internal_import(
-                    module_name, file_path, project_root
-                ):
-                    relation = RelationFactory.create_imports_relation(
-                        importer=file_name, imported=module_name, import_type="module"
-                    )
-                    relations.append(relation)
+                relation = RelationFactory.create_imports_relation(
+                    importer=file_name, imported=module_name, import_type="module"
+                )
+                relations.append(relation)
 
         return relations
 
     def _is_internal_import(
-        self, module_name: str, current_file: Path, project_root: Path
+        self, module_name: str, current_file: Path, project_root: Path  # noqa: ARG002
     ) -> bool:
         """Check if an import is internal to the project by checking if the module file exists."""
         # Handle relative imports (always internal to the project)
@@ -902,7 +896,7 @@ class PythonParser(CodeParser):
 
         # Process ONLY imports from Jedi (better cross-module resolution)
         file_name = str(file_path)
-        project_root = (
+        (
             self.project_path if hasattr(self, "project_path") else file_path.parent
         )
 
@@ -1104,7 +1098,7 @@ class PythonParser(CodeParser):
                 if sig:
                     type_hints["signature"] = str(sig)
             return type_hints
-        except:
+        except Exception:
             return {}
 
     def _extract_function_calls_from_source(self, source: str, node_type: str = "function") -> list[str]:
@@ -1118,25 +1112,25 @@ class PythonParser(CodeParser):
             filtered_lines = []
             in_method = False
             method_indent = 0
-            
+
             for line in lines:
                 stripped = line.strip()
                 current_indent = len(line) - len(line.lstrip())
-                
+
                 # Detect method start
                 if stripped.startswith("def "):
                     in_method = True
                     method_indent = current_indent
                     continue  # Skip method definition line
-                
+
                 # Skip method body lines (higher indent than method definition)
                 if in_method and current_indent > method_indent:
                     continue
-                    
+
                 # End of method body (back to class level or less)
                 if in_method and current_indent <= method_indent and stripped:
                     in_method = False
-                    
+
                 # Keep class-level lines
                 if not in_method:
                     filtered_lines.append(line)
@@ -1164,7 +1158,7 @@ class PythonParser(CodeParser):
         # Find module.function or module.class patterns
         module_pattern = r"(\w+)\.(\w+)"
         matches = re.findall(module_pattern, source)
-        return list(set([f"{module}.{attr}" for module, attr in matches]))
+        return list({f"{module}.{attr}" for module, attr in matches})
 
     def _extract_exceptions_from_source(self, source: str) -> list[str]:
         """Extract exception types from source code."""
@@ -1197,7 +1191,7 @@ class PythonParser(CodeParser):
         return nodes
 
     def _extract_file_operations(
-        self, tree: "tree_sitter.Tree", file_path: Path, content: str
+        self, tree: "tree_sitter.Tree", file_path: Path, content: str  # noqa: ARG002
     ) -> list["Relation"]:
         """Extract file operations from Python AST using tree-sitter."""
         relations = []
@@ -1452,7 +1446,7 @@ class PythonParser(CodeParser):
 
         # Get entity names from current batch for validation
         entity_names = {entity.name for entity in entities} if entities else set()
-        
+
         # 🐛 DEBUG: Track chunks and their call metadata
         logger.debug(f"🔍 PHANTOM DEBUG: Processing {len(chunks)} chunks for relations")
         logger.debug(f"🔍 PHANTOM DEBUG: Current entity names: {sorted(entity_names)}")
@@ -1461,7 +1455,7 @@ class PythonParser(CodeParser):
             if chunk.chunk_type == "implementation":
                 # Only process function calls from semantic metadata
                 calls = chunk.metadata.get("semantic_metadata", {}).get("calls", [])
-                
+
                 # 🐛 DEBUG: Log chunk details
                 if calls:
                     logger.debug(f"🔍 PHANTOM DEBUG: Chunk {chunk.entity_name} has calls: {calls}")
@@ -1616,10 +1610,10 @@ class MarkdownParser(CodeParser):
             # Extract content between headers
             for i, header in enumerate(headers):
                 # Determine section bounds
-                start_line = int(header["line_num"]) + 1 if isinstance(header["line_num"], (int, str)) else 1
+                start_line = int(header["line_num"]) + 1 if isinstance(header["line_num"], int | str) else 1
                 if i + 1 < len(headers):
                     next_header_line = headers[i + 1]["line_num"]
-                    end_line = int(next_header_line) if isinstance(next_header_line, (int, str)) else len(lines)
+                    end_line = int(next_header_line) if isinstance(next_header_line, int | str) else len(lines)
                 else:
                     end_line = len(lines)
 
@@ -1664,7 +1658,7 @@ class MarkdownParser(CodeParser):
                     line_count = section_content.count("\n") + 1
                     word_count = len(section_content.split())
 
-                    metadata_content = f"Section: {header['text']} | Preview: {preview} | Lines: {line_count} | Words: {word_count}"
+                    f"Section: {header['text']} | Preview: {preview} | Lines: {line_count} | Words: {word_count}"
 
                     # Create collision-resistant metadata chunk ID
                     metadata_unique_content = f"{str(file_path)}::{header['text']}::documentation::metadata::{header['line_num']}"
@@ -1687,7 +1681,7 @@ class MarkdownParser(CodeParser):
                         metadata={
                             "entity_type": "documentation",
                             "file_path": str(file_path),
-                            "line_number": int(header["line_num"]) + 1 if isinstance(header["line_num"], (int, str)) else 1,
+                            "line_number": int(header["line_num"]) + 1 if isinstance(header["line_num"], int | str) else 1,
                             "section_type": "markdown_section",
                             "has_implementation": True,
                             "content_length": len(section_content),
@@ -1862,4 +1856,4 @@ class ParserRegistry:
         extensions = set()
         for parser in self._parsers:
             extensions.update(parser.get_supported_extensions())
-        return sorted(list(extensions))
+        return sorted(extensions)

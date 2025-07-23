@@ -500,7 +500,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         start_time = time.time()
 
         try:
-            delete_response = self.client.delete(
+            self.client.delete(
                 collection_name=collection_name, points_selector=point_ids
             )
 
@@ -587,7 +587,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         conditions = []
 
         for field, value in filter_conditions.items():
-            if isinstance(value, (str, int, float, bool)):
+            if isinstance(value, str | int | float | bool):
                 condition = FieldCondition(key=field, match=MatchValue(value=value))
                 conditions.append(condition)
 
@@ -1165,24 +1165,24 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         self, collection_name: str, file_path: str, chunk_types: list[str] = None
     ) -> dict[str, list[dict[str, Any]]]:
         """Find entities for file grouped by chunk type for targeted replacement.
-        
+
         Args:
             collection_name: Name of the collection to search
             file_path: Path of the file to find entities for
             chunk_types: List of chunk types to filter by. Defaults to ["metadata", "implementation", "relation"]
-            
+
         Returns:
             Dictionary mapping chunk_type to list of entities:
             {"metadata": [...], "implementation": [...], "relation": [...]}
         """
         if chunk_types is None:
             chunk_types = ["metadata", "implementation", "relation"]
-        
+
         results = {}
-        
+
         try:
             from qdrant_client import models
-            
+
             for chunk_type in chunk_types:
                 filter_conditions = models.Filter(
                     must=[
@@ -1194,7 +1194,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                         )
                     ]
                 )
-                
+
                 points = self._scroll_collection(
                     collection_name=collection_name,
                     scroll_filter=filter_conditions,
@@ -1202,7 +1202,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     with_vectors=False,
                     handle_pagination=True,
                 )
-                
+
                 results[chunk_type] = [
                     {
                         "id": point.id,
@@ -1213,13 +1213,13 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     }
                     for point in points
                 ]
-        
+
         except Exception as e:
             # Log error and return empty results for all chunk types
             if hasattr(self, 'logger') and self.logger:
                 self.logger.error(f"Error in find_entities_for_file_by_type for {file_path}: {e}")
             results = {chunk_type: [] for chunk_type in chunk_types}
-        
+
         return results
 
     def _should_run_cleanup(self, collection_name: str, force: bool = False) -> bool:
@@ -1230,7 +1230,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         # TEMPORARY FIX: Disable timer to always run cleanup (fixes stale relations bug)
         # TODO: Re-enable timer after fixing orphan cleanup scope limitations
         return True  # Always run cleanup for now
-        
+
         # Load cleanup interval from config (default 1 minute) - COMMENTED OUT
         # try:
         #     from ..config.config_loader import ConfigLoader
@@ -1238,7 +1238,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         #     interval_minutes = getattr(config, "cleanup_interval_minutes", 1)
         # except Exception:
         #     interval_minutes = 1  # Fallback default
-        # 
+        #
         # # 0 means disabled timer (always run - original behavior)
         # if interval_minutes == 0:
         #     return True
@@ -1335,7 +1335,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
 
         if verbose:
             logger.debug("🔍 Scanning collection for orphaned relations...")
-        
+
         # ENHANCED DEBUG: Always log key information for phantom relation debugging
         logger.debug(f"Starting cleanup for collection '{collection_name}' (force={force})")
 
@@ -1387,9 +1387,9 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             )
             if entity_names:
                 logger.debug(f"Sample entity names: {list(entity_names)[:5]}...")
-            
+
             if verbose:
-                logger.debug(f"   📊 Additional verbose details available")
+                logger.debug("   📊 Additional verbose details available")
 
             if not relations:
                 if verbose:
@@ -1653,7 +1653,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             # Combine orphaned and phantom relations for deletion
             all_stale_relations = orphaned_relations + phantom_relations
             total_to_delete = len(all_stale_relations)
-            
+
             # Batch delete stale relations if found
             if all_stale_relations:
                 relation_ids = [r.id for r in all_stale_relations]
@@ -1691,13 +1691,13 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         self, all_points: list, from_entity: str, to_entity: str, collection_name: str
     ) -> bool:
         """Check if a call relation is phantom (entities exist but call doesn't).
-        
+
         Args:
             all_points: All points from the collection for efficient lookup
-            from_entity: Source entity name 
+            from_entity: Source entity name
             to_entity: Target entity name
             collection_name: Collection name for debugging
-            
+
         Returns:
             True if the call relation is phantom (stale), False if legitimate
         """
@@ -1705,19 +1705,19 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             # Find implementation chunks for the source entity
             source_implementations = [
                 point for point in all_points
-                if (point.payload.get("entity_name") == from_entity 
+                if (point.payload.get("entity_name") == from_entity
                     and point.payload.get("chunk_type") == "implementation")
             ]
-            
+
             if not source_implementations:
                 # No implementation found - might be external entity, keep relation
                 logger.debug(f"   🔍 No implementation found for {from_entity}, keeping relation")
                 return False
-            
+
             # Check if any implementation chunk contains the function call
             for impl_point in source_implementations:
                 content = impl_point.payload.get("content", "")
-                
+
                 # Simple heuristic: look for the target function being called in the content
                 # This catches most cases like: load_user_data(username, path)
                 if to_entity in content:
@@ -1730,16 +1730,16 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                             code_part = line[:comment_index]
                         else:
                             code_part = line
-                        
+
                         # Look for function call pattern: target_function(
                         if f"{to_entity}(" in code_part:
                             logger.debug(f"   ✅ Found legitimate call: {from_entity} -> {to_entity}")
                             return False
-            
+
             # No legitimate call found in any implementation
             logger.debug(f"   👻 Phantom call detected: {from_entity} -> {to_entity} (call not found in implementation)")
             return True
-            
+
         except Exception as e:
             logger.debug(f"   ⚠️ Error checking phantom relation {from_entity} -> {to_entity}: {e}")
             # On error, keep the relation (safer than deleting)

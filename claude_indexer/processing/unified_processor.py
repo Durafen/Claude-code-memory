@@ -32,24 +32,23 @@ class UnifiedContentProcessor:
         changed_entity_ids: set[str],
     ) -> ProcessingResult:
         """Single entry point replacing _store_vectors() logic."""
-        
+
         # DEBUG: Print parameters to compare CLI vs Watcher calls
         if self.logger:
-            self.logger.debug(f"🔥 DEBUG process_all_content CALL:")
+            self.logger.debug("🔥 DEBUG process_all_content CALL:")
             self.logger.debug(f"🔥   collection_name: {collection_name}")
             self.logger.debug(f"🔥   entities_count: {len(entities)}")
             self.logger.debug(f"🔥   relations_count: {len(relations)}")
             self.logger.debug(f"🔥   implementation_chunks_count: {len(implementation_chunks)}")
             self.logger.debug(f"🔥   changed_entity_ids_count: {len(changed_entity_ids)}")
-            
+
             # Check if collection has existing data
             try:
-                from qdrant_client.http import models
                 if hasattr(self.vector_store, "backend"):
                     qdrant_client = self.vector_store.backend.client
                 else:
                     qdrant_client = self.vector_store.client
-                    
+
                 total_points = qdrant_client.count(collection_name).count
                 self.logger.debug(f"🔥   existing_points_in_collection: {total_points}")
             except Exception as e:
@@ -162,7 +161,7 @@ class UnifiedContentProcessor:
         if self.logger:
             self.logger.debug("💾 === FINAL STORAGE SUMMARY ===")
             self.logger.debug(f"   Collection: {collection_name}")
-            self.logger.debug(f"   Total points to store: {len(all_points)}")
+            self.logger.info(f"   Total points to store: {len(all_points)}")
 
             # Count different types of points
             entity_points = sum(
@@ -257,7 +256,7 @@ class UnifiedContentProcessor:
                 self.logger.debug(f"🗑️ DEBUG: About to delete {len(entity_ids)} entities from {collection_name}")
                 for i, entity_id in enumerate(entity_ids[:5]):  # Show first 5
                     self.logger.debug(f"🗑️ DEBUG: Entity {i+1}: {entity_id}")
-            
+
             # Handle both string and integer entity IDs
             integer_ids = []
             for entity_id in entity_ids:
@@ -265,10 +264,10 @@ class UnifiedContentProcessor:
                     integer_ids.append(entity_id)
                 else:
                     integer_ids.append(self.vector_store.generate_deterministic_id(entity_id))
-            
+
             if self.logger:
-                self.logger.debug(f"🗑️ DEBUG: Converted to integer IDs:")
-                for i, (str_id, int_id) in enumerate(zip(entity_ids[:5], integer_ids[:5])):
+                self.logger.debug("🗑️ DEBUG: Converted to integer IDs:")
+                for i, (str_id, int_id) in enumerate(zip(entity_ids[:5], integer_ids[:5], strict=False)):
                     self.logger.debug(f"🗑️ DEBUG: {str_id} → {int_id}")
 
             from qdrant_client.models import PointIdsList
@@ -283,7 +282,7 @@ class UnifiedContentProcessor:
                 collection_name=collection_name,
                 points_selector=PointIdsList(points=integer_ids)
             )
-            
+
             if self.logger:
                 self.logger.debug(f"🗑️ DEBUG: Qdrant delete result: {delete_result}")
                 # Check count after deletion

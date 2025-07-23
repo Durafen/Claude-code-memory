@@ -77,12 +77,12 @@ def create_user_manager(db_path: str = None) -> UserManager:
 
 class SessionStore:
     """Persistent session storage handler."""
-    
+
     def __init__(self, manager: UserManager):
         self.manager = manager
         self.active_sessions = {}
         self.created_at = time.time()
-    
+
     def store_session(self, session_data: dict) -> str:
         """Store session and return session ID."""
         session_id = f"session_{len(self.active_sessions)}_{int(time.time())}"
@@ -92,7 +92,7 @@ class SessionStore:
             "manager_id": id(self.manager)
         }
         return session_id
-    
+
     def cleanup_expired(self, max_age: int = 3600) -> int:
         """Remove expired sessions, return count cleaned."""
         current_time = time.time()
@@ -209,7 +209,7 @@ def create_session(username: str) -> dict:
     """Legacy session creation function."""
     return {"user": username, "token": "legacy_token"}
 
-# Updated global variables  
+# Updated global variables
 DEFAULT_DB_PATH = "/var/lib/users.db"
 MAX_SESSIONS = 100
 ```
@@ -221,7 +221,7 @@ claude-indexer index -p debug/isolated_test -c parser-test --verbose
 
 ### Expected Results Stage 5:
 - **Expected:** Incremental update detects changes, REPLACES existing entities with updated versions, removes old versions completely
-- **Changes:** Added logging import, enhanced methods with type annotations, new variables, modified function logic  
+- **Changes:** Added logging import, enhanced methods with type annotations, new variables, modified function logic
 - **AI Verification:** CRITICAL BUG CHECK - Verify ONLY current code versions exist, NO OLD VERSIONS should remain. Search for duplicate function implementations - if found, incremental update is BROKEN
 - **Summary:** **CRITICAL:** Only current code versions should exist. Any duplicate old/new versions indicates incremental update failure requiring immediate fix
 

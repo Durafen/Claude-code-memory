@@ -169,7 +169,7 @@ class JSONParser(TreeSitterParser):
                     entities.append(entity)
 
                     # Create containment relation
-                    parent = str(file_path) if not parent_path else parent_path
+                    parent = parent_path if parent_path else str(file_path)
                     relation = RelationFactory.create_contains_relation(
                         parent, current_path
                     )
@@ -750,60 +750,19 @@ class JSONParser(TreeSitterParser):
                     break
 
             # Process final partial batch if any items remain
-            if current_batch_entities or current_batch_chunks:
-                if batch_callback:
-                    batch_result = batch_callback(
-                        current_batch_entities, [], current_batch_chunks
+            if (current_batch_entities or current_batch_chunks) and batch_callback:
+                batch_result = batch_callback(
+                    current_batch_entities, [], current_batch_chunks
+                )
+                if batch_result:
+                    total_entities_processed += len(current_batch_entities)
+                    total_chunks_processed += len(current_batch_chunks)
+                    logger.info(
+                        f"✅ Processed final batch: {len(current_batch_chunks)} chunks from {file_path.name}"
                     )
-                    if batch_result:
-                        total_entities_processed += len(current_batch_entities)
-                        total_chunks_processed += len(current_batch_chunks)
-                        logger.info(
-                            f"✅ Processed final batch: {len(current_batch_chunks)} chunks from {file_path.name}"
-                        )
                     # Clear final batch
                     current_batch_entities.clear()
                     current_batch_chunks.clear()
-
-            # Handle case where no content items were found
-            if processed_count == 0:
-                result.errors.append("No content items found in any expected arrays")  # type: ignore[union-attr]
-                if not batch_callback:
-                    # Only create placeholder chunk if not using callback (traditional mode)
-                    chunk = EntityChunk(
-                        id=self._create_chunk_id(
-                            file_path, "no_content", "implementation"
-                        ),
-                        entity_name=str(file_path),
-                        chunk_type="implementation",
-                        content="Large JSON file with no extractable content items",
-                        metadata={
-                            "entity_type": "json_content",
-                            "file_path": str(file_path),
-                        },
-                    )
-                    current_batch_chunks.append(chunk)
-
-            # Set result based on processing mode
-            if batch_callback:
-                # Streaming mode: return minimal result with counts
-                result.entities = []  # Already processed via callback
-                result.relations = []  # No structural relations in content_only mode
-                result.implementation_chunks = []  # Already processed via callback
-                # Store metadata for reporting
-                result.entities_created = total_entities_processed
-                result.implementation_chunks_created = total_chunks_processed
-                logger.info(
-                    f"🚀 Streaming completed: {processed_count} items → {total_chunks_processed} chunks processed from {file_path.name}"
-                )
-            else:
-                # Traditional mode: return accumulated results
-                result.entities = current_batch_entities
-                result.relations = []  # No structural relations in content_only mode
-                result.implementation_chunks = current_batch_chunks
-                logger.info(
-                    f"📄 Traditional processing: {processed_count} items from {file_path.name}"
-                )
 
         except Exception as e:
             result.errors.append(f"Streaming JSON parsing failed: {str(e)[:200]}")  # type: ignore[union-attr]
@@ -811,6 +770,46 @@ class JSONParser(TreeSitterParser):
             file_entity = self._create_file_entity(file_path, content_type="error")
             result.entities = [file_entity]
             result.implementation_chunks = []
+
+        # Handle case where no content items were found
+        if processed_count == 0:
+            result.errors.append("No content items found in any expected arrays")  # type: ignore[union-attr]
+            if not batch_callback:
+                # Only create placeholder chunk if not using callback (traditional mode)
+                chunk = EntityChunk(
+                    id=self._create_chunk_id(
+                        file_path, "no_content", "implementation"
+                    ),
+                    entity_name=str(file_path),
+                    chunk_type="implementation",
+                    content="Large JSON file with no extractable content items",
+                    metadata={
+                        "entity_type": "json_content",
+                        "file_path": str(file_path),
+                    },
+                )
+                current_batch_chunks.append(chunk)
+
+        # Set result based on processing mode
+        if batch_callback:
+            # Streaming mode: return minimal result with counts
+            result.entities = []  # Already processed via callback
+            result.relations = []  # No structural relations in content_only mode
+            result.implementation_chunks = []  # Already processed via callback
+            # Store metadata for reporting
+            result.entities_created = total_entities_processed
+            result.implementation_chunks_created = total_chunks_processed
+            logger.info(
+                f"🚀 Streaming completed: {processed_count} items → {total_chunks_processed} chunks processed from {file_path.name}"
+            )
+        else:
+            # Traditional mode: return accumulated results
+            result.entities = current_batch_entities
+            result.relations = []  # No structural relations in content_only mode
+            result.implementation_chunks = current_batch_chunks
+            logger.info(
+                f"📄 Traditional processing: {processed_count} items from {file_path.name}"
+            )
 
         result.parsing_time = time.time() - start_time
         return result

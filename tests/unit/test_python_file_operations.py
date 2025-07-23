@@ -206,7 +206,7 @@ pyproject_data = toml.load('pyproject.toml')
         )
 
         # Check that config operations are being detected
-        targets = [r.to_entity for r in config_relations]
+        [r.to_entity for r in config_relations]
         contexts = [r.context for r in config_relations]
         # Ensure at least toml operations are detected
         assert any("toml_read" in ctx for ctx in contexts), (

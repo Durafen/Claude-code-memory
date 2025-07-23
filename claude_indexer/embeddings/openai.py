@@ -235,7 +235,7 @@ class OpenAIEmbedder(TiktokenMixin, RetryableEmbedder):
             tokens_per_text = actual_tokens // len(texts)
 
             results = []
-            for i, (text, embedding_data) in enumerate(
+            for _i, (text, embedding_data) in enumerate(
                 zip(texts, response.data, strict=False)
             ):
                 results.append(

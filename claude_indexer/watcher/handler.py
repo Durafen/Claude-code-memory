@@ -208,7 +208,7 @@ class IndexingEventHandler(FileSystemEventHandler):
             if existing_files:
                 # Use a set to handle duplicates if a file was in both lists
                 unique_existing_paths = sorted(
-                    list(set(existing_files)), key=lambda p: str(p)
+                    set(existing_files), key=lambda p: str(p)
                 )
 
                 relative_paths = [

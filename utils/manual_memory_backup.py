@@ -161,10 +161,7 @@ def is_truly_manual_entry(payload: dict[str, Any]) -> bool:
         observations and isinstance(observations, list) and len(observations) > 0
     ) or (content and isinstance(content, str) and len(content.strip()) > 0)
 
-    if not has_meaningful_content:
-        return False
-
-    return True
+    return has_meaningful_content
 
 
 def backup_manual_entries(collection_name: str, output_file: str = None):
@@ -286,7 +283,7 @@ def backup_manual_entries(collection_name: str, output_file: str = None):
         print(f"❓ Unknown entries: {len(unknown_entries)}")
 
         if unknown_entries:
-            unknown_types = set(e["entity_type"] for e in unknown_entries)
+            unknown_types = {e["entity_type"] for e in unknown_entries}
             print(f"❓ Unknown entity types found: {sorted(unknown_types)}")
 
         # Create backup data
@@ -298,8 +295,8 @@ def backup_manual_entries(collection_name: str, output_file: str = None):
             "code_entries_count": len(code_entries),
             "relation_entries_count": len(relation_entries),
             "unknown_entries_count": len(unknown_entries),
-            "manual_entity_types": sorted(list(manual_entity_types)),
-            "code_entity_types": sorted(list(code_types)),
+            "manual_entity_types": sorted(manual_entity_types),
+            "code_entity_types": sorted(code_types),
             "manual_entries": manual_entries,
             "relation_entries": relevant_relations,  # Only relations connected to manual entries
             "unknown_entries": unknown_entries,  # Include for review
@@ -398,10 +395,7 @@ def restore_manual_entries(
         if not store.collection_exists(target_collection):
             print(f"📦 Creating collection: {target_collection}")
             # Get vector size from embedder
-            if config.embedding_provider == "voyage":
-                vector_size = 512  # Voyage AI dimension
-            else:
-                vector_size = 1536  # OpenAI dimension
+            vector_size = 512 if config.embedding_provider == "voyage" else 1536
             store.create_collection(
                 collection_name=target_collection,
                 vector_size=vector_size,
@@ -437,10 +431,7 @@ def restore_manual_entries(
                 content = payload.get("content", "")
 
                 # Use existing content for embedding
-                if content:
-                    content_for_embedding = content
-                else:
-                    content_for_embedding = f"{entity_type}: {entity_name}"
+                content_for_embedding = content or f"{entity_type}: {entity_name}"
 
                 # Generate embedding for this entry
                 print(f"🔮 Generating embedding for: {entity_name[:50]}...")

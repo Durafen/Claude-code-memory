@@ -1,6 +1,7 @@
 """Async debouncing for file change events."""
 
 import asyncio
+import contextlib
 import threading
 import time
 from collections.abc import Awaitable, Callable
@@ -46,10 +47,8 @@ class AsyncDebouncer:
 
             # Cancel the task
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
 
     async def add_file_event(self, file_path: str, event_type: str) -> None:
         """Add a file change event to the debounce queue."""

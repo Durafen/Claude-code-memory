@@ -755,8 +755,6 @@ class ChatHtmlReporter:
         # Extract conversation characteristics
         all_content = " ".join([msg.content for msg in conversation.messages]).lower()
         project_path = conversation.metadata.project_path
-        has_code = conversation.metadata.has_code
-        message_count = conversation.metadata.message_count
 
         # Define memory entry templates based on common patterns
         entry_templates = {
@@ -1004,7 +1002,7 @@ class ChatHtmlReporter:
 
         return entries
 
-    def _format_memory_entries(self, entries, conversation: ChatConversation) -> str:
+    def _format_memory_entries(self, entries, conversation: ChatConversation) -> str:  # noqa: ARG002
         """Format memory entries for HTML display."""
         if not entries:
             return ""
@@ -1013,7 +1011,7 @@ class ChatHtmlReporter:
         for i, entry in enumerate(entries):
             score = entry.get("score", 0.0)
             name = entry.get("metadata", {}).get("name", f"Memory Entry {i + 1}")
-            entity_type = entry.get("metadata", {}).get("entity_type", "unknown")
+            entry.get("metadata", {}).get("entity_type", "unknown")
             observations = entry.get("metadata", {}).get("observations", [])
 
             # Determine score class

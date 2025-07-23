@@ -238,13 +238,13 @@ class YAMLParser(TreeSitterParser):
         return entities, relations
 
     def _extract_generic_structure(
-        self, root: Node, content: str, file_path: Path
+        self, root: Node, content: str, file_path: Path  # noqa: ARG002
     ) -> list[Entity]:
         """Extract generic YAML structure."""
         entities = []
 
         # Extract top-level keys as entities
-        for mapping in self._find_nodes_by_type(root, ["block_mapping"]):
+        for _mapping in self._find_nodes_by_type(root, ["block_mapping"]):
             # This is a simplified extraction - in a full implementation,
             # we would recursively parse the YAML structure
             break  # For now, just handle the first mapping
@@ -252,7 +252,7 @@ class YAMLParser(TreeSitterParser):
         return entities
 
     def _extract_yaml_value(
-        self, root: Node, key_path: str, content: str
+        self, root: Node, key_path: str, content: str  # noqa: ARG002
     ) -> str | None:
         """Extract a value from YAML by key path (e.g., 'metadata.name')."""
         # This is a simplified implementation
@@ -268,7 +268,7 @@ class YAMLParser(TreeSitterParser):
         return None
 
     def _extract_yaml_mapping_keys(
-        self, root: Node, parent_key: str, content: str
+        self, root: Node, parent_key: str, content: str  # noqa: ARG002
     ) -> list[str]:
         """Extract keys from a YAML mapping under a parent key."""
         # This is a simplified implementation
@@ -300,7 +300,7 @@ class YAMLParser(TreeSitterParser):
         return keys
 
     def _create_yaml_chunks(
-        self, file_path: Path, root: Node, content: str
+        self, file_path: Path, root: Node, content: str  # noqa: ARG002
     ) -> list[EntityChunk]:
         """Create searchable chunks from YAML content."""
         chunks = []

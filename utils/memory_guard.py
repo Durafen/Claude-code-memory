@@ -55,7 +55,7 @@ class BypassManager:
             with self.lock:
                 state = {"global_disabled": disabled}
                 self.state_file.write_text(json.dumps(state, indent=2))
-                
+
                 if disabled:
                     return "🔴 Memory Guard disabled globally"
                 else:
@@ -79,7 +79,7 @@ class BypassManager:
         try:
             if not self.state_file.exists():
                 return False
-            
+
             with self.lock:
                 state = json.loads(self.state_file.read_text())
                 return state.get("global_disabled", False)
@@ -257,7 +257,7 @@ class MemoryGuard:
             # Ensure logs directory exists
             logs_dir = base_dir / "logs"
             logs_dir.mkdir(exist_ok=True)
-            
+
             for log_file in log_files:
                 if not log_file.exists():
                     # Create the file with a header
@@ -613,7 +613,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                 if response.get("steps_summary"):
                     steps = response.get("steps_summary", [])
                     if steps:
-                        reason += f"\n\n🔍 ANALYSIS STEPS:\n"
+                        reason += "\n\n🔍 ANALYSIS STEPS:\n"
                         for i, step in enumerate(steps, 1):
                             reason += f"   {i}. {step}\n"
 

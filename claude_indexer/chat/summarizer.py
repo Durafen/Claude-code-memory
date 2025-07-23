@@ -311,7 +311,7 @@ Respond in JSON format:
         raise Exception("Max retries exceeded")
 
     def _parse_summary_response(
-        self, response: dict[str, Any], conversation: ChatConversation
+        self, response: dict[str, Any], conversation: ChatConversation  # noqa: ARG002
     ) -> SummaryResult:
         """Parse OpenAI response into SummaryResult."""
         summary = response.get("summary", "Conversation summary unavailable")

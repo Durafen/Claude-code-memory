@@ -200,10 +200,7 @@ def main():
 
     for project_dir in project_dirs:
         # Decode project path
-        if args.project:
-            project_path = args.project
-        else:
-            project_path = decode_project_path(project_dir.name)
+        project_path = args.project or decode_project_path(project_dir.name)
 
         if args.verbose:
             print(f"\nProcessing project: {project_path}")

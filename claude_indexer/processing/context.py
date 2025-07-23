@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 
-@dataclass  
+@dataclass
 class ProcessingContext:
     """Context information for content processing operations."""
 
@@ -17,7 +17,7 @@ class ProcessingContext:
     total_tokens: int = 0
     total_cost: float = 0.0
     total_requests: int = 0
-    
+
     def __post_init__(self):
         """Initialize mutable default values."""
         if self.files_being_processed is None:

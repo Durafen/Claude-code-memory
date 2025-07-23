@@ -142,7 +142,7 @@ else:
                 sys.exit(1)
 
             # Setup logging with collection-specific file logging and project path
-            logger = setup_logging(
+            setup_logging(
                 quiet=quiet,
                 verbose=verbose,
                 collection_name=collection,
@@ -247,7 +247,7 @@ else:
                     # Get total tracked files from state (not just current run)
                     state = indexer._load_state(collection)
                     total_tracked = len(
-                        [k for k in state.keys() if not k.startswith("_")]
+                        [k for k in state if not k.startswith("_")]
                     )
 
                     # Get file change details for this run
@@ -780,12 +780,12 @@ else:
         """Background service commands."""
         pass
 
-    @service.command()
+    @service.command("start")
     @common_options
     @click.option(
         "--config-file", type=click.Path(), help="Service configuration file path"
     )
-    def start(verbose, quiet, config, config_file):
+    def start_service(verbose, quiet, config, config_file):
         """Start the background indexing service."""
 
         try:
@@ -831,12 +831,12 @@ else:
             click.echo(f"❌ Error: {e}", err=True)
             sys.exit(1)
 
-    @service.command()
+    @service.command("status")
     @common_options
     @click.option(
         "--config-file", type=click.Path(), help="Service configuration file path"
     )
-    def status(verbose, quiet, config, config_file):
+    def service_status(verbose, quiet, config, config_file):
         """Show service status."""
 
         try:
@@ -904,10 +904,10 @@ else:
             click.echo(f"❌ Error: {e}", err=True)
             sys.exit(1)
 
-    @hooks.command()
+    @hooks.command("status")
     @project_options
     @common_options
-    def status(project, collection, verbose, quiet, config):
+    def hooks_status(project, collection, verbose, quiet, config):
         """Show git hooks status."""
 
         try:
@@ -1159,7 +1159,7 @@ else:
         """Chat history indexing and summarization commands."""
         pass
 
-    @chat.command()
+    @chat.command("index")
     @project_options
     @common_options
     @click.option(
@@ -1175,7 +1175,7 @@ else:
         default=1.0,
         help="Consider conversations inactive after N hours",
     )
-    def index(project, collection, verbose, quiet, config, limit, inactive_hours):
+    def chat_index(project, collection, verbose, quiet, config, limit, inactive_hours):
         """Index Claude Code chat history files for a project."""
         try:
             # Load configuration
@@ -1449,14 +1449,14 @@ Code Patterns: {", ".join(summary.code_patterns)}
                 traceback.print_exc()
             sys.exit(1)
 
-    @chat.command()
+    @chat.command("search")
     @project_options
     @common_options
     @click.argument("query")
     @click.option(
         "--limit", "-l", type=int, default=10, help="Maximum number of results"
     )
-    def search(project, collection, verbose, quiet, config, query, limit):
+    def chat_search(project, collection, verbose, quiet, config, query, limit):
         """Search indexed chat conversations by content."""
         try:
             # Load configuration and create components

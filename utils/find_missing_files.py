@@ -173,9 +173,9 @@ def compare_file_sets(
     in_both = qdrant_files & state_files
 
     return {
-        "in_qdrant_not_state": sorted(list(in_qdrant_not_state)),
-        "in_state_not_qdrant": sorted(list(in_state_not_qdrant)),
-        "in_both": sorted(list(in_both)),
+        "in_qdrant_not_state": sorted(in_qdrant_not_state),
+        "in_state_not_qdrant": sorted(in_state_not_qdrant),
+        "in_both": sorted(in_both),
     }
 
 
@@ -271,8 +271,8 @@ def main() -> int:
                     "collection_name": collection_name,
                     "qdrant_file_count": len(qdrant_files),
                     "state_file_count": len(state_files),
-                    "qdrant_files": sorted(list(qdrant_files)),
-                    "state_files": sorted(list(state_files)),
+                    "qdrant_files": sorted(qdrant_files),
+                    "state_files": sorted(state_files),
                     "comparison": comparison,
                 },
                 f,

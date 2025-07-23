@@ -171,7 +171,7 @@ class QdrantStatsCollector:
                         metadata = point.payload["metadata"]
                         if "file_path" in metadata and metadata["file_path"]:
                             file_path = metadata["file_path"]
-                    
+
                     # Track file extensions (will be deduplicated later)
 
             # Count unique files and their extensions
@@ -179,7 +179,7 @@ class QdrantStatsCollector:
             for point in all_points:
                 if not (hasattr(point, "payload") and point.payload):
                     continue
-                
+
                 file_path = None
                 # Check top-level file_path
                 if "file_path" in point.payload and point.payload["file_path"]:
@@ -189,10 +189,10 @@ class QdrantStatsCollector:
                     metadata = point.payload["metadata"]
                     if "file_path" in metadata and metadata["file_path"]:
                         file_path = metadata["file_path"]
-                
+
                 if file_path:
                     unique_files.add(file_path)
-            
+
             # Count extensions from unique files only
             file_extensions = Counter()
             for file_path in unique_files:
@@ -201,7 +201,7 @@ class QdrantStatsCollector:
                     file_extensions[ext] += 1
                 else:
                     file_extensions["no_extension"] += 1
-            
+
             total_files_count = len(unique_files)
 
             return {
@@ -319,10 +319,7 @@ class QdrantStatsCollector:
             observations and isinstance(observations, list) and len(observations) > 0
         ) or (content and isinstance(content, str) and len(content.strip()) > 0)
 
-        if not has_meaningful_content:
-            return False
-
-        return True
+        return has_meaningful_content
 
     def _get_health_status(self, stats: dict[str, Any]) -> str:
         """Determine comprehensive health status based on collection statistics."""
@@ -332,7 +329,7 @@ class QdrantStatsCollector:
         status = stats.get("status", "").upper()
         points_count = stats.get("points_count", 0)
         indexed_count = stats.get("indexed_vectors_count", 0)
-        segments_count = stats.get("segments_count", 0)
+        stats.get("segments_count", 0)
 
         # Handle all Qdrant status values
         if status == "GREEN":
@@ -666,24 +663,24 @@ class QdrantStatsCollector:
                             if state_file.exists():
                                 with open(state_file) as f:
                                     state_data = json.load(f)
-                                return len([k for k in state_data.keys() if not k.startswith("_")])
+                                return len([k for k in state_data if not k.startswith("_")])
                         break
-            
+
             # Fallback: search for state files - prioritize subdirectories for test collections
             search_paths = [
                 *list(Path.cwd().glob(f"*/*/.claude-indexer/{collection_name}.json")),
                 *list(Path.cwd().glob(f"*/.claude-indexer/{collection_name}.json")),
                 Path.cwd() / ".claude-indexer" / f"{collection_name}.json",
             ]
-            
+
             for state_path in search_paths:
                 if state_path.exists():
                     with open(state_path) as f:
                         state_data = json.load(f)
-                    count = len([k for k in state_data.keys() if not k.startswith("_")])
+                    count = len([k for k in state_data if not k.startswith("_")])
                     if count > 0:  # Return first non-empty state file
                         return count
-                        
+
         except Exception:
             pass
 
@@ -864,8 +861,8 @@ class QdrantStatsCollector:
 
         # Show health details with explanations
         health_details = stats.get("health_details", {})
-        health_status = stats.get("health_status", "UNKNOWN")
-        direct_api_health = stats.get("direct_api_health", {})
+        stats.get("health_status", "UNKNOWN")
+        stats.get("direct_api_health", {})
 
         if health_details:
             # Show simplified health metrics only

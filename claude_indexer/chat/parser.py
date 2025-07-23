@@ -195,7 +195,7 @@ class ChatParser:
         if timestamp is None:
             return None
 
-        if isinstance(timestamp, (int, float)):
+        if isinstance(timestamp, int | float):
             # Unix timestamp - return as naive datetime
             return datetime.fromtimestamp(timestamp)
         elif isinstance(timestamp, str):
@@ -207,7 +207,7 @@ class ChatParser:
                     # Convert to UTC then remove timezone info
                     dt = dt.replace(tzinfo=None)
                 return dt
-            except:
+            except Exception:
                 return None
 
         return None

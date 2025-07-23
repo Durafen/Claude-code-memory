@@ -239,7 +239,7 @@ class VoyageEmbedder(TiktokenMixin, RetryableEmbedder):
             tokens_per_text = actual_tokens // len(texts)
 
             results = []
-            for i, (text, embedding) in enumerate(
+            for _i, (text, embedding) in enumerate(
                 zip(texts, response.embeddings, strict=False)
             ):
                 results.append(

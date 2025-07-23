@@ -219,7 +219,7 @@ def qdrant_store(qdrant_client) -> "QdrantStore":
     try:
         from qdrant_client.models import FieldCondition, Filter, MatchValue
 
-        filter_obj = Filter(
+        Filter(
             must=[FieldCondition(key="test", match=MatchValue(value=True))]
         )
         # Note: collection_name should be passed from fixture if needed
@@ -280,7 +280,7 @@ class DummyEmbedder:
     def embed(self, texts: list[str]) -> list[np.ndarray]:
         """Generate deterministic embeddings based on text hash."""
         embeddings = []
-        for i, text in enumerate(texts):
+        for _i, text in enumerate(texts):
             # Create deterministic but unique embeddings
             seed = hash(text) % 10000
             np.random.seed(seed)
@@ -575,7 +575,7 @@ def wait_for_eventual_consistency(
             # Handle different return types
             if hasattr(results, "__len__"):
                 actual_count = len(results)
-            elif isinstance(results, (int, float)):
+            elif isinstance(results, int | float):
                 actual_count = int(results)
             else:
                 actual_count = 1 if results else 0

@@ -201,7 +201,7 @@ def run_indexing_with_shared_deletion(
         if not quiet and verbose:
             # Get total tracked files from state (after deletion)
             state = indexer._load_state(collection_name)
-            total_tracked = len([k for k in state.keys() if not k.startswith("_")])
+            total_tracked = len([k for k in state if not k.startswith("_")])
 
             # Get actual database counts AFTER deletion
             try:
@@ -306,7 +306,7 @@ def run_indexing_with_specific_files(
         bool: True if successful, False otherwise
     """
     try:
-        # Create common indexer components 
+        # Create common indexer components
         project, logger, config, embedder, vector_store, indexer = (
             _create_indexer_components(
                 project_path,
@@ -376,11 +376,10 @@ def run_indexing_with_specific_files(
         )
 
         # Handle any processing errors
-        if errors:
-            if not quiet:
-                logger.error("❌ Processing errors occurred:")
-                for error in errors:
-                    logger.error(f"   {error}")
+        if errors and not quiet:
+            logger.error("❌ Processing errors occurred:")
+            for error in errors:
+                logger.error(f"   {error}")
 
         # Store vectors if we have entities or relations
         storage_success = True
@@ -487,7 +486,7 @@ def run_indexing_with_specific_files(
 
                 # Get total tracked files from state (not just current run)
                 state = indexer._load_state(collection_name)
-                total_tracked = len([k for k in state.keys() if not k.startswith("_")])
+                total_tracked = len([k for k in state if not k.startswith("_")])
 
                 # Get actual database counts using direct Qdrant client
                 try:
@@ -794,7 +793,7 @@ def run_indexing(
                     # Get total tracked files from state (after deletion)
                     state = indexer._load_state(collection_name)
                     total_tracked = len(
-                        [k for k in state.keys() if not k.startswith("_")]
+                        [k for k in state if not k.startswith("_")]
                     )
 
                     # Get actual database counts AFTER deletion

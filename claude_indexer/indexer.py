@@ -898,7 +898,7 @@ class CoreIndexer:
             state = self._load_state(collection_name or "default")
             candidates = []
 
-            for state_file_path, metadata in state.items():
+            for state_file_path, _metadata in state.items():
                 if state_file_path.startswith("_"):  # Skip metadata keys
                     continue
 
@@ -1244,24 +1244,23 @@ class CoreIndexer:
         """
         # DEBUG: Print parameters to compare CLI vs Watcher calls
         if self.logger:
-            self.logger.debug(f"🚨 DEBUG _process_file_batch CALL:")
+            self.logger.debug("🚨 DEBUG _process_file_batch CALL:")
             self.logger.debug(f"🚨   files: {[str(f) for f in files]}")
             self.logger.debug(f"🚨   collection_name: {collection_name}")
             self.logger.debug(f"🚨   verbose: {_verbose}")
-            
+
             # Check if collection has existing data
             try:
-                from qdrant_client.http import models
                 if hasattr(self.vector_store, "backend"):
                     qdrant_client = self.vector_store.backend.client
                 else:
                     qdrant_client = self.vector_store.client
-                    
+
                 total_points = qdrant_client.count(collection_name).count
                 self.logger.debug(f"🚨   existing_points_in_collection: {total_points}")
             except Exception as e:
                 self.logger.debug(f"🚨   existing_points_check_failed: {e}")
-        
+
         all_entities: list[Entity] = []
         all_relations: list[Relation] = []
         all_implementation_chunks: list[EntityChunk] = []
@@ -1317,15 +1316,15 @@ class CoreIndexer:
                     successfully_processed_files.append(
                         file_path
                     )  # Track successful processing
-                    
+
                     # 🔧 DEBUG: Log entities extracted by parser for watcher bug debugging
                     if self.logger:
                         entity_details = [f"{getattr(e, 'entity_type', 'unknown')}:{e.name}" for e in result.entities]
                         self.logger.debug(f"🔧 PARSER OUTPUT: {file_path.name}")
                         self.logger.debug(f"🔧   Entities extracted: {entity_details}")
                         self.logger.debug(f"🔧   Total: {len(result.entities)} entities, {len(result.relations)} relations, {len(result.implementation_chunks or [])} chunks")
-                    
-                    self.logger.debug(
+
+                    self.logger.info(
                         f"  Found {len(result.entities)} entities, {len(result.relations)} relations, {len(result.implementation_chunks or [])} implementation chunks"
                     )
                 else:

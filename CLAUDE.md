@@ -1,6 +1,8 @@
 # CLAUDE.md
 
 **Test using CLI tools:** `claude-indexer index/watch/service --verbose` for comprehensive validation.
+**Main integration test:** `pytest tests/integration/test_index_check_complete.py -v -s -x` - 9-stage incremental indexing protocol. Logs: `debug/isolated_test/logs/parser-test.log`
+**Watcher test:** Add `--watcher` flag to above command. Watcher logs: `~/.claude-indexer/logs/service.log`
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 

@@ -392,7 +392,7 @@ class RelationProcessor(ContentProcessor):
         items: list,
         embedding_results: list,
         collection_name: str,
-        point_creation_method: str = "create_relation_chunk_point",
+        point_creation_method: str = "create_relation_chunk_point",  # noqa: ARG002
     ) -> tuple:
         """Override to handle relation chunk creation."""
         points = []

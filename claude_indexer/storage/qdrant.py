@@ -3,10 +3,14 @@
 import hashlib
 import time
 import warnings
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..indexer_logging import get_logger
 from .base import ManagedVectorStore, StorageResult, VectorPoint
+
+if TYPE_CHECKING:
+    from ..analysis.entities import EntityChunk, RelationChunk
+    from ..chat.parser import ChatChunk
 
 logger = get_logger()
 
@@ -90,7 +94,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         api_key: str = None,
         timeout: float = 60.0,
         auto_create_collections: bool = True,
-        **kwargs,
+        **kwargs,  # noqa: ARG002
     ):
         if not QDRANT_AVAILABLE:
             raise ImportError(
@@ -114,7 +118,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             # Test connection
             self.client.get_collections()
         except Exception as e:
-            raise ConnectionError(f"Failed to connect to Qdrant at {url}: {e}")
+            raise ConnectionError(f"Failed to connect to Qdrant at {url}: {e}") from None
 
     def create_collection(
         self, collection_name: str, vector_size: int, distance_metric: str = "cosine"
@@ -1688,7 +1692,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             return 0
 
     def _is_phantom_call_relation(
-        self, all_points: list, from_entity: str, to_entity: str, collection_name: str
+        self, all_points: list, from_entity: str, to_entity: str, collection_name: str  # noqa: ARG002
     ) -> bool:
         """Check if a call relation is phantom (entities exist but call doesn't).
 

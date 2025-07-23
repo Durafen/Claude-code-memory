@@ -49,7 +49,7 @@ class EmbedderRegistry:
             return embedder
 
         except Exception as e:
-            raise RuntimeError(f"Failed to create {provider} embedder: {e}")
+            raise RuntimeError(f"Failed to create {provider} embedder: {e}") from None
 
     def get_available_providers(self) -> list[str]:
         """Get list of available embedder providers."""

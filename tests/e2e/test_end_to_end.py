@@ -113,35 +113,36 @@ class TestCLIEndToEnd:
                 mock_file = Mock()
                 mock_file.__enter__ = Mock(return_value=mock_file)
                 mock_file.__exit__ = Mock(return_value=None)
-                with patch("builtins.open", Mock(return_value=mock_file)):
-                    with patch("json.dump", Mock()):
-                        mock_embedder.return_value = Mock()
-                        mock_store.return_value = Mock()
+                with patch("builtins.open", Mock(return_value=mock_file)), patch("json.dump", Mock()):
+                    mock_embedder.return_value = Mock()
+                    mock_store.return_value = Mock()
 
-                        # Test index command
-                        result = runner.invoke(
-                            cli.cli,
-                            [
-                                "index",
-                                "--project",
-                                str(temp_repo),
-                                "--collection",
-                                "test-collection",
-                            ],
-                        )
+                    # Test index command
+                    result = runner.invoke(
+                        cli.cli,
+                        [
+                            "index",
+                            "--project",
+                            str(temp_repo),
+                            "--collection",
+                            "test-collection",
+                        ],
+                    )
 
-                        # Should succeed and call indexer
-                        if result.exit_code != 0:
-                            print(f"Exit code: {result.exit_code}")
-                            print(f"Output: {result.output}")
-                            print(f"Exception: {result.exception}")
-                        assert result.exit_code == 0
-                        assert mock_indexer.index_project.called
+                    # Should succeed and call indexer
+                    if result.exit_code != 0:
+                        print(f"Exit code: {result.exit_code}")
+                        print(f"Output: {result.output}")
+                        print(f"Exception: {result.exception}")
+                    assert result.exit_code == 0
+                    assert mock_indexer.index_project.called
 
     def test_cli_search_command(self, temp_repo):
         """Test CLI search functionality."""
         try:
-            import click
+            import importlib.util
+            if importlib.util.find_spec("click") is None:
+                pytest.skip("Click not available for CLI testing")
             from click.testing import CliRunner
         except ImportError:
             pytest.skip("Click not available for CLI testing")
@@ -153,35 +154,34 @@ class TestCLIEndToEnd:
             "claude_indexer.cli_full.create_embedder_from_config"
         ) as mock_embedder_factory, patch(
             "claude_indexer.cli_full.create_store_from_config"
-        ) as mock_store_factory:
-            with patch("claude_indexer.cli_full.CoreIndexer") as mock_indexer_class:
-                # Configure mock embedder
-                mock_embedder = Mock()
-                mock_embedder.embed_single.return_value = [0.1] * 1536
-                mock_embedder_factory.return_value = mock_embedder
+        ) as mock_store_factory, patch("claude_indexer.cli_full.CoreIndexer") as mock_indexer_class:
+            # Configure mock embedder
+            mock_embedder = Mock()
+            mock_embedder.embed_single.return_value = [0.1] * 1536
+            mock_embedder_factory.return_value = mock_embedder
 
-                # Configure mock store
-                mock_store = Mock()
-                mock_store_factory.return_value = mock_store
+            # Configure mock store
+            mock_store = Mock()
+            mock_store_factory.return_value = mock_store
 
-                # Configure mock indexer with search results
-                mock_indexer = Mock()
-                search_results = [
-                    {
-                        "payload": {
-                            "name": "test_function",
-                            "file_path": "test.py",
-                            "line": 10,
-                        },
-                        "score": 0.95,
-                    }
-                ]
-                mock_indexer.search_similar.return_value = search_results
-                mock_indexer_class.return_value = mock_indexer
+            # Configure mock indexer with search results
+            mock_indexer = Mock()
+            search_results = [
+                {
+                    "payload": {
+                        "name": "test_function",
+                        "file_path": "test.py",
+                        "line": 10,
+                    },
+                    "score": 0.95,
+                }
+            ]
+            mock_indexer.search_similar.return_value = search_results
+            mock_indexer_class.return_value = mock_indexer
 
-                # Test search command
-                result = runner.invoke(
-                    cli.cli,
+            # Test search command
+            result = runner.invoke(
+                cli.cli,
                     [
                         "search",
                         "--project",

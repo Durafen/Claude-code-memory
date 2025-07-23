@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from ..analysis.entities import Entity
+from ..analysis.entities import Entity, Relation
 from ..storage.qdrant import ContentHashMixin
 
 

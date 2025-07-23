@@ -332,7 +332,7 @@ class IndexingService:
             logger.error(f"❌ Failed to stop watcher for {project_path}: {e}")
             return False
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum, frame):  # noqa: ARG002
         """Handle shutdown signals."""
         logger.info(f"\n📡 Received signal {signum}, shutting down gracefully...")
         self.running = False

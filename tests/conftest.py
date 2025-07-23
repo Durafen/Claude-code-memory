@@ -8,13 +8,6 @@ Provides test fixtures for:
 - Configuration management
 """
 
-def pytest_addoption(parser):
-    """Add custom command line option for watcher mode."""
-    parser.addoption(
-        "--watcher", action="store_true", default=False,
-        help="Run tests using watcher mode instead of incremental indexing"
-    )
-
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -23,6 +16,14 @@ import numpy as np
 import pytest
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
+
+
+def pytest_addoption(parser):
+    """Add custom command line option for watcher mode."""
+    parser.addoption(
+        "--watcher", action="store_true", default=False,
+        help="Run tests using watcher mode instead of incremental indexing"
+    )
 
 # Import project components
 try:
@@ -503,11 +504,10 @@ def cleanup_test_collections_on_failure():
             )  # deletion tests
         ]
 
+        import contextlib
         for collection_name in temp_test_collections:
-            try:
+            with contextlib.suppress(Exception):
                 client.delete_collection(collection_name)
-            except Exception:
-                pass  # Ignore individual failures
 
     except Exception:
         pass  # Ignore all cleanup failures to not interfere with test results
@@ -738,14 +738,13 @@ def verify_entity_searchable(
                 continue
 
             # Only match if search term is in the entity name (not just content)
-            if entity_name in entity_name_field:
-                if entity_name_field not in unique_entity_names:
-                    unique_entity_names.add(entity_name_field)
-                    matching_hits.append(hit)
-                    if verbose:
-                        print(
-                            f"DEBUG: Unique entity match - entity_name='{entity_name_field}', chunk_type='{chunk_type}'"
-                        )
+            if entity_name in entity_name_field and entity_name_field not in unique_entity_names:
+                unique_entity_names.add(entity_name_field)
+                matching_hits.append(hit)
+                if verbose:
+                    print(
+                        f"DEBUG: Unique entity match - entity_name='{entity_name_field}', chunk_type='{chunk_type}'"
+                    )
 
         if verbose:
             print(

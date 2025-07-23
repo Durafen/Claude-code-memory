@@ -42,7 +42,7 @@ class OpenAIEmbedder(TiktokenMixin, RetryableEmbedder):
         model: str = "text-embedding-3-small",
         max_retries: int = 3,
         base_delay: float = 1.0,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ARG002
     ) -> None:
         if not OPENAI_AVAILABLE:
             raise ImportError(

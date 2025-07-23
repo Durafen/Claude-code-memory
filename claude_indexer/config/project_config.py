@@ -47,7 +47,7 @@ class ProjectConfigManager:
 
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in project config: {e}")
-            raise ValueError(f"Invalid project config: {e}")
+            raise ValueError(f"Invalid project config: {e}") from None
         except Exception as e:
             logger.error(f"Failed to load project config: {e}")
             raise

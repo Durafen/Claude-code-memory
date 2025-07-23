@@ -1,5 +1,6 @@
 """Legacy settings.txt parsing for backward compatibility."""
 
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -46,11 +47,8 @@ def load_legacy_settings(settings_file: Path) -> dict[str, Any]:
                         value = value.lower() == "true"
                     # Convert numeric values (more robust check)
                     elif value.replace(".", "", 1).replace("-", "", 1).isdigit():
-                        try:
+                        with contextlib.suppress(ValueError):
                             value = float(raw_value) if "." in raw_value else int(raw_value)
-                        except ValueError:
-                            # Keep as string if conversion fails
-                            pass
 
                     # Map uppercase keys to lowercase field names
                     mapped_key = key_mapping.get(key, key)

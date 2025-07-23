@@ -139,7 +139,7 @@ exit 0
             return True
 
         except Exception as e:
-            raise RuntimeError(f"Failed to create hook script: {e}")
+            raise RuntimeError(f"Failed to create hook script: {e}") from None
 
     def uninstall_pre_commit_hook(self, quiet: bool = False) -> bool:
         """Remove the pre-commit hook."""

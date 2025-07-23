@@ -78,7 +78,7 @@ class ContentProcessor(ContentHashMixin, ABC):
             entity_path in context.files_being_processed
         )
 
-    def process_embeddings(self, items: list, item_name: str) -> tuple[list, dict]:
+    def process_embeddings(self, items: list, item_name: str) -> tuple[list, dict]:  # noqa: ARG002
         """Generate embeddings with error handling and cost tracking."""
         if not items:
             return [], {"tokens": 0, "cost": 0.0, "requests": 0}

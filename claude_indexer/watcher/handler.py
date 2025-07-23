@@ -99,7 +99,7 @@ class IndexingEventHandler(FileSystemEventHandler):
             self._handle_file_event(event.src_path, "deleted")
             self._handle_file_event(event.dest_path, "created")
 
-    def _handle_file_event(self, file_path: str, event_type: str) -> None:
+    def _handle_file_event(self, file_path: str, event_type: str) -> None:  # noqa: ARG002
         """Process a file system event by adding it to the coalescer."""
         self.events_received += 1
 

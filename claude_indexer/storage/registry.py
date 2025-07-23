@@ -46,7 +46,7 @@ class StorageRegistry:
             return store
 
         except Exception as e:
-            raise RuntimeError(f"Failed to create {backend} store: {e}")
+            raise RuntimeError(f"Failed to create {backend} store: {e}") from None
 
     def get_available_backends(self) -> list[str]:
         """Get list of available storage backends."""

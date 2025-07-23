@@ -398,6 +398,19 @@ class CachingVectorStore(VectorStore):
                 f"Backend {type(self.backend)} does not support _cleanup_orphaned_relations"
             )
 
+    def find_entities_for_file_by_type(
+        self, collection_name: str, file_path: str, chunk_types: list[str] = None
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Delegate entity finding by file and type to backend"""
+        if hasattr(self.backend, "find_entities_for_file_by_type"):
+            return self.backend.find_entities_for_file_by_type(
+                collection_name, file_path, chunk_types
+            )
+        else:
+            raise AttributeError(
+                f"Backend {type(self.backend)} does not support find_entities_for_file_by_type"
+            )
+
     def _scroll_collection(
         self,
         collection_name: str,

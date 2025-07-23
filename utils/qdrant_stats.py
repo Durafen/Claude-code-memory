@@ -133,8 +133,11 @@ class QdrantStatsCollector:
                         and "relation_type" in point.payload
                     )
 
-                    # v2.4 format only
-                    entity_type = point.payload.get("entity_type", "unknown")
+                    # Check both locations for entity_type (old: top-level, new: metadata.entity_type)
+                    entity_type = point.payload.get("entity_type")
+                    if not entity_type and "metadata" in point.payload and isinstance(point.payload["metadata"], dict):
+                        entity_type = point.payload["metadata"].get("entity_type")
+                    entity_type = entity_type or "unknown"
 
                     # Only count entity_type for non-relation entries
                     if not has_relation_structure:
@@ -160,23 +163,49 @@ class QdrantStatsCollector:
                         # Track manual entity types separately
                         manual_entity_types[entity_type] += 1
 
-                    # Count file extensions for file entities
-                    if entity_type == "file":
-                        # Check multiple possible file path fields
-                        file_path = (
-                            point.payload.get("entity_name", "")
-                            or point.payload.get("name", "")
-                            or point.payload.get("file_path", "")
-                        )
-                        if file_path:
-                            ext = Path(file_path).suffix.lower()
-                            if ext:
-                                file_extensions[ext] += 1
-                            else:
-                                file_extensions["no_extension"] += 1
+                    # Count file extensions for entities with file_path (check metadata field)
+                    file_path = None
+                    if "file_path" in point.payload and point.payload["file_path"]:
+                        file_path = point.payload["file_path"]
+                    elif "metadata" in point.payload and isinstance(point.payload["metadata"], dict):
+                        metadata = point.payload["metadata"]
+                        if "file_path" in metadata and metadata["file_path"]:
+                            file_path = metadata["file_path"]
+                    
+                    # Track file extensions (will be deduplicated later)
+
+            # Count unique files and their extensions
+            unique_files = set()
+            for point in all_points:
+                if not (hasattr(point, "payload") and point.payload):
+                    continue
+                
+                file_path = None
+                # Check top-level file_path
+                if "file_path" in point.payload and point.payload["file_path"]:
+                    file_path = point.payload["file_path"]
+                # Check metadata.file_path
+                elif "metadata" in point.payload and isinstance(point.payload["metadata"], dict):
+                    metadata = point.payload["metadata"]
+                    if "file_path" in metadata and metadata["file_path"]:
+                        file_path = metadata["file_path"]
+                
+                if file_path:
+                    unique_files.add(file_path)
+            
+            # Count extensions from unique files only
+            file_extensions = Counter()
+            for file_path in unique_files:
+                ext = Path(file_path).suffix.lower()
+                if ext:
+                    file_extensions[ext] += 1
+                else:
+                    file_extensions["no_extension"] += 1
+            
+            total_files_count = len(unique_files)
 
             return {
-                "total_files": entity_types.get("file", 0),
+                "total_files": total_files_count,
                 "entity_breakdown": dict(entity_types),
                 "chunk_type_breakdown": dict(chunk_types),
                 "manual_entity_breakdown": dict(manual_entity_types),
@@ -623,9 +652,8 @@ class QdrantStatsCollector:
     def _get_tracked_files_count(self, collection_name: str) -> int:
         """Get count of files actually tracked in indexer state files for this collection."""
         try:
-            # Get project path from config for project-specific state files
+            # Check config-registered projects first
             config_path = Path.home() / ".claude-indexer" / "config.json"
-            project_path = None
             if config_path.exists():
                 with open(config_path) as f:
                     config = json.load(f)
@@ -633,52 +661,31 @@ class QdrantStatsCollector:
                 for project in projects:
                     if project.get("collection") == collection_name:
                         project_path = Path(project.get("path", ""))
+                        if project_path.exists():
+                            state_file = project_path / ".claude-indexer" / f"{collection_name}.json"
+                            if state_file.exists():
+                                with open(state_file) as f:
+                                    state_data = json.load(f)
+                                return len([k for k in state_data.keys() if not k.startswith("_")])
                         break
-
-            # Check project-local state directory first
-            if project_path and project_path.exists():
-                project_state_dir = project_path / ".claude-indexer"
-                if project_state_dir.exists():
-                    # Look for state files with collection name
-                    for state_file in project_state_dir.glob(f"{collection_name}.json"):
-                        try:
-                            with open(state_file) as f:
-                                state_data = json.load(f)
-                            # Count file entries (exclude metadata keys)
-                            file_count = len(
-                                [k for k in state_data.keys() if not k.startswith("_")]
-                            )
-                            if file_count > 0:
-                                return file_count
-                        except Exception:
-                            continue
-
-        except Exception:
-            pass
-
-        # Enhanced fallback: search for state files in multiple locations
-        search_paths = [
-            Path.cwd() / ".claude-indexer" / f"{collection_name}.json",
-            # Search in parent directories up to 3 levels
-            Path.cwd().parent / ".claude-indexer" / f"{collection_name}.json",
-            Path.cwd().parent.parent / ".claude-indexer" / f"{collection_name}.json",
-            # Search in subdirectories (for cases like mcp-qdrant-memory)
-            *list(Path.cwd().glob(f"*/.claude-indexer/{collection_name}.json")),
-            # Search recursively up to 2 levels deep
-            *list(Path.cwd().glob(f"*/*/.claude-indexer/{collection_name}.json")),
-        ]
-
-        for state_path in search_paths:
-            if state_path.exists():
-                try:
+            
+            # Fallback: search for state files - prioritize subdirectories for test collections
+            search_paths = [
+                *list(Path.cwd().glob(f"*/*/.claude-indexer/{collection_name}.json")),
+                *list(Path.cwd().glob(f"*/.claude-indexer/{collection_name}.json")),
+                Path.cwd() / ".claude-indexer" / f"{collection_name}.json",
+            ]
+            
+            for state_path in search_paths:
+                if state_path.exists():
                     with open(state_path) as f:
                         state_data = json.load(f)
-                    # Count file entries (exclude metadata keys)
                     count = len([k for k in state_data.keys() if not k.startswith("_")])
-                    if count > 0:
+                    if count > 0:  # Return first non-empty state file
                         return count
-                except Exception:
-                    continue
+                        
+        except Exception:
+            pass
 
         return 0
 

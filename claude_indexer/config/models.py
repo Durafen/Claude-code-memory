@@ -45,6 +45,12 @@ class IndexerConfig(BaseModel):
             ".git/",
             ".venv/",
             "node_modules/",
+            ".env",
+            "*.log",
+            ".DS_Store",
+            "qdrant_storage/",
+            "package-lock.json",
+            ".claude-indexer/",
         ]
     )
 
@@ -81,7 +87,7 @@ class FilePatterns(BaseModel):
     """File patterns for include/exclude."""
 
     include: list[str] = Field(default_factory=list)
-    exclude: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=lambda: ["debug/", "debug/*"])
 
     @validator("include", "exclude")
     def validate_patterns(cls, v: Any) -> list[str]:

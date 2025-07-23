@@ -288,7 +288,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     entity_name = point.payload.get("entity_name", "unknown")
                     entity_type = point.payload.get("entity_type", "unknown")
                     chunk_type = point.payload.get("chunk_type", "unknown")
-                    file_path = point.payload.get("file_path", "unknown")
+                    file_path = point.payload.get("metadata", {}).get("file_path", "unknown")
                     logger.warning(
                         f"       - {chunk_type} {entity_type}: {entity_name} ({file_path})"
                     )
@@ -815,8 +815,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 for point in all_points:
                     # Auto-generated entities have file_path
                     if (
-                        "file_path" in point.payload
-                        and point.payload["file_path"]
+                        point.payload.get("metadata", {}).get("file_path")
                         or (
                             "entity_name" in point.payload
                             and "relation_target" in point.payload
@@ -1093,7 +1092,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     should=[
                         # Find entities with file_path matching
                         models.FieldCondition(
-                            key="file_path", match=models.MatchValue(value=file_path)
+                            key="metadata.file_path", match=models.MatchValue(value=file_path)
                         ),
                         # Find File entities where entity_name = file_path (with fallback to name)
                         models.FieldCondition(
@@ -1162,23 +1161,87 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
 
         return results
 
+    def find_entities_for_file_by_type(
+        self, collection_name: str, file_path: str, chunk_types: list[str] = None
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Find entities for file grouped by chunk type for targeted replacement.
+        
+        Args:
+            collection_name: Name of the collection to search
+            file_path: Path of the file to find entities for
+            chunk_types: List of chunk types to filter by. Defaults to ["metadata", "implementation", "relation"]
+            
+        Returns:
+            Dictionary mapping chunk_type to list of entities:
+            {"metadata": [...], "implementation": [...], "relation": [...]}
+        """
+        if chunk_types is None:
+            chunk_types = ["metadata", "implementation", "relation"]
+        
+        results = {}
+        
+        try:
+            from qdrant_client import models
+            
+            for chunk_type in chunk_types:
+                filter_conditions = models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="chunk_type", match=models.MatchValue(value=chunk_type)
+                        ),
+                        models.FieldCondition(
+                            key="metadata.file_path", match=models.MatchValue(value=file_path)
+                        )
+                    ]
+                )
+                
+                points = self._scroll_collection(
+                    collection_name=collection_name,
+                    scroll_filter=filter_conditions,
+                    limit=1000,
+                    with_vectors=False,
+                    handle_pagination=True,
+                )
+                
+                results[chunk_type] = [
+                    {
+                        "id": point.id,
+                        "entity_name": point.payload.get("entity_name", ""),
+                        "entity_type": point.payload.get("entity_type", "unknown"),
+                        "chunk_type": chunk_type,
+                        "payload": point.payload
+                    }
+                    for point in points
+                ]
+        
+        except Exception as e:
+            # Log error and return empty results for all chunk types
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.error(f"Error in find_entities_for_file_by_type for {file_path}: {e}")
+            results = {chunk_type: [] for chunk_type in chunk_types}
+        
+        return results
+
     def _should_run_cleanup(self, collection_name: str, force: bool = False) -> bool:
         """Check if orphan cleanup should run based on timer interval."""
         if force:
             return True
 
-        # Load cleanup interval from config (default 1 minute)
-        try:
-            from ..config.config_loader import ConfigLoader
-
-            config = ConfigLoader().load()
-            interval_minutes = getattr(config, "cleanup_interval_minutes", 1)
-        except Exception:
-            interval_minutes = 1  # Fallback default
-
-        # 0 means disabled timer (always run - original behavior)
-        if interval_minutes == 0:
-            return True
+        # TEMPORARY FIX: Disable timer to always run cleanup (fixes stale relations bug)
+        # TODO: Re-enable timer after fixing orphan cleanup scope limitations
+        return True  # Always run cleanup for now
+        
+        # Load cleanup interval from config (default 1 minute) - COMMENTED OUT
+        # try:
+        #     from ..config.config_loader import ConfigLoader
+        #     config = ConfigLoader().load()
+        #     interval_minutes = getattr(config, "cleanup_interval_minutes", 1)
+        # except Exception:
+        #     interval_minutes = 1  # Fallback default
+        # 
+        # # 0 means disabled timer (always run - original behavior)
+        # if interval_minutes == 0:
+        #     return True
 
         # Check last cleanup timestamp
         try:
@@ -1272,6 +1335,9 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
 
         if verbose:
             logger.debug("🔍 Scanning collection for orphaned relations...")
+        
+        # ENHANCED DEBUG: Always log key information for phantom relation debugging
+        logger.debug(f"Starting cleanup for collection '{collection_name}' (force={force})")
 
         try:
             # Check if collection exists
@@ -1315,11 +1381,15 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                                 f"   ⚠️ Point without name: type={point.payload.get('type')}, chunk_type={point.payload.get('chunk_type')}, keys={list(point.payload.keys())[:5]}"
                             )
 
+            # ENHANCED DEBUG: Always log for debugging phantom relations
+            logger.info(
+                f"   📊 Found {entity_count} entities, {len(relations)} relations, {other_count} other points"
+            )
+            if entity_names:
+                logger.debug(f"Sample entity names: {list(entity_names)[:5]}...")
+            
             if verbose:
-                logger.debug(
-                    f"   📊 Found {entity_count} entities, {len(relations)} relations, {other_count} other points"
-                )
-                logger.debug(f"   📊 Sample entity names: {list(entity_names)[:5]}...")
+                logger.debug(f"   📊 Additional verbose details available")
 
             if not relations:
                 if verbose:
@@ -1330,6 +1400,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
 
             # Check each relation for orphaned references with consistent snapshot
             orphaned_relations = []
+            phantom_relations = []  # NEW: Track phantom call relations
             valid_relations = 0
             file_ref_relations = 0
 
@@ -1436,19 +1507,20 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 resolution_cache[module_name] = result
                 return result
 
-            # Debug: Log first few relations to understand the data
-            if verbose and len(relations) > 0:
-                logger.debug("   📊 Sample relations being checked:")
-                for i, rel in enumerate(relations[:3]):
+            # ENHANCED DEBUG: Always log sample relations for debugging
+            if len(relations) > 0:
+                logger.debug("Sample relations being checked:")
+                for i, rel in enumerate(relations[:5]):  # Show 5 instead of 3
                     from_e = rel.payload.get("entity_name", "")
                     to_e = rel.payload.get("relation_target", "")
+                    rel_type = rel.payload.get("relation_type", "")
                     imp_type = rel.payload.get("import_type", "none")
                     logger.debug(
-                        f"      Relation {i}: {from_e} -> {to_e} [import_type: {imp_type}]"
+                        f"Relation {i+1}: {from_e} --{rel_type}--> {to_e} [import_type: {imp_type}]"
                     )
 
             logger.debug(
-                f"🔍 DEBUG: Checking {len(relations)} relations against {len(entity_names)} entities"
+                f"Checking {len(relations)} relations against {len(entity_names)} entities"
             )
 
             # Progress tracking
@@ -1522,16 +1594,31 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                         f"   🔍 ORPHAN (target missing): {from_entity} -> {to_entity} [import_type: {imp_type}]"
                     )
                 else:
-                    valid_relations += 1
-                    if is_file_reference:
-                        file_ref_relations += 1
-                        if (
-                            verbose and file_ref_relations <= 5
-                        ):  # Log first few file refs
-                            imp_type = relation.payload.get("import_type", "none")
+                    # NEW: Check for phantom call relations (both entities exist but call is stale)
+                    relation_type = relation.payload.get("relation_type", "")
+                    if relation_type == "calls" and not from_missing and not to_missing:
+                        # Both entities exist but we need to verify the call still exists in implementation
+                        is_phantom = self._is_phantom_call_relation(
+                            all_points, from_entity, to_entity, collection_name
+                        )
+                        if is_phantom:
+                            phantom_relations.append(relation)
                             logger.debug(
-                                f"   ✅ VALID file ref: {from_entity} -> {to_entity} [import_type: {imp_type}]"
+                                f"PHANTOM (stale call): {from_entity} -> {to_entity}"
                             )
+                        else:
+                            valid_relations += 1
+                    else:
+                        valid_relations += 1
+                        if is_file_reference:
+                            file_ref_relations += 1
+                            if (
+                                verbose and file_ref_relations <= 5
+                            ):  # Log first few file refs
+                                imp_type = relation.payload.get("import_type", "none")
+                                logger.debug(
+                                    f"   ✅ VALID file ref: {from_entity} -> {to_entity} [import_type: {imp_type}]"
+                                )
 
                 # Log progress every 5 seconds or every 1000 relations
                 current_time = time.time()
@@ -1563,31 +1650,97 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     else "N/A"
                 )
 
-            # Batch delete orphaned relations if found
-            if orphaned_relations:
-                relation_ids = [r.id for r in orphaned_relations]
+            # Combine orphaned and phantom relations for deletion
+            all_stale_relations = orphaned_relations + phantom_relations
+            total_to_delete = len(all_stale_relations)
+            
+            # Batch delete stale relations if found
+            if all_stale_relations:
+                relation_ids = [r.id for r in all_stale_relations]
                 delete_result = self.delete_points(collection_name, relation_ids)
 
                 if delete_result.success:
+                    # ENHANCED DEBUG: Always log successful deletions
+                    logger.info(
+                        f"🗑️  Successfully deleted {total_to_delete} stale relations: {len(orphaned_relations)} orphaned + {len(phantom_relations)} phantom"
+                    )
                     if verbose:
                         logger.debug(
-                            f"🗑️  Deleted {len(orphaned_relations)} orphaned relations"
+                            f"🗑️  Deleted {total_to_delete} relations ({len(orphaned_relations)} orphaned + {len(phantom_relations)} phantom)"
                         )
                     # Update cleanup timestamp after successful cleanup
                     self._update_cleanup_timestamp(collection_name)
-                    return len(orphaned_relations)
+                    return total_to_delete
                 else:
                     logger.debug(
-                        f"❌ Failed to delete orphaned relations: {delete_result.errors}"
+                        f"❌ Failed to delete stale relations: {delete_result.errors}"
                     )
                     return 0
             else:
                 if verbose:
-                    logger.debug("   No orphaned relations found")
-                # Update cleanup timestamp even when no orphans found (successful scan)
+                    logger.debug("   No stale relations found")
+                # Update cleanup timestamp even when no stale relations found (successful scan)
                 self._update_cleanup_timestamp(collection_name)
                 return 0
 
         except Exception as e:
             logger.debug(f"❌ Error during orphaned relation cleanup: {e}")
             return 0
+
+    def _is_phantom_call_relation(
+        self, all_points: list, from_entity: str, to_entity: str, collection_name: str
+    ) -> bool:
+        """Check if a call relation is phantom (entities exist but call doesn't).
+        
+        Args:
+            all_points: All points from the collection for efficient lookup
+            from_entity: Source entity name 
+            to_entity: Target entity name
+            collection_name: Collection name for debugging
+            
+        Returns:
+            True if the call relation is phantom (stale), False if legitimate
+        """
+        try:
+            # Find implementation chunks for the source entity
+            source_implementations = [
+                point for point in all_points
+                if (point.payload.get("entity_name") == from_entity 
+                    and point.payload.get("chunk_type") == "implementation")
+            ]
+            
+            if not source_implementations:
+                # No implementation found - might be external entity, keep relation
+                logger.debug(f"   🔍 No implementation found for {from_entity}, keeping relation")
+                return False
+            
+            # Check if any implementation chunk contains the function call
+            for impl_point in source_implementations:
+                content = impl_point.payload.get("content", "")
+                
+                # Simple heuristic: look for the target function being called in the content
+                # This catches most cases like: load_user_data(username, path)
+                if to_entity in content:
+                    # Additional check: make sure it's actually a function call, not just a comment
+                    lines = content.split('\n')
+                    for line in lines:
+                        # Skip comments and strings
+                        if '#' in line:
+                            comment_index = line.find('#')
+                            code_part = line[:comment_index]
+                        else:
+                            code_part = line
+                        
+                        # Look for function call pattern: target_function(
+                        if f"{to_entity}(" in code_part:
+                            logger.debug(f"   ✅ Found legitimate call: {from_entity} -> {to_entity}")
+                            return False
+            
+            # No legitimate call found in any implementation
+            logger.debug(f"   👻 Phantom call detected: {from_entity} -> {to_entity} (call not found in implementation)")
+            return True
+            
+        except Exception as e:
+            logger.debug(f"   ⚠️ Error checking phantom relation {from_entity} -> {to_entity}: {e}")
+            # On error, keep the relation (safer than deleting)
+            return False

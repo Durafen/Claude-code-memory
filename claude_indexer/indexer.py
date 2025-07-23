@@ -561,7 +561,7 @@ class CoreIndexer:
                 result.processed_files = [str(f) for f in successfully_processed]
 
                 # Clean up orphaned relations after processing files (both full and incremental modes)
-                if successfully_processed:
+                if successfully_processed or result.entities or result.relations:
                     logger.info("🧹 === ORPHAN CLEANUP TRIGGERED ===")
                     logger.info(f"   Mode: {'INCREMENTAL' if incremental else 'FULL'}")
                     logger.info(f"   Files processed: {len(successfully_processed)}")
@@ -1032,7 +1032,7 @@ class CoreIndexer:
             # Process first batch
             for point in points:
                 payload = point.payload if hasattr(point, "payload") else {}
-                file_path = payload.get("file_path")
+                file_path = payload.get("metadata", {}).get("file_path")
                 if file_path:
                     # Convert to relative path for consistency
                     try:
@@ -1057,7 +1057,7 @@ class CoreIndexer:
 
                 for point in points:
                     payload = point.payload if hasattr(point, "payload") else {}
-                    file_path = payload.get("file_path")
+                    file_path = payload.get("metadata", {}).get("file_path")
                     if file_path:
                         try:
                             rel_path = str(
@@ -1242,6 +1242,26 @@ class CoreIndexer:
         Returns:
             Tuple of (entities, relations, implementation_chunks, errors, successfully_processed_files)
         """
+        # DEBUG: Print parameters to compare CLI vs Watcher calls
+        if self.logger:
+            self.logger.debug(f"🚨 DEBUG _process_file_batch CALL:")
+            self.logger.debug(f"🚨   files: {[str(f) for f in files]}")
+            self.logger.debug(f"🚨   collection_name: {collection_name}")
+            self.logger.debug(f"🚨   verbose: {_verbose}")
+            
+            # Check if collection has existing data
+            try:
+                from qdrant_client.http import models
+                if hasattr(self.vector_store, "backend"):
+                    qdrant_client = self.vector_store.backend.client
+                else:
+                    qdrant_client = self.vector_store.client
+                    
+                total_points = qdrant_client.count(collection_name).count
+                self.logger.debug(f"🚨   existing_points_in_collection: {total_points}")
+            except Exception as e:
+                self.logger.debug(f"🚨   existing_points_check_failed: {e}")
+        
         all_entities: list[Entity] = []
         all_relations: list[Relation] = []
         all_implementation_chunks: list[EntityChunk] = []
@@ -1297,6 +1317,14 @@ class CoreIndexer:
                     successfully_processed_files.append(
                         file_path
                     )  # Track successful processing
+                    
+                    # 🔧 DEBUG: Log entities extracted by parser for watcher bug debugging
+                    if self.logger:
+                        entity_details = [f"{getattr(e, 'entity_type', 'unknown')}:{e.name}" for e in result.entities]
+                        self.logger.debug(f"🔧 PARSER OUTPUT: {file_path.name}")
+                        self.logger.debug(f"🔧   Entities extracted: {entity_details}")
+                        self.logger.debug(f"🔧   Total: {len(result.entities)} entities, {len(result.relations)} relations, {len(result.implementation_chunks or [])} chunks")
+                    
                     self.logger.debug(
                         f"  Found {len(result.entities)} entities, {len(result.relations)} relations, {len(result.implementation_chunks or [])} implementation chunks"
                     )

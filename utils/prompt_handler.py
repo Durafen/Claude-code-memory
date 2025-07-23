@@ -75,6 +75,11 @@ if __name__ == "__main__":
         # Output result
         print(json.dumps(result))
         
+        # Display notification in UI using stderr + exit code 2
+        if "notification" in result:
+            print(result["notification"], file=sys.stderr)
+            sys.exit(2)
+        
     except Exception as e:
         # Fallback error handling
         result = {
@@ -82,3 +87,5 @@ if __name__ == "__main__":
             "notification": f"Error in prompt handler: {str(e)}"
         }
         print(json.dumps(result))
+        print(result["notification"], file=sys.stderr)
+        sys.exit(2)

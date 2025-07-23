@@ -35,6 +35,7 @@
         "*.min.js",
         ".env",
         "*.log",
+        ".DS_Store",
         ".mypy_cache/",
         "qdrant_storage/",
         "backups/",
@@ -47,7 +48,8 @@
         "debug/",
         "memories.md",
         "memory_guard_debug.txt",
-        "memory_guard_debug_*.txt"
+        "memory_guard_debug_*.txt",
+        "package-lock.json"
       ]
     },
     "max_file_size": 1048576,

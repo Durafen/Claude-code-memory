@@ -79,34 +79,39 @@ class ObservationExtractor:
             if exceptions:
                 observations.append(f"Handles: {', '.join(exceptions)}")
 
-            # 5. Extract return patterns
+            # 5. Extract return type annotation (Tree-sitter)
+            return_type = self._extract_return_type_annotation(node, source_code)
+            if return_type:
+                observations.append(f"-> {return_type}")
+
+            # 6. Extract return patterns
             return_info = self._extract_return_patterns(node, source_code)
             if return_info:
                 observations.append(f"Returns: {return_info}")
 
-            # 6. Extract parameter patterns
+            # 7. Extract parameter patterns
             param_info = self._extract_parameter_patterns(node, source_code)
             if param_info:
                 observations.append(f"Parameters: {param_info}")
 
-            # 7. Extract decorators (behavior modifiers)
+            # 8. Extract decorators (behavior modifiers)
             decorators = self._extract_decorators(node, source_code)
             for decorator in decorators:
                 observations.append(f"Decorator: {decorator}")
 
-            # 8. Extract complexity indicators
+            # 9. Extract complexity indicators
             complexity = self._calculate_complexity(node, source_code)
             if complexity > 5:  # Only note if significantly complex
                 observations.append(f"Complexity: {complexity} (high)")
             elif complexity >= 2:  # Include moderate complexity
                 observations.append(f"Complexity: {complexity} (moderate)")
 
-            # 9. Extract framework patterns
+            # 10. Extract framework patterns
             frameworks = self._extract_framework_patterns(node, source_code)
             if frameworks:
                 observations.append(f"Framework: {', '.join(frameworks)}")
 
-            # 10. Extract async patterns
+            # 11. Extract async patterns
             async_patterns = self._extract_async_patterns(node, source_code)
             if async_patterns:
                 observations.append(f"Async: {', '.join(async_patterns)}")
@@ -577,17 +582,40 @@ class ObservationExtractor:
             # Look for parameters node (Python) or formal_parameters node (JavaScript)
             for child in node.children:
                 if child.type in ["parameters", "formal_parameters"]:
-                    param_count = len(
-                        [c for c in child.children if c.type == "identifier"]
-                    )
-                    if param_count > 0:
-                        # Extract parameter names for richer context
-                        param_names = [
-                            source_code[c.start_byte : c.end_byte]
-                            for c in child.children
-                            if c.type == "identifier"
-                        ]
+                    param_names = []
+                    
+                    # Process all parameter children
+                    for param_child in child.children:
+                        if param_child.type == "identifier":
+                            # Simple parameter (like 'self')
+                            param_name = source_code[param_child.start_byte : param_child.end_byte]
+                            param_names.append(param_name)
+                        elif param_child.type == "typed_parameter":
+                            # Parameter with type annotation (like 'username: str')
+                            param_full = source_code[param_child.start_byte : param_child.end_byte]
+                            param_names.append(param_full)
+                        elif param_child.type == "typed_default_parameter":
+                            # Parameter with type annotation and default value (like 'db_path: str = None')
+                            param_full = source_code[param_child.start_byte : param_child.end_byte]
+                            param_names.append(param_full)
+                    
+                    if param_names:
+                        param_count = len(param_names)
                         return f"{param_count} parameters: {', '.join(param_names)}"
+            return None
+        except Exception:
+            return None
+
+    def _extract_return_type_annotation(
+        self, node: "tree_sitter.Node", source_code: str
+    ) -> str | None:
+        """Extract return type annotation from function signature."""
+        try:
+            # Look for return type (Python uses 'type' node after '->' token)
+            for child in node.children:
+                if child.type == "type":
+                    return_type = source_code[child.start_byte : child.end_byte]
+                    return return_type
             return None
         except Exception:
             return None
@@ -856,7 +884,7 @@ class ObservationExtractor:
                                         return_type = sig_str.split("->")[-1].strip()
                                         if return_type and return_type != "None":
                                             type_observations.append(
-                                                f"Returns type: {return_type}"
+                                                f"-> {return_type}"
                                             )
 
                                 # Get parameter types

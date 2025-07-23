@@ -287,6 +287,7 @@ def run_indexing_with_specific_files(
     quiet: bool = False,
     verbose: bool = False,
     config_file: str | None = None,
+    skip_change_detection: bool = False,
 ) -> bool:
     """Run indexing with specific file paths, bypassing file discovery.
 
@@ -305,7 +306,7 @@ def run_indexing_with_specific_files(
         bool: True if successful, False otherwise
     """
     try:
-        # Create common indexer components with debug logging enabled
+        # Create common indexer components 
         project, logger, config, embedder, vector_store, indexer = (
             _create_indexer_components(
                 project_path,
@@ -313,7 +314,7 @@ def run_indexing_with_specific_files(
                 quiet,
                 verbose,
                 config_file,
-                enable_debug_logging=True,
+                enable_debug_logging=verbose,
             )
         )
         if indexer is None:
@@ -330,6 +331,15 @@ def run_indexing_with_specific_files(
         if not paths_to_process:
             if not quiet:
                 logger.info("✅ No files to process")
+            # Ensure collection exists even when no files to process (critical for watcher startup)
+            # Get correct vector size from embedder (handle caching wrapper)
+            if hasattr(embedder, 'embedder'):
+                # CachingEmbedder wrapper - get from underlying embedder
+                vector_size = embedder.embedder.dimension()
+            else:
+                # Direct embedder
+                vector_size = embedder.dimension()
+            indexer.vector_store.backend.ensure_collection(collection_name, vector_size)
             return True
 
         if not quiet and verbose:
@@ -348,7 +358,7 @@ def run_indexing_with_specific_files(
 
         # RACE CONDITION FIX: Capture file state BEFORE processing for atomic consistency
         pre_captured_states = None
-        if paths_to_process:
+        if paths_to_process and not skip_change_detection:
             from datetime import datetime
             logger.info(
                 f"🔒 PRE-CAPTURE: Taking atomic file state snapshot at {datetime.now().strftime('%H:%M:%S.%f')[:-3]}"
@@ -357,6 +367,8 @@ def run_indexing_with_specific_files(
             logger.info(
                 f"🔒 PRE-CAPTURE: Captured {len(pre_captured_states)} file states for atomic consistency"
             )
+        elif skip_change_detection and verbose:
+            logger.info("🚀 BYPASS: Skipping change detection for watcher-triggered files")
 
         # Process files directly using batch processing
         entities, relations, implementation_chunks, errors, actually_processed_files = (
@@ -429,7 +441,7 @@ def run_indexing_with_specific_files(
             )
 
             # Clean up orphaned relations after processing
-            if incremental and successfully_processed:
+            if incremental and (successfully_processed or entities or relations):
                 if verbose:
                     logger.info(
                         f"🔍 Cleaning up orphaned relations after processing {len(successfully_processed)} files"
@@ -861,6 +873,15 @@ def run_indexing(
         if not files_to_process:
             if not quiet:
                 logger.info("✅ No files to process")
+            # Ensure collection exists even when no files to process (critical for watcher startup)
+            # Get correct vector size from embedder (handle caching wrapper)
+            if hasattr(embedder, 'embedder'):
+                # CachingEmbedder wrapper - get from underlying embedder
+                vector_size = embedder.embedder.dimension()
+            else:
+                # Direct embedder
+                vector_size = embedder.dimension()
+            indexer.vector_store.backend.ensure_collection(collection_name, vector_size)
             return True
 
         # Delegate to the specific files function

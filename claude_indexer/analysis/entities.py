@@ -73,7 +73,7 @@ class EntityChunk:
             "content": self.content,
             "content_hash": ContentHashMixin.compute_content_hash(self.content),
             "created_at": datetime.now().isoformat(),
-            **self.metadata,
+            "metadata": self.metadata,
         }
         return payload
 
@@ -194,11 +194,9 @@ class RelationChunk:
         if self.confidence != 1.0:
             payload["confidence"] = self.confidence
 
-        # Include metadata fields (especially import_type for import relations)
+        # Include metadata as nested object
         if self.metadata:
-            for key, value in self.metadata.items():
-                if key not in payload:  # Don't override existing fields
-                    payload[key] = value
+            payload["metadata"] = self.metadata
 
         return payload
 

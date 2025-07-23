@@ -106,6 +106,11 @@ class IndexingEventHandler(FileSystemEventHandler):
         try:
             path = Path(file_path)
 
+            # Fast exclude check for .claude-indexer/ files before expensive pattern matching
+            if '.claude-indexer/' in file_path:
+                self.events_ignored += 1
+                return
+
             # Check if we should process this file
             if not self._should_process_file(path):
                 self.events_ignored += 1
@@ -147,11 +152,6 @@ class IndexingEventHandler(FileSystemEventHandler):
             logger = get_logger()
             logger.info(f"🔄 Auto-indexing ({event_type}): {relative_path}")
 
-            # Use Git+Meta optimized single-file indexing instead of batch processing
-            # This provides content deduplication and skips unchanged files
-            if not hasattr(self, "_indexer"):
-                self._indexer = self._create_indexer()
-
             # Use main.py session summary display (same as CLI runs)
             from ..main import run_indexing_with_specific_files
 
@@ -161,6 +161,7 @@ class IndexingEventHandler(FileSystemEventHandler):
                 [path],
                 quiet=False,  # Always show summary output, even in non-verbose mode
                 verbose=self.verbose,
+                skip_change_detection=True,  # Bypass expensive hash checking for watcher
             )
 
             if success:
@@ -225,6 +226,7 @@ class IndexingEventHandler(FileSystemEventHandler):
                     unique_existing_paths,
                     quiet=False,  # Always show summary output, even in non-verbose mode
                     verbose=self.verbose,
+                    skip_change_detection=True,  # Bypass expensive hash checking for watcher
                 )
 
                 if success:
@@ -353,6 +355,7 @@ class IndexingEventHandler(FileSystemEventHandler):
             self.processed_files = set(list(self.processed_files)[-5000:])
 
 
+
 class Watcher:
     """Unified watcher class using IndexingEventHandler for reliable file watching."""
 
@@ -430,11 +433,15 @@ class Watcher:
                 "exclude_patterns",
                 [
                     "*.pyc",
-                    "__pycache__",
-                    ".git",
-                    ".venv",
-                    "node_modules",
-                    "qdrant_storage",
+                    "__pycache__/",
+                    ".git/",
+                    ".venv/",
+                    "node_modules/",
+                    ".env",
+                    "*.log",
+                    ".DS_Store",
+                    "qdrant_storage/",
+                    "package-lock.json",
                 ],
             )
             print("⚠️  Watcher using FALLBACK patterns:")

@@ -8,6 +8,13 @@ Provides test fixtures for:
 - Configuration management
 """
 
+def pytest_addoption(parser):
+    """Add custom command line option for watcher mode."""
+    parser.addoption(
+        "--watcher", action="store_true", default=False,
+        help="Run tests using watcher mode instead of incremental indexing"
+    )
+
 import os
 from collections.abc import Iterator
 from pathlib import Path

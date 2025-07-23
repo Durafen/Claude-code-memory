@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Test files in `debug/` are automatically ignored by git and indexer
 - Never contaminate production collections with test data
 - Examples: `debug/test_parser.py`, `debug/test_relations.py`, `debug/test_collections/parser-test`
+- **Use Desktop Commander tools (`mcp__desktop-commander__write_file`, `mcp__desktop-commander__edit_block`) for ALL file operations in debug/ folder**
 
 # Claude Code Memory Solution
 

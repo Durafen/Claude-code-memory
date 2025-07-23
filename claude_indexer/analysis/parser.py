@@ -336,20 +336,14 @@ class PythonParser(CodeParser):
 
             # Enhanced variable extraction for new patterns
             elif node.type == "with_statement":
-                # Extract context manager variables
-                if current_context != "function_definition":
-                    context_variables = self._extract_variables_from_context_manager(
-                        node, file_path
-                    )
-                    entities.extend(context_variables)
+                # Skip context manager variables - these are temporary local variables
+                # that shouldn't be indexed as entities
+                pass
 
             elif node.type == "except_clause":
-                # Extract exception handler variables
-                if current_context != "function_definition":
-                    exception_variables = (
-                        self._extract_variables_from_exception_handler(node, file_path)
-                    )
-                    entities.extend(exception_variables)
+                # Skip exception handler variables - these are temporary local variables
+                # that shouldn't be indexed as entities (e.g., 'e' from 'except ... as e:')
+                pass
 
             elif node.type == "named_expression":
                 # Extract walrus operator variables
@@ -612,73 +606,11 @@ class PythonParser(CodeParser):
 
         return variables
 
-    def _extract_variables_from_context_manager(
-        self, node: "tree_sitter.Node", file_path: Path
-    ) -> list["Entity"]:
-        """Extract variables from with statements (context managers)."""
-        variables = []
-        line_number = node.start_point[0] + 1
-        end_line = node.end_point[0] + 1
+# Note: Context manager variables are now properly excluded from indexing
+    # as they are temporary local variables that shouldn't be indexed as entities
 
-        def traverse_for_as_pattern_targets(current_node: Any) -> None:
-            if current_node.type == "as_pattern_target":
-                for child in current_node.children:
-                    if child.type == "identifier":
-                        var_name = child.text.decode("utf-8") if child.text else ""
-                        entity = Entity(
-                            name=var_name,
-                            entity_type=EntityType.VARIABLE,
-                            observations=[
-                                f"Variable: {var_name}",
-                                f"Context manager variable in: {file_path}",
-                                f"Line: {line_number}",
-                            ],
-                            file_path=file_path,
-                            line_number=line_number,
-                            end_line_number=end_line,
-                        )
-                        variables.append(entity)
-                        break
-
-            for child in current_node.children:
-                traverse_for_as_pattern_targets(child)
-
-        traverse_for_as_pattern_targets(node)
-        return variables
-
-    def _extract_variables_from_exception_handler(
-        self, node: "tree_sitter.Node", file_path: Path
-    ) -> list["Entity"]:
-        """Extract variables from except clauses."""
-        variables = []
-        line_number = node.start_point[0] + 1
-        end_line = node.end_point[0] + 1
-
-        def traverse_for_exception_vars(current_node: Any) -> None:
-            if current_node.type == "as_pattern_target":
-                for child in current_node.children:
-                    if child.type == "identifier":
-                        var_name = child.text.decode("utf-8") if child.text else ""
-                        entity = Entity(
-                            name=var_name,
-                            entity_type=EntityType.VARIABLE,
-                            observations=[
-                                f"Variable: {var_name}",
-                                f"Exception handler variable in: {file_path}",
-                                f"Line: {line_number}",
-                            ],
-                            file_path=file_path,
-                            line_number=line_number,
-                            end_line_number=end_line,
-                        )
-                        variables.append(entity)
-                        break
-
-            for child in current_node.children:
-                traverse_for_exception_vars(child)
-
-        traverse_for_exception_vars(node)
-        return variables
+# Note: Exception handler variables (e.g., 'e' from 'except ... as e:') are now 
+# correctly excluded from indexing as they are temporary local variables
 
     def _extract_variables_from_walrus(
         self, node: "tree_sitter.Node", file_path: Path
@@ -902,7 +834,9 @@ class PythonParser(CodeParser):
                     parts = line[7:].split(",")
                     for part in parts:
                         module = part.strip().split(" as ")[0].strip()
-                        if self._is_internal_import(
+                        # Filter out file modes that aren't real imports
+                        file_modes = {'r', 'w', 'a', 'x', 'b', 't', 'rb', 'wb', 'ab', 'rt', 'wt', 'at', 'r+', 'w+', 'a+', 'x+'}
+                        if module not in file_modes and self._is_internal_import(
                             module, file_path, self.project_path
                         ):
                             import_names.add(module)
@@ -912,7 +846,9 @@ class PythonParser(CodeParser):
                     # Handle: from pathlib import Path
                     if " import " in line:
                         module = line.split(" import ")[0][5:].strip()
-                        if self._is_internal_import(
+                        # Filter out file modes that aren't real imports
+                        file_modes = {'r', 'w', 'a', 'x', 'b', 't', 'rb', 'wb', 'ab', 'rt', 'wt', 'at', 'r+', 'w+', 'a+', 'x+'}
+                        if module not in file_modes and self._is_internal_import(
                             module, file_path, self.project_path
                         ):
                             import_names.add(module)
@@ -1091,7 +1027,7 @@ class PythonParser(CodeParser):
                     semantic_metadata = {
                         "inferred_types": self._get_type_hints(definition),
                         "calls": self._extract_function_calls_from_source(
-                            implementation
+                            implementation, node.type
                         ),
                         "imports_used": self._extract_imports_used_in_source(
                             implementation
@@ -1106,7 +1042,7 @@ class PythonParser(CodeParser):
                 else:
                     semantic_metadata = {
                         "calls": self._extract_function_calls_from_source(
-                            implementation
+                            implementation, node.type
                         ),
                         "imports_used": [],
                         "exceptions_handled": [],
@@ -1115,7 +1051,7 @@ class PythonParser(CodeParser):
             except Exception:
                 # Fallback to basic analysis
                 semantic_metadata = {
-                    "calls": self._extract_function_calls_from_source(implementation),
+                    "calls": self._extract_function_calls_from_source(implementation, node.type),
                     "imports_used": [],
                     "exceptions_handled": [],
                     "complexity": implementation.count("\n") + 1,  # Simple line count
@@ -1171,19 +1107,47 @@ class PythonParser(CodeParser):
         except:
             return {}
 
-    def _extract_function_calls_from_source(self, source: str) -> list[str]:
+    def _extract_function_calls_from_source(self, source: str, node_type: str = "function") -> list[str]:
         """Extract function calls from source code using regex."""
 
         # Split source into lines to filter out function definitions
         lines = source.split("\n")
 
-        # Filter out function definition lines that start with 'def '
-        filtered_lines = []
-        for line in lines:
-            stripped = line.strip()
-            # Skip lines that are function definitions
-            if not stripped.startswith("def "):
-                filtered_lines.append(line)
+        # For classes: filter out method bodies to avoid double-counting
+        if node_type == "class_definition":
+            filtered_lines = []
+            in_method = False
+            method_indent = 0
+            
+            for line in lines:
+                stripped = line.strip()
+                current_indent = len(line) - len(line.lstrip())
+                
+                # Detect method start
+                if stripped.startswith("def "):
+                    in_method = True
+                    method_indent = current_indent
+                    continue  # Skip method definition line
+                
+                # Skip method body lines (higher indent than method definition)
+                if in_method and current_indent > method_indent:
+                    continue
+                    
+                # End of method body (back to class level or less)
+                if in_method and current_indent <= method_indent and stripped:
+                    in_method = False
+                    
+                # Keep class-level lines
+                if not in_method:
+                    filtered_lines.append(line)
+        else:
+            # For functions: filter out function definition lines that start with 'def '
+            filtered_lines = []
+            for line in lines:
+                stripped = line.strip()
+                # Skip lines that are function definitions
+                if not stripped.startswith("def "):
+                    filtered_lines.append(line)
 
         # Rejoin the filtered source
         filtered_source = "\n".join(filtered_lines)
@@ -1307,24 +1271,31 @@ class PythonParser(CodeParser):
                                 if arg.type == "string":
                                     file_ref = extract_string_literal(arg)
                                     if file_ref:
-                                        relation = (
-                                            RelationFactory.create_imports_relation(
-                                                importer=str(file_path),
-                                                imported=file_ref,
-                                                import_type=op_type,
+                                        # Filter out file modes that shouldn't be relation targets
+                                        file_modes = {
+                                            "r", "w", "a", "x", "b", "t",
+                                            "rb", "wb", "ab", "rt", "wt", "at",
+                                            "r+", "w+", "a+", "x+",
+                                        }
+                                        if file_ref not in file_modes:
+                                            relation = (
+                                                RelationFactory.create_imports_relation(
+                                                    importer=str(file_path),
+                                                    imported=file_ref,
+                                                    import_type=op_type,
+                                                )
                                             )
-                                        )
-                                        relations.append(relation)
-                                        # Truncate long content for cleaner logs
-                                        display_ref = (
-                                            file_ref[:50] + "..."
-                                            if len(file_ref) > 50
-                                            else file_ref
-                                        )
-                                        logger.debug(
-                                            f"   ✅ Created {op_type} relation: {file_path} -> {display_ref}"
-                                        )
-                                        # logger.debug(f"      Relation has import_type: {relation.metadata.get('import_type', 'MISSING')}")
+                                            relations.append(relation)
+                                            # Truncate long content for cleaner logs
+                                            display_ref = (
+                                                file_ref[:50] + "..."
+                                                if len(file_ref) > 50
+                                                else file_ref
+                                            )
+                                            logger.debug(
+                                                f"   ✅ Created {op_type} relation: {file_path} -> {display_ref}"
+                                            )
+                                            # logger.debug(f"      Relation has import_type: {relation.metadata.get('import_type', 'MISSING')}")
                                         break
 
                     # Handle method calls on objects (e.g., df.to_json())
@@ -1338,21 +1309,28 @@ class PythonParser(CodeParser):
                                     if arg.type == "string":
                                         file_ref = extract_string_literal(arg)
                                         if file_ref:
-                                            relation = (
-                                                RelationFactory.create_imports_relation(
-                                                    importer=str(file_path),
-                                                    imported=file_ref,
-                                                    import_type=FILE_OPERATIONS[
-                                                        method_name
-                                                    ],
+                                            # Filter out file modes that shouldn't be relation targets
+                                            file_modes = {
+                                                "r", "w", "a", "x", "b", "t",
+                                                "rb", "wb", "ab", "rt", "wt", "at",
+                                                "r+", "w+", "a+", "x+",
+                                            }
+                                            if file_ref not in file_modes:
+                                                relation = (
+                                                    RelationFactory.create_imports_relation(
+                                                        importer=str(file_path),
+                                                        imported=file_ref,
+                                                        import_type=FILE_OPERATIONS[
+                                                            method_name
+                                                        ],
+                                                    )
                                                 )
-                                            )
-                                            relations.append(relation)
-                                            logger.debug(
-                                                f"   ✅ Created DataFrame {FILE_OPERATIONS[method_name]} relation: {file_path} -> {file_ref}"
-                                            )
-                                            # logger.debug(f"      Method: {method_name}, import_type: {relation.metadata.get('import_type', 'MISSING')}")
-                                            break
+                                                relations.append(relation)
+                                                logger.debug(
+                                                    f"   ✅ Created DataFrame {FILE_OPERATIONS[method_name]} relation: {file_path} -> {file_ref}"
+                                                )
+                                                # logger.debug(f"      Method: {method_name}, import_type: {relation.metadata.get('import_type', 'MISSING')}")
+                                                break
 
                     # Special handling for open() built-in
                     if func_text == "open":
@@ -1414,13 +1392,20 @@ class PythonParser(CodeParser):
                                             if arg.type == "string":
                                                 file_ref = extract_string_literal(arg)
                                                 if file_ref:
-                                                    relation = RelationFactory.create_imports_relation(
-                                                        importer=str(file_path),
-                                                        imported=file_ref,
-                                                        import_type="path_open",
-                                                    )
-                                                    relations.append(relation)
-                                                    break
+                                                    # Filter out file modes that shouldn't be relation targets
+                                                    file_modes = {
+                                                        "r", "w", "a", "x", "b", "t",
+                                                        "rb", "wb", "ab", "rt", "wt", "at",
+                                                        "r+", "w+", "a+", "x+",
+                                                    }
+                                                    if file_ref not in file_modes:
+                                                        relation = RelationFactory.create_imports_relation(
+                                                            importer=str(file_path),
+                                                            imported=file_ref,
+                                                            import_type="path_open",
+                                                        )
+                                                        relations.append(relation)
+                                                        break
                                     break
                             parent = parent.parent
 
@@ -1467,11 +1452,19 @@ class PythonParser(CodeParser):
 
         # Get entity names from current batch for validation
         entity_names = {entity.name for entity in entities} if entities else set()
+        
+        # 🐛 DEBUG: Track chunks and their call metadata
+        logger.debug(f"🔍 PHANTOM DEBUG: Processing {len(chunks)} chunks for relations")
+        logger.debug(f"🔍 PHANTOM DEBUG: Current entity names: {sorted(entity_names)}")
 
         for chunk in chunks:
             if chunk.chunk_type == "implementation":
                 # Only process function calls from semantic metadata
                 calls = chunk.metadata.get("semantic_metadata", {}).get("calls", [])
+                
+                # 🐛 DEBUG: Log chunk details
+                if calls:
+                    logger.debug(f"🔍 PHANTOM DEBUG: Chunk {chunk.entity_name} has calls: {calls}")
 
                 for called_name in calls:
                     # Only create relations to entities we actually indexed
@@ -1485,12 +1478,13 @@ class PythonParser(CodeParser):
                         )
                         relations.append(relation)
                         logger.debug(
-                            f"Created CALLS relation: {chunk.entity_name} -> {called_name}"
+                            f"🔍 PHANTOM DEBUG: Created CALLS relation: {chunk.entity_name} -> {called_name} [CURRENT ENTITY]"
                         )
                     else:
-                        # logger.debug(f"Skipped non-entity call: {chunk.entity_name} -> {called_name}")
-                        pass
+                        # 🐛 DEBUG: Log phantom call attempts
+                        logger.debug(f"🔍 PHANTOM DEBUG: Skipped call {chunk.entity_name} -> {called_name} [NOT IN CURRENT ENTITIES]")
 
+        logger.debug(f"🔍 PHANTOM DEBUG: Created {len(relations)} total relations from chunks")
         return relations
 
 

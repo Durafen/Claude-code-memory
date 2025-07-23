@@ -667,13 +667,15 @@ else:
                 ]
                 exclude_patterns = [
                     "*.pyc",
-                    "__pycache__",
-                    ".git",
-                    ".venv",
-                    "node_modules",
+                    "__pycache__/",
+                    ".git/",
+                    ".venv/",
+                    "node_modules/",
                     ".env",
                     "*.log",
-                    "qdrant_storage",
+                    ".DS_Store",
+                    "qdrant_storage/",
+                    "package-lock.json",
                 ]
 
             # Load service configuration for other settings
@@ -1016,8 +1018,8 @@ else:
                         )
                         click.echo(f"   Type: {entity_type}")
 
-                        if "file_path" in payload:
-                            click.echo(f"   File: {payload['file_path']}")
+                        if payload.get("metadata", {}).get("file_path"):
+                            click.echo(f"   File: {payload.get('metadata', {}).get('file_path')}")
 
                         if "observations" in payload:
                             obs = payload["observations"][:2]  # First 2 observations

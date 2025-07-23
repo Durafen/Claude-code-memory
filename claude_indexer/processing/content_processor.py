@@ -50,6 +50,34 @@ class ContentProcessor(ContentHashMixin, ABC):
             return item.to_vector_payload().get("content_hash", "")
         return ""
 
+    def _get_existing_entities_for_file(
+        self, collection_name: str, file_path: str, chunk_type: str
+    ) -> list[str]:
+        """Get existing entity IDs for file and chunk type."""
+        if hasattr(self.vector_store, 'find_entities_for_file_by_type'):
+            entities_by_type = self.vector_store.find_entities_for_file_by_type(
+                collection_name, file_path, [chunk_type]
+            )
+            entity_ids = [entity["id"] for entity in entities_by_type.get(chunk_type, [])]
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.debug(f"🔍 DEBUG: _get_existing_entities_for_file found {len(entity_ids)} entities for {file_path}::{chunk_type}")
+                for eid in entity_ids[:5]:  # Show first 5
+                    self.logger.debug(f"🔍 DEBUG: Entity ID: {eid}")
+            return entity_ids
+        return []
+    
+    def _should_replace_file_entities(self, entity_file_path: str, context: "ProcessingContext") -> bool:
+        """Determine if file entities should be replaced."""
+        from pathlib import Path
+        
+        # Convert string path to Path for comparison since files_being_processed contains Path objects
+        entity_path = Path(entity_file_path)
+        
+        return (
+            context.replacement_mode and 
+            entity_path in context.files_being_processed
+        )
+
     def process_embeddings(self, items: list, item_name: str) -> tuple[list, dict]:
         """Generate embeddings with error handling and cost tracking."""
         if not items:

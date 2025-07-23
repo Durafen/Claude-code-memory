@@ -290,6 +290,10 @@ class VoyageEmbedder(TiktokenMixin, RetryableEmbedder):
         """Get maximum token limit for input text."""
         return int(self.model_config["max_tokens"])
 
+    def dimension(self) -> int:
+        """Get the dimension of embeddings for the current model."""
+        return self.model_config["dimensions"]
+
     def get_usage_stats(self) -> dict[str, Any]:
         """Get usage statistics."""
         current_time = time.time()

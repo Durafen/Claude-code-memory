@@ -14,6 +14,7 @@ Claude Code Hook Response Schema:
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -33,8 +34,7 @@ except ImportError:
     from utils.code_analyzer import CodeAnalyzer
 
 # Configuration
-DEBUG_ENABLED = True
-DEBUG_LOG_FILE = "memory_guard_debug.txt"
+DEBUG_ENABLED = os.getenv("MEMORY_GUARD_DEBUG", "true").lower() == "true"
 
 
 class BypassManager:
@@ -217,9 +217,9 @@ class MemoryGuard:
         """Get the current debug log file to use."""
         try:
             log_files = [
-                base_dir / "memory_guard_debug_1.txt",
-                base_dir / "memory_guard_debug_2.txt",
-                base_dir / "memory_guard_debug_3.txt",
+                base_dir / "logs" / "memory_guard_1.log",
+                base_dir / "logs" / "memory_guard_2.log",
+                base_dir / "logs" / "memory_guard_3.log",
             ]
 
             if is_new_run:
@@ -242,24 +242,28 @@ class MemoryGuard:
                 return newest
 
         except Exception:
-            return base_dir / "memory_guard_debug_1.txt"  # Fallback
+            return base_dir / "logs" / "memory_guard_1.log"  # Fallback
 
     def _ensure_debug_files_exist(self) -> None:
         """Create all three debug log files if they don't exist."""
         try:
             base_dir = self.project_root if self.project_root else Path.cwd()
             log_files = [
-                base_dir / "memory_guard_debug_1.txt",
-                base_dir / "memory_guard_debug_2.txt",
-                base_dir / "memory_guard_debug_3.txt",
+                base_dir / "logs" / "memory_guard_1.log",
+                base_dir / "logs" / "memory_guard_2.log",
+                base_dir / "logs" / "memory_guard_3.log",
             ]
 
+            # Ensure logs directory exists
+            logs_dir = base_dir / "logs"
+            logs_dir.mkdir(exist_ok=True)
+            
             for log_file in log_files:
                 if not log_file.exists():
                     # Create the file with a header
                     log_file.touch()
                     with open(log_file, "w") as f:
-                        f.write(f"# Memory Guard Debug Log - {log_file.name}\n")
+                        f.write(f"# Memory Guard Log - {log_file.name}\n")
                         f.write(
                             f"# Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
                         )
@@ -460,18 +464,22 @@ OPERATION CONTEXT:
 2. Search for existing implementations, patterns, and related functionality
 3. Analyze completeness: missing error cases, validations, edge cases
 4. Check integration: dependencies, API contracts, data flows
-5. Verify preservation: ensure existing features remain functional
-6. EXCLUDE ALL MANUAL ENTRIES AND DOCUMENTATION:
+5. Verify flow integrity: function usage, dependency impact, breaking changes
+6. Verify preservation: ensure existing features remain functional
+7. EXCLUDE ALL MANUAL ENTRIES AND DOCUMENTATION:
    - IGNORE: documentation files (.md, .txt, .markdown, .rst)
    - IGNORE: manual entries (debugging_pattern, implementation_pattern, integration_pattern, configuration_pattern, architecture_pattern, performance_pattern, knowledge_insight, active_issue, ideas)
    - IGNORE: any human-created analysis, notes, or patterns
-   - FOCUS ONLY ON: actual code implementations (functions, classes, interfaces)
+   - IGNORE: test/debug files (tests/, debug/, *test*, *debug*) - not production code
+   - FOCUS ONLY ON: actual production code implementations (functions, classes, interfaces)
 
 🎯 ANALYSIS STRATEGY:
 - Use entityTypes filters: ["metadata", "function", "class"] for overview
 - Use entityTypes=["implementation"] for detailed code analysis
+- Use entityTypes=["relation"] for dependency analysis
 - Search for related patterns: error handling, validation, similar flows
 - Look for dependencies and integration points
+- Check function usage with read_graph(entity="function_name", mode="relationships")
 - Check for existing feature implementations
 
 📋 RESPONSE FORMAT (JSON only):
@@ -479,12 +487,12 @@ OPERATION CONTEXT:
 
 For BLOCKING (quality issues found): {{
   "hasIssues": true,
-  "issueType": "duplication|logic|flow|feature",
+  "issueType": "duplication|logic|flow|feature|dependency",
   "reason": "Specific issue description with location and impact",
   "suggestion": "Concrete recommendation to fix the issue",
   "debug": "2-3 sentences: What you found + Why it's problematic + What should be done",
   "turns_used": "number of turns for analysis",
-  "steps_summary": ["search_similar: <query>", "read_graph: <entity>", "search_similar: <refinement>"]
+  "steps_summary": ["search_similar(query='<query>', entityTypes=['<types>'], limit=<n>)", "read_graph(entity='<entity>', mode='<mode>')", "search_similar(query='<refinement>', entityTypes=['<types>'])"]
 }}
 
 For APPROVING (no quality issues): {{
@@ -493,7 +501,7 @@ For APPROVING (no quality issues): {{
   "reason": "Your analysis of why this code is acceptable",
   "debug": "Your detailed analysis findings",
   "turns_used": "number of turns for analysis",
-  "steps_summary": ["search_similar: <query>", "read_graph: <entity>", "search_similar: <refinement>"]
+  "steps_summary": ["search_similar(query='<query>', entityTypes=['<types>'], limit=<n>)", "read_graph(entity='<entity>', mode='<mode>')", "search_similar(query='<refinement>', entityTypes=['<types>'])"]
 }}
 
 🚨 CRITICAL: Thoroughly analyze ALL four quality dimensions. Only approve if code passes ALL checks.
@@ -689,7 +697,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             decision_info += f"- Should Block: {should_block}\n"
             decision_info += f"- Decision: {result.get('decision', 'approve')}\n"
             decision_info += f"- Reason: {reason}\n"
-            decision_info += f"- Claude Response: {claude_response}\n"
+            decision_info += f"- Claude Response:\n{json.dumps(claude_response, indent=2)}\n"
             self.save_debug_info(decision_info)
 
         except Exception as e:

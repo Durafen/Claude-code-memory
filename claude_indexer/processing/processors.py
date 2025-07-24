@@ -34,7 +34,14 @@ class EntityProcessor(ContentProcessor):
                 entity.entity_type.value == 'documentation'):
                 continue
 
-            has_implementation = entity.name in context.implementation_entity_names
+            # BUGFIX: Import entities should NEVER have has_implementation=true
+            # regardless of name collisions with classes/functions
+            if entity.entity_type.value == 'import':
+                has_implementation = False
+            else:
+                has_implementation = entity.name in context.implementation_entity_names
+            
+            
             from ..analysis.entities import EntityChunk
 
             metadata_chunk = EntityChunk.create_metadata_chunk(

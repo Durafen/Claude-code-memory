@@ -72,6 +72,15 @@ class UnifiedContentProcessor:
             implementation_entity_names = {
                 chunk.entity_name for chunk in implementation_chunks
             }
+        
+        # DEBUG: Track implementation_entity_names population
+        if self.logger:
+            self.logger.debug(f"🔍 UNIFIED PROCESSOR DEBUG:")
+            self.logger.debug(f"🔍   implementation_chunks count: {len(implementation_chunks) if implementation_chunks else 0}")
+            self.logger.debug(f"🔍   implementation_entity_names: {sorted(implementation_entity_names)}")
+            self.logger.debug(f"🔍   entities count: {len(entities)}")
+            import_entities = [e for e in entities if hasattr(e, 'entity_type') and e.entity_type.value == 'import']
+            self.logger.debug(f"🔍   import_entities: {[e.name for e in import_entities]}")
 
         # Phase 2: Create enhanced processing context
         context = ProcessingContext(

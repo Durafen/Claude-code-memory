@@ -427,6 +427,22 @@ class CoreIndexer:
                 result.processing_time = time.time() - start_time
                 return result
 
+            # DEBUG: Log all configuration before processing
+            if self.logger:
+                self.logger.debug(f"🔍 INDEXER CONFIG DEBUG:")
+                self.logger.debug(f"🔍   collection_name: {collection_name}")
+                self.logger.debug(f"🔍   project_path: {self.project_path}")
+                self.logger.debug(f"🔍   verbose: {verbose}")
+                self.logger.debug(f"🔍   include_patterns: {self.config.include_patterns}")
+                self.logger.debug(f"🔍   exclude_patterns: {self.config.exclude_patterns}")
+                self.logger.debug(f"🔍   include_markdown: {self.config.include_markdown}")
+                self.logger.debug(f"🔍   include_tests: {self.config.include_tests}")
+                self.logger.debug(f"🔍   max_file_size: {self.config.max_file_size}")
+                self.logger.debug(f"🔍   batch_size: {self.config.batch_size}")
+                self.logger.debug(f"🔍   parser registry: {type(self.parser_registry).__name__}")
+                self.logger.debug(f"🔍   vector_store: {type(self.vector_store).__name__ if self.vector_store else 'None'}")
+                self.logger.debug(f"🔍   embedder: {type(self.embedder).__name__ if self.embedder else 'None'}")
+
             self.logger.info(f"Found {len(files_to_process)} files to process")
 
             # Process files in batches with progressive disclosure support
@@ -1309,6 +1325,18 @@ class CoreIndexer:
                     file_path, batch_callback, global_entity_names=global_entity_names
                 )
 
+                # DEBUG: Show parse result details
+                self.logger.debug(f"🔍 PARSE RESULT DEBUG for {file_path.name}:")
+                self.logger.debug(f"🔍   result.success: {result.success}")
+                self.logger.debug(f"🔍   result.errors: {getattr(result, 'errors', 'No errors attribute')}")
+                if hasattr(result, 'error_message'):
+                    self.logger.debug(f"🔍   result.error_message: {result.error_message}")
+                
+                # DEBUG: Track execution flow - where do entities go next?
+                self.logger.debug(f"🔍 FLOW DEBUG: {file_path.name} parse successful, entities will go to:")
+                self.logger.debug(f"🔍   - all_entities.extend() - no processing")
+                self.logger.debug(f"🔍   - Direct storage without unified processor")
+
                 if result.success:
                     all_entities.extend(result.entities)
                     all_relations.extend(result.relations)
@@ -1399,8 +1427,7 @@ class CoreIndexer:
             processor = UnifiedContentProcessor(
                 self.vector_store, self.embedder, logger
             )
-
-            # Single call replacing ~200 lines of duplicated logic (NEW)
+            
             result = processor.process_all_content(
                 collection_name,
                 entities,

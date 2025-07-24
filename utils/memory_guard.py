@@ -517,8 +517,8 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                 else Path.cwd() / ".claude"
             )
 
-            # Allow specific MCP memory tools
-            allowed_tools = f"{self.mcp_collection}search_similar,{self.mcp_collection}read_graph,{self.mcp_collection}get_implementation"
+            # Allow specific MCP memory tools plus read-only analysis tools
+            allowed_tools = f"Read,LS,Bash(ls:*),Glob,Grep,WebFetch,WebSearch,{self.mcp_collection}search_similar,{self.mcp_collection}read_graph,{self.mcp_collection}get_implementation,mcp__github__*"
 
             result = subprocess.run(
                 [

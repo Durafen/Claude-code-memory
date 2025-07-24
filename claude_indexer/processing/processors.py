@@ -34,9 +34,9 @@ class EntityProcessor(ContentProcessor):
                 entity.entity_type.value == 'documentation'):
                 continue
 
-            # BUGFIX: Import entities should NEVER have has_implementation=true
+            # BUGFIX: Import, variable, and constant entities should NEVER have has_implementation=true
             # regardless of name collisions with classes/functions
-            if entity.entity_type.value == 'import':
+            if entity.entity_type.value in ['import', 'variable', 'constant']:
                 has_implementation = False
             else:
                 has_implementation = entity.name in context.implementation_entity_names

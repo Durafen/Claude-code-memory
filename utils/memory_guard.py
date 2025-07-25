@@ -132,38 +132,93 @@ class EntityExtractor:
 class MemoryGuard:
     """Comprehensive code quality gate - checks duplication, logic, flow integrity, and feature preservation."""
 
-    def __init__(self):
+    def __init__(self, hook_data: dict[str, Any] | None = None):
         self.extractor = EntityExtractor()
-        self.project_root = self._detect_project_root()
-        self.project_name = self.project_root.name if self.project_root else "unknown"
-        self.mcp_collection = self._detect_mcp_collection()
-        self.bypass_manager = BypassManager(self.project_root)
         self.code_analyzer = CodeAnalyzer()
-
+        
+        # Early project detection using hook data or current directory
+        self.project_root = None
+        self.project_name = "unknown"
+        self.mcp_collection = "mcp__project-memory__"
+        self.bypass_manager = None
+        
+        # Attempt early project detection
+        self._early_project_detection(hook_data)
+        
         # Ensure all three debug log files exist (only if debug is enabled)
         if DEBUG_ENABLED:
             self._ensure_debug_files_exist()
 
-    def _detect_project_root(self) -> Path | None:
-        """Detect the project root directory."""
+    def _early_project_detection(self, hook_data: dict[str, Any] | None = None) -> None:
+        """Attempt early project detection from hook data or current directory."""
         try:
-            # Start from current working directory
-            current = Path.cwd()
+            file_path = None
+            
+            # Try to get file path from hook data
+            if hook_data:
+                tool_input = hook_data.get("tool_input", {})
+                file_path = tool_input.get("file_path", "")
+                
+                # Also try working directory from hook data
+                if not file_path:
+                    file_path = hook_data.get("cwd", "")
+            
+            # Detect project root
+            detected_root = self._detect_project_root(file_path if file_path else None)
+            
+            if detected_root:
+                self.project_root = detected_root
+                self.project_name = detected_root.name
+                self.mcp_collection = self._detect_mcp_collection()
+                
+                # Initialize bypass manager early
+                self.bypass_manager = BypassManager(self.project_root)
+            else:
+                # Fallback: try to detect from current working directory
+                self.project_root = self._detect_project_root()
+                if self.project_root:
+                    self.project_name = self.project_root.name
+                    self.mcp_collection = self._detect_mcp_collection()
+                    self.bypass_manager = BypassManager(self.project_root)
+                    
+        except Exception:
+            # If detection fails, we'll retry later in process_hook
+            pass
 
-            # Look for common project markers
-            markers = [
-                ".git",
-                "pyproject.toml",
-                "setup.py",
-                "package.json",
-                "Cargo.toml",
-                "go.mod",
-                ".claude",
-                "CLAUDE.md",
-            ]
+    def _detect_project_root(self, file_path: str | None = None) -> Path | None:
+        """Detect the project root directory from target file path or current directory."""
+        try:
+            # Start from target file's directory if provided, otherwise current working directory
+            if file_path:
+                current = Path(file_path).resolve().parent
+            else:
+                current = Path.cwd()
 
+            # Look for project markers in strict priority order
+            # .git is the strongest indicator of true project root
+            git_markers = [".git"]
+            package_markers = ["pyproject.toml", "setup.py", "package.json", "Cargo.toml", "go.mod"]
+            weak_markers = [".claude", "CLAUDE.md"]
+            
+            # First pass: look for .git only (highest priority)
+            temp_current = current
+            while temp_current != temp_current.parent:
+                for marker in git_markers:
+                    if (temp_current / marker).exists():
+                        return temp_current
+                temp_current = temp_current.parent
+            
+            # Second pass: look for package markers
+            temp_current = current
+            while temp_current != temp_current.parent:
+                for marker in package_markers:
+                    if (temp_current / marker).exists():
+                        return temp_current
+                temp_current = temp_current.parent
+            
+            # Second pass: if no strong markers found, look for weak markers
             while current != current.parent:
-                for marker in markers:
+                for marker in weak_markers:
                     if (current / marker).exists():
                         return current
                 current = current.parent
@@ -197,6 +252,13 @@ class MemoryGuard:
         self, content: str, mode: str = "a", timestamp: bool = False
     ) -> None:
         """Save debug information to last updated log file (keeps 3 files)."""
+        # EMERGENCY DEBUG - always write to tmp regardless of DEBUG_ENABLED
+        # try:
+        #     with open("/tmp/memory_guard_debug.log", "a") as f:
+        #         f.write(f"SAVE_DEBUG_INFO CALLED: mode={mode}, content_len={len(content)}, project_root={self.project_root}\n")
+        # except:
+        #     pass
+            
         if not DEBUG_ENABLED:
             return
         try:
@@ -206,12 +268,24 @@ class MemoryGuard:
 
             # Find the most recently updated log file to use
             base_dir = self.project_root if self.project_root else Path.cwd()
-            current_log = self._get_current_debug_log(base_dir, mode == "w")
+            current_log = self._get_current_debug_log(base_dir, False)  # Always use newest file
 
             with open(current_log, mode) as f:
                 f.write(content)
-        except Exception:
-            pass
+        except Exception as e:
+            # Write error to fallback file we can check
+            try:
+                # Try project logs first, then /tmp
+                error_log = base_dir / "logs" / "memory_guard_error.log"
+                error_log.parent.mkdir(exist_ok=True)
+                with open(error_log, "a") as f:
+                    f.write(f"ERROR: {e}\nPATH: {current_log}\nROOT: {base_dir}\n\n")
+            except:
+                try:
+                    with open("/tmp/memory_guard_error.log", "a") as f:
+                        f.write(f"ERROR: {e}\nPATH: {current_log}\nROOT: {base_dir}\n\n")
+                except:
+                    pass
 
     def _get_current_debug_log(self, base_dir: Path, is_new_run: bool) -> Path:
         """Get the current debug log file to use."""
@@ -405,6 +479,13 @@ class MemoryGuard:
         self, file_path: str, tool_name: str, code_info: str
     ) -> str:
         """Build the prompt for comprehensive code quality analysis."""
+        
+        # REMOVED ERROR REPORTING INSTRUCTIONS:
+        # 🚨 ERROR REPORTING: If you cannot access MCP memory tools ({self.mcp_collection}*), report in detail:
+        # - Which exact MCP tool you tried to call (e.g., "{self.mcp_collection}search_similar")
+        # - What parameters you used (query, entityTypes, limit) 
+        # - What error message you received (timeout, not found, access denied, etc.)
+        # - Include this in your debug field with prefix "MCP_ERROR:"
         return f"""You are a comprehensive code quality gate with access to MCP memory tools.
 
 OPERATION CONTEXT:
@@ -516,7 +597,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             )
 
             # Allow specific MCP memory tools plus read-only analysis tools
-            allowed_tools = f"Read,LS,Bash(ls:*),Glob,Grep,WebFetch,WebSearch,{self.mcp_collection}search_similar,{self.mcp_collection}read_graph,{self.mcp_collection}get_implementation,mcp__github__*"
+            allowed_tools = f"Read,LS,Bash(ls:*),Glob,Grep,WebFetch,WebSearch,{self.mcp_collection}*,mcp__github__*"
 
             result = subprocess.run(
                 [
@@ -535,7 +616,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                 capture_output=True,
                 text=True,
                 timeout=60,
-                cwd=str(claude_dir),
+                cwd=str(self.project_root) if self.project_root else None,
             )
 
             if result.returncode != 0:
@@ -632,10 +713,38 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
 
     def process_hook(self, hook_data: dict[str, Any]) -> dict[str, Any]:
         """Process the hook and return the result."""
+        # EMERGENCY DEBUG - track all hook calls
+        # try:
+        #     with open("/tmp/memory_guard_debug.log", "a") as f:
+        #         f.write(f"PROCESS_HOOK CALLED: project_root={self.project_root}, tool={hook_data.get('tool_name')}\n")
+        # except:
+        #     pass
+            
         # Default result
         result = {"suppressOutput": False}
 
         try:
+            # Get file path from tool input to detect correct project
+            tool_input = hook_data.get("tool_input", {})
+            file_path = tool_input.get("file_path", "")
+            
+            # Detect project root and MCP collection based on target file
+            if file_path:
+                self.project_root = self._detect_project_root(file_path)
+                if self.project_root:
+                    self.project_name = self.project_root.name
+                    self.mcp_collection = self._detect_mcp_collection()
+                    
+                    # Initialize bypass manager for the detected project
+                    if not self.bypass_manager:
+                        self.bypass_manager = BypassManager(self.project_root)
+                    
+                    # Log the project detection
+                    self.save_debug_info(f"\n🎯 PROJECT DETECTED:\n")
+                    self.save_debug_info(f"- Project: {self.project_name}\n")
+                    self.save_debug_info(f"- Root: {self.project_root}\n")
+                    self.save_debug_info(f"- MCP Collection: {self.mcp_collection}\n")
+
             # Check if we should process this hook
             should_process, skip_reason = self.should_process(hook_data)
             if not should_process:
@@ -648,7 +757,6 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
 
             # Extract information
             tool_name = hook_data.get("tool_name", "")
-            tool_input = hook_data.get("tool_input", {})
 
             # Extract entities (not used but required for analysis flow)
             _ = self.extractor.extract_entities_from_operation(
@@ -715,8 +823,8 @@ def main():
         # Read hook data from stdin
         hook_data = json.loads(sys.stdin.read())
 
-        # Initialize guard
-        guard = MemoryGuard()
+        # Initialize guard with hook data for early project detection
+        guard = MemoryGuard(hook_data)
 
         # Clear debug file at start and save initial info with timestamp
         debug_info = f"HOOK CALLED:\n{json.dumps(hook_data, indent=2)}\n\n"

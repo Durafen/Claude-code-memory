@@ -302,8 +302,6 @@ class MemoryGuard:
                 ".yaml",
                 ".rst",
                 ".xml",
-                ".html",
-                ".css",
             }
             if file_ext in skip_extensions:
                 return (

@@ -49,6 +49,15 @@
 **Memory Guard:** "🔗 FLOW INTEGRITY ISSUE: Removing 'fallback_config' parameter breaks 8+ files!"
 **Claude:** "You're right! I'll maintain backward compatibility"
 
+#### Example 1: Code Quality Analysis in Action
+![Memory Guard Code Quality Analysis](docs/images/memory-guard-quality-analysis.png)
+
+#### Example 2: Preventing Critical Function Modification
+![Memory Guard Protection Example](docs/images/memory-guard-protection.png)
+
+#### Example 3: Security Architecture Protection
+![Memory Guard Security Detection](docs/images/memory-guard-security-detection.png)
+
 ### Real-World Protection Examples:
 
 **🔄 Code Duplication:** Prevents recreating existing functions

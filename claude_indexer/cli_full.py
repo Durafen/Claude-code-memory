@@ -198,10 +198,10 @@ else:
                         )
 
                 # Clear the log file for this collection
-                # TODO: Commented out to preserve debugging history
-                # log_cleared = clear_log_file(collection)
-                # if not quiet and log_cleared:
-                #     click.echo(f"🗑️ Cleared log file for collection: {collection}")
+                from .indexer_logging import clear_log_file
+                log_cleared = clear_log_file(collection, project_path)
+                if not quiet and log_cleared:
+                    click.echo(f"🗑️ Cleared log file for collection: {collection}")
 
                 success = indexer.clear_collection(
                     collection, preserve_manual=preserve_manual

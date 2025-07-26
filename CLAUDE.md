@@ -126,24 +126,29 @@ Use `§m` to search memory for detailed configuration patterns, file organizatio
 
 **Research-backed categorization with semantic content analysis:**
 
-- **`debugging_pattern` (30% target)**: SOLUTIONS and resolution patterns for errors (not the bugs themselves)
-- **`implementation_pattern` (25% target)**: Coding solutions, algorithms, best practices
+- **`debugging_pattern` (30% target)**: Investigation techniques and system analysis methods
+- **`implementation_pattern` (25% target)**: Code patterns, algorithms, best practices
 - **`integration_pattern` (15% target)**: APIs, databases, authentication, pipelines
 - **`configuration_pattern` (12% target)**: Environment setup, deployment, CI/CD
 - **`architecture_pattern` (10% target)**: System design, component structure
 - **`performance_pattern` (8% target)**: Optimization, caching, bottlenecks
 - **`knowledge_insight`**: Research findings, lessons learned, methodology
-- **`active_issue`**: Current bugs/problems requiring attention (delete when fixed)
+- **`active_issue`**: Current development tasks and user-reported issues requiring attention
 - **`ideas`**: Project ideas, feature suggestions, future enhancements, brainstorming
 
 ## Memory Storage Rules
-***Don't store just info about bugs, but store about solutions, insights about how the code works***
+***Store system knowledge, patterns, and insights - NOT bug history or fix records***
 
-When categorizing memories:
-- **debugging_pattern**: Store SOLUTIONS and resolution patterns, not the bugs themselves
-- **implementation_pattern**: Working code solutions and techniques
-- Focus on "how to fix" rather than "what's broken"
-- Only store after issues are resolved with working solutions
+**What TO store:**
+- Code flow patterns and system understanding
+- Debugging techniques and investigation methods  
+- Function relationships and architecture insights
+- Better coding practices learned
+
+**What NOT to store:**
+- Bug descriptions or that bugs existed
+- Fix history or "resolved" status
+- Problem-solution pairs from specific incidents
 
 **Classification Approach**: Analyze content semantics, not format. Identify 3 strongest indicators, then categorize based on actual problem domain rather than documentation style.
 

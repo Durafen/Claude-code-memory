@@ -189,7 +189,17 @@ class EnhancedOrphanCleanup:
         existing_entities = set()
         for point in metadata_points:
             if point.payload and point.payload.get("entity_name"):
-                existing_entities.add(point.payload.get("entity_name"))
+                entity_name = point.payload.get("entity_name")
+                existing_entities.add(entity_name)
+                
+                # Handle markdown grouped headers: extract all headers from metadata
+                if " (+" in entity_name and entity_name.endswith(" more)"):
+                    # Get headers from metadata.headers field (same as comprehensive cleanup)
+                    metadata = point.payload.get("metadata", {})
+                    headers = metadata.get("headers", [])
+                    if headers:
+                        for header in headers:
+                            existing_entities.add(header)
 
         return existing_entities
 

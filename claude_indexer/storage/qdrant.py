@@ -1376,9 +1376,21 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     name = point.payload.get(
                         "entity_name", point.payload.get("name", "")
                     )
+                    
                     if name:
                         entity_names.add(name)
                         entity_count += 1
+                        
+                        # For markdown entities with (+X more) suffix, add individual section names
+                        if " (+" in name and name.endswith(" more)"):
+                            sections = point.payload.get("headers", [])
+                            metadata_headers = point.payload.get("metadata", {}).get("headers", [])
+                            
+                            # Try both locations for headers
+                            actual_headers = sections or metadata_headers
+                            if actual_headers:
+                                for section in actual_headers:
+                                    entity_names.add(section)
                     else:
                         other_count += 1
                         if verbose:

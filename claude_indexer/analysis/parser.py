@@ -1,11 +1,15 @@
 """Code parsing abstractions with Tree-sitter and Jedi integration."""
 
 import hashlib
+import copy
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
+
+# Import TiktokenMixin for accurate token counting
+from ..embeddings.base import TiktokenMixin
 
 try:
     import jedi
@@ -1482,8 +1486,17 @@ class PythonParser(CodeParser):
         return relations
 
 
-class MarkdownParser(CodeParser):
-    """Parser for Markdown documentation files."""
+class MarkdownParser(CodeParser, TiktokenMixin):
+    """Parser for Markdown documentation files with intelligent chunking."""
+    
+    # Hardcoded optimal values for chunking
+    TARGET_CHUNK_TOKENS = 800  # Target tokens per chunk
+    MAX_CHUNK_TOKENS = 1000   # Hard limit
+    OVERLAP_PERCENT = 0.125   # 12.5% overlap
+    MIN_CHUNK_TOKENS = 100    # Minimum viable chunk size
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def can_parse(self, file_path: Path) -> bool:
         """Check if this is a Markdown file."""
@@ -1587,7 +1600,7 @@ class MarkdownParser(CodeParser):
         return entities
 
     def _extract_section_content(self, file_path: Path) -> list["EntityChunk"]:
-        """Extract section content between headers as implementation chunks for searchability."""
+        """Extract section content with intelligent chunking and semantic boundaries."""
         chunks = []
 
         try:
@@ -1595,112 +1608,445 @@ class MarkdownParser(CodeParser):
                 content = f.read()
                 lines = content.split("\n")
 
-            # Find all headers with their positions
-            headers = []
-            for line_num, line in enumerate(lines):
-                line = line.strip()
-                if line.startswith("#"):
-                    level = len(line) - len(line.lstrip("#"))
-                    header_text = line.lstrip("#").strip()
-                    # Only process headers that have corresponding entities (h1, h2 only)
-                    if header_text and level <= 2:
-                        headers.append(
-                            {"text": header_text, "level": level, "line_num": line_num}
-                        )
-
-            # Extract content between headers
-            for i, header in enumerate(headers):
-                # Determine section bounds
-                start_line = int(header["line_num"]) + 1 if isinstance(header["line_num"], int | str) else 1
-                
-                # Find next header at same level or higher (lower level number)
-                end_line = len(lines)
-                current_level = header["level"]
-                for j in range(i + 1, len(headers)):
-                    next_header = headers[j]
-                    if next_header["level"] <= current_level:
-                        end_line = int(next_header["line_num"]) if isinstance(next_header["line_num"], int | str) else len(lines)
-                        break
-
-                # Extract section content
-                section_lines = lines[start_line:end_line]
-                section_content = "\n".join(section_lines).strip()
-
-                # Only create chunks for sections with meaningful content
-                if section_content and len(section_content.strip()) > 5:
-                    # Create collision-resistant implementation chunk ID
-                    import hashlib
-
-                    unique_content = f"{str(file_path)}::{header['text']}::documentation::{start_line}::{end_line}"
-                    unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
-                    impl_base_id = self._create_chunk_id(
-                        file_path, str(header["text"]), "implementation", "documentation"
-                    )
-                    collision_resistant_impl_id = f"{impl_base_id}::{unique_hash}"
-
-                    # Create implementation chunk using existing patterns
-                    impl_chunk = EntityChunk(
-                        id=collision_resistant_impl_id,
-                        entity_name=str(header["text"]),
-                        chunk_type="implementation",
-                        content=section_content,
-                        metadata={
-                            "entity_type": "documentation",
-                            "file_path": str(file_path),
-                            "start_line": start_line + 1,
-                            "end_line": end_line,
-                            "section_type": "markdown_section",
-                            "content_length": len(section_content),
-                        },
-                    )
-                    chunks.append(impl_chunk)
-
-                    # Create metadata chunk for fast discovery
-                    preview = section_content[:200]
-                    if len(section_content) > 200:
-                        preview += "..."
-
-                    line_count = section_content.count("\n") + 1
-                    word_count = len(section_content.split())
-
-                    f"Section: {header['text']} | Preview: {preview} | Lines: {line_count} | Words: {word_count}"
-
-                    # Create collision-resistant metadata chunk ID
-                    metadata_unique_content = f"{str(file_path)}::{header['text']}::documentation::metadata::{header['line_num']}"
-                    metadata_unique_hash = hashlib.md5(
-                        metadata_unique_content.encode()
-                    ).hexdigest()[:8]
-                    metadata_base_id = self._create_chunk_id(
-                        file_path, str(header["text"]), "metadata", "documentation"
-                    )
-                    collision_resistant_metadata_id = (
-                        f"{metadata_base_id}::{metadata_unique_hash}"
-                    )
-
-                    # FIX: Create metadata chunk for progressive disclosure
-                    metadata_chunk = EntityChunk(
-                        id=collision_resistant_metadata_id,
-                        entity_name=str(header["text"]),
-                        chunk_type="metadata",  # FIXED: Should be metadata for progressive disclosure
-                        content=section_content,  # Use full section content
-                        metadata={
-                            "entity_type": "documentation",
-                            "file_path": str(file_path),
-                            "line_number": int(header["line_num"]) + 1 if isinstance(header["line_num"], int | str) else 1,
-                            "section_type": "markdown_section",
-                            "has_implementation": True,
-                            "content_length": len(section_content),
-                            "word_count": word_count,
-                            "line_count": line_count,
-                        },
-                    )
-                    chunks.append(metadata_chunk)
+            # Parse markdown into structured sections
+            sections = self._parse_markdown_sections(content, file_path)
+            
+            # Apply intelligent chunking algorithm
+            chunk_groups = self._create_intelligent_chunks(sections)
+            
+            # Convert chunk groups to EntityChunks
+            for chunk_group in chunk_groups:
+                impl_chunk, metadata_chunk = self._create_entity_chunks(chunk_group, file_path)
+                chunks.extend([impl_chunk, metadata_chunk])
 
         except Exception as e:
             # Graceful fallback - implementation chunks are optional
+            from ..indexer_logging import get_logger
+            logger = get_logger()
             logger.debug(f"Section content extraction failed for {file_path}: {e}")
 
         return chunks
+    
+    def _parse_markdown_sections(self, content: str, file_path: Path) -> list[dict]:
+        """Parse markdown into hierarchical sections with token counts."""
+        sections = []
+        lines = content.split('\n')
+        header_stack = []  # Track parent hierarchy
+        
+        # Find all headers
+        headers = []
+        for line_num, line in enumerate(lines):
+            line = line.strip()
+            if line.startswith("#"):
+                level = len(line) - len(line.lstrip("#"))
+                header_text = line.lstrip("#").strip()
+                if header_text:  # Accept all header levels now
+                    headers.append({
+                        "text": header_text,
+                        "level": level,
+                        "line_num": line_num
+                    })
+        
+        # Forward-merge empty headers into next content sections
+        for i, header in enumerate(headers):
+            level = header["level"]
+            
+            # Find section boundaries
+            start_line = header["line_num"] + 1
+            end_line = len(lines)
+            
+            # Find next header at same level or higher
+            for j in range(i + 1, len(headers)):
+                next_header = headers[j]
+                if next_header["level"] <= level:
+                    end_line = next_header["line_num"]
+                    break
+            
+            # Extract section content
+            section_lines = lines[start_line:end_line]  
+            section_content = "\n".join(section_lines).strip()
+            
+            # If empty, merge into next section with content
+            if not section_content or len(section_content.strip()) <= 5:
+                # Find next section with content to merge into
+                for k in range(i + 1, len(headers)):
+                    next_header = headers[k]
+                    
+                    # Get next section's content
+                    next_start = next_header["line_num"] + 1
+                    next_end = len(lines)
+                    for m in range(k + 1, len(headers)):
+                        if headers[m]["level"] <= next_header["level"]:
+                            next_end = headers[m]["line_num"]
+                            break
+                    
+                    next_content = "\n".join(lines[next_start:next_end]).strip()
+                    
+                    # If next section has content, merge this empty header into it
+                    if next_content and len(next_content.strip()) > 5:
+                        headers[k]["merged_headers"] = headers[k].get("merged_headers", []) + [header["text"]]
+                        break
+            else:
+                # Section has content - check if any empty headers should be merged into it
+                merged_header_texts = header.get("merged_headers", [])
+                
+                # Update hierarchy stack with merged headers included
+                header_stack = header_stack[:level-1] + [header["text"]]
+                
+                # Create combined content if we have merged headers
+                display_header = header["text"]
+                if merged_header_texts:
+                    # Prepend merged headers to content (not header name)
+                    merged_content = "\n\n".join([f"## {h}" for h in merged_header_texts])
+                    section_content = f"{merged_content}\n\n{section_content}"
+                
+                # Calculate tokens for this section (header + content)
+                full_section = f"{display_header}\n\n{section_content}"
+                tokens = self._estimate_tokens_with_tiktoken(full_section)
+                
+                sections.append({
+                    "header": display_header,
+                    "level": level,
+                    "content": section_content,
+                    "tokens": tokens,
+                    "line_start": start_line,
+                    "line_end": end_line,
+                    "parent_path": header_stack.copy(),
+                    "original_header_line": header["line_num"]
+                })
+        
+        return sections
+    
+    def _create_intelligent_chunks(self, sections: list[dict]) -> list[list[dict]]:
+        """Group sections intelligently into token-optimized chunks."""
+        if not sections:
+            return []
+            
+        # First pass: handle oversized sections
+        processed_sections = []
+        for section in sections:
+            if section["tokens"] > self.MAX_CHUNK_TOKENS:
+                # Split large sections
+                split_sections = self._split_large_section(section)
+                processed_sections.extend(split_sections)
+            else:
+                processed_sections.append(section)
+        
+        # Second pass: aggressive grouping for optimal token utilization
+        chunk_groups = []
+        current_group = []
+        current_tokens = 0
+        current_parent = None
+        
+        # Use 85% of max tokens for initial packing (more aggressive initial grouping)
+        AGGRESSIVE_TOKEN_BUDGET = int(self.MAX_CHUNK_TOKENS * 0.85)  # 850 tokens
+        MAX_SECTIONS_PER_CHUNK = 10  # Increased from 8
+        
+        for section in processed_sections:
+            parent_key = tuple(section["parent_path"][:-1]) if len(section["parent_path"]) > 1 else ()
+            
+            # More aggressive grouping logic
+            can_group = (
+                current_tokens + section["tokens"] <= AGGRESSIVE_TOKEN_BUDGET and  # Aggressive budget
+                len(current_group) < MAX_SECTIONS_PER_CHUNK and  # Higher section limit
+                (
+                    current_parent == parent_key or  # Same parent (preferred)
+                    (len(section["parent_path"]) <= 3 and len(current_group) < 6) or  # Allow deeper nesting
+                    len(current_group) < 3  # Always allow first few sections to group
+                )
+            )
+            
+            if can_group and current_group:
+                current_group.append(section)
+                current_tokens += section["tokens"]
+            else:
+                # Start new group
+                if current_group:
+                    chunk_groups.append(current_group)
+                current_group = [section]
+                current_tokens = section["tokens"]
+                current_parent = parent_key
+        
+        # Add final group
+        if current_group:
+            chunk_groups.append(current_group)
+        
+        # Third pass: redistribute undersized chunks  
+        chunk_groups = self._redistribute_undersized_chunks(chunk_groups)
+        
+        # Fourth pass: add overlap context
+        return self._add_overlap_context(chunk_groups)
+    
+    def _split_large_section(self, section: dict) -> list[dict]:
+        """Split sections that exceed token limit at semantic boundaries."""
+        content = section["content"]
+        
+        # Try splitting by semantic boundaries
+        boundaries = [
+            r'\n\n\n+',           # Multiple blank lines
+            r'\n\n(?=[A-Z])',     # Paragraph breaks  
+            r'\n(?=[-*+] |\d+\.)', # Before list items
+            r'(?<=\.)\s+(?=[A-Z])', # After sentences
+            r'\n(?=```)',         # Before code blocks
+            r'(?<=```)\n',        # After code blocks
+        ]
+        
+        parts = [content]
+        for pattern in boundaries:
+            new_parts = []
+            for part in parts:
+                part_tokens = self._estimate_tokens_with_tiktoken(f"{section['header']}\n\n{part}")
+                if part_tokens > self.MAX_CHUNK_TOKENS:
+                    splits = re.split(pattern, part)
+                    new_parts.extend([s.strip() for s in splits if s.strip()])
+                else:
+                    new_parts.append(part)
+            parts = new_parts
+        
+        # Create section objects for each part
+        result_sections = []
+        for i, part in enumerate(parts):
+            if not part.strip():
+                continue
+                
+            part_tokens = self._estimate_tokens_with_tiktoken(f"{section['header']}\n\n{part}")
+            if part_tokens < self.MIN_CHUNK_TOKENS and i > 0:
+                # Merge small parts with previous
+                if result_sections:
+                    result_sections[-1]["content"] += f"\n\n{part}"
+                    result_sections[-1]["tokens"] = self._estimate_tokens_with_tiktoken(
+                        f"{section['header']}\n\n{result_sections[-1]['content']}"
+                    )
+                continue
+            
+            chunk_name = section["header"]
+            if len(parts) > 1:
+                chunk_name += f" (Part {i + 1})"
+            
+            result_sections.append({
+                **section,
+                "header": chunk_name,
+                "content": part,
+                "tokens": part_tokens
+            })
+        
+        return result_sections
+    
+    def _redistribute_undersized_chunks(self, chunk_groups: list[list[dict]]) -> list[list[dict]]:
+        """Redistribute sections from undersized chunks to meet minimum token requirements."""
+        if len(chunk_groups) <= 1:
+            return chunk_groups
+        
+        MIN_CHUNK_TOKENS = 600  # Target minimum
+        redistributed_groups = []
+        
+        i = 0
+        while i < len(chunk_groups):
+            current_group = chunk_groups[i]
+            current_tokens = sum(section["tokens"] for section in current_group)
+            
+            # If chunk is undersized, try to merge with adjacent chunks
+            if current_tokens < MIN_CHUNK_TOKENS:
+                merged = False
+                
+                # First try merging with next chunk (if available)
+                if i < len(chunk_groups) - 1:
+                    next_group = chunk_groups[i + 1]
+                    next_tokens = sum(section["tokens"] for section in next_group)
+                    combined_tokens = current_tokens + next_tokens
+                    
+                    if (combined_tokens <= self.MAX_CHUNK_TOKENS and 
+                        len(current_group) + len(next_group) <= 8):
+                        
+                        # Merge current undersized chunk with next
+                        merged_group = current_group + next_group
+                        redistributed_groups.append(merged_group)
+                        i += 2  # Skip the next group since we merged it
+                        merged = True
+                
+                # If no next merge, try merging with previous group
+                if not merged and len(redistributed_groups) > 0:
+                    prev_group = redistributed_groups[-1]
+                    prev_tokens = sum(section["tokens"] for section in prev_group)
+                    combined_tokens = prev_tokens + current_tokens
+                    
+                    if (combined_tokens <= self.MAX_CHUNK_TOKENS and 
+                        len(prev_group) + len(current_group) <= 8):
+                        
+                        # Merge with previous group
+                        redistributed_groups[-1] = prev_group + current_group
+                        i += 1
+                        merged = True
+                
+                if merged:
+                    continue
+            
+            # Default: add current group as-is
+            redistributed_groups.append(current_group)
+            i += 1
+        
+        return redistributed_groups
+    
+    def _add_overlap_context(self, chunk_groups: list[list[dict]]) -> list[list[dict]]:
+        """Add 12.5% overlap between adjacent chunks for context."""
+        if len(chunk_groups) <= 1:
+            return chunk_groups
+        
+        # Add overlap by including trailing content from previous chunk
+        # and leading content preview in next chunk
+        enhanced_groups = []
+        
+        for i, group in enumerate(chunk_groups):
+            enhanced_group = copy.deepcopy(group)
+            
+            # Add trailing context from previous chunk
+            if i > 0:
+                prev_group = enhanced_groups[i-1]
+                # Get last section content from previous chunk
+                if prev_group:
+                    last_section = prev_group[-1]
+                    clean_content = self._extract_clean_content(last_section["content"])
+                    overlap_content = clean_content[-200:] if len(clean_content) > 200 else clean_content
+                    
+                    # Append overlap context after main content to preserve header-content relationship
+                    if enhanced_group:
+                        enhanced_group[0] = {
+                            **enhanced_group[0],
+                            "content": f"{enhanced_group[0]['content']}\n\n[Previous context: ...{overlap_content}]",
+                            "has_overlap": True
+                        }
+            
+            enhanced_groups.append(enhanced_group)
+        
+        return enhanced_groups
+    
+    def _extract_clean_content(self, content: str) -> str:
+        """Extract clean content by removing existing overlap markers to prevent cascading."""
+        if not content:
+            return content
+    
+        # If no overlap markers, return as-is
+        if '[...' not in content:
+            return content
+    
+        original_content = content
+    
+        # Split by paragraphs and find the first clean section
+        parts = content.split('\n\n')
+        for part in parts:
+            part = part.strip()
+            if part and not part.startswith('[...'):
+                return part
+    
+        # Fallback: more conservative regex cleanup
+        # Only remove overlap markers that are clearly at the beginning of content
+        lines = content.split('\n')
+        clean_lines = []
+    
+        for line in lines:
+            line = line.strip()
+            # Skip lines that are clearly overlap markers
+            if line.startswith('[...') and line.endswith(']'):
+                continue
+            # Keep everything else
+            clean_lines.append(line)
+    
+        cleaned = '\n'.join(clean_lines).strip()
+    
+        # CRITICAL: If cleaning resulted in empty content, return original
+        # This prevents data loss when entire content looks like overlap
+        if not cleaned and original_content:
+            return original_content
+    
+        return cleaned if cleaned else original_content
+
+    def _create_entity_chunks(self, section_group: list[dict], file_path: Path) -> tuple["EntityChunk", "EntityChunk"]:
+        """Create implementation and metadata chunks from section group."""
+        import hashlib
+        
+        # Combine all sections in group
+        combined_content = []
+        combined_headers = []
+        total_tokens = 0
+        start_line = float('inf')
+        end_line = 0
+        first_header_line = None
+        
+        for section in section_group:
+            combined_headers.append(section["header"])
+            combined_content.append(f"# {section['header']}\n\n{section['content']}")
+            total_tokens += section["tokens"]
+            start_line = min(start_line, section["line_start"])
+            end_line = max(end_line, section["line_end"])
+            # Get the actual header line number (not content start line)
+            if first_header_line is None:
+                first_header_line = section.get("original_header_line")
+        
+        # Create chunk name
+        if len(section_group) == 1:
+            chunk_name = section_group[0]["header"]
+        else:
+            chunk_name = f"{section_group[0]['header']} (+{len(section_group)-1} more)"
+        
+        full_content = "\n\n".join(combined_content)
+        
+        # Create implementation chunk
+        unique_content = f"{str(file_path)}::{chunk_name}::documentation::{start_line}::{end_line}"
+        unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
+        impl_base_id = self._create_chunk_id(file_path, chunk_name, "implementation", "documentation")
+        impl_id = f"{impl_base_id}::{unique_hash}"
+        
+        impl_chunk = EntityChunk(
+            id=impl_id,
+            entity_name=chunk_name,
+            chunk_type="implementation",
+            content=full_content,
+            metadata={
+                "entity_type": "documentation",
+                "file_path": str(file_path),
+                "start_line": int(start_line) + 1,
+                "end_line": int(end_line),
+                "section_type": "markdown_section",
+                "content_length": len(full_content),
+                "token_count": total_tokens,
+                "section_count": len(section_group),
+                "headers": combined_headers
+            },
+        )
+        
+        # Create metadata chunk for fast discovery
+        preview = full_content[:300] + "..." if len(full_content) > 300 else full_content
+        line_count = full_content.count("\n") + 1
+        word_count = len(full_content.split())
+        
+        metadata_content = f"Sections: {', '.join(combined_headers)} | Tokens: {total_tokens} | Preview: {preview} | Lines: {line_count} | Words: {word_count}"
+        
+        metadata_unique_content = f"{str(file_path)}::{chunk_name}::documentation::metadata::{start_line}"
+        metadata_hash = hashlib.md5(metadata_unique_content.encode()).hexdigest()[:8]
+        metadata_base_id = self._create_chunk_id(file_path, chunk_name, "metadata", "documentation")
+        metadata_id = f"{metadata_base_id}::{metadata_hash}"
+        
+        metadata_chunk = EntityChunk(
+            id=metadata_id,
+            entity_name=chunk_name,
+            chunk_type="metadata",
+            content=metadata_content,
+            metadata={
+                "entity_type": "documentation",
+                "file_path": str(file_path),
+                "line_number": int(first_header_line) + 1,
+                "section_type": "markdown_section",
+                "has_implementation": True,
+                "content_length": len(full_content),
+                "word_count": word_count,
+                "line_count": line_count,
+                "token_count": total_tokens,
+                "section_count": len(section_group),
+                "headers": combined_headers
+            },
+        )
+        
+        return impl_chunk, metadata_chunk
 
 
 class ParserRegistry:

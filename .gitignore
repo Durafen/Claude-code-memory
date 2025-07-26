@@ -87,3 +87,7 @@ claude_code_collaboration_tips.md
 docs/logging.md
 missing_files_analysis.json
 documentation_export.md
+utils/scraper_configs.json
+utils/scraper_configs_backup.json
+utils/scraper_configs_manual_work.json
+utils/scraper_configs.json

@@ -186,44 +186,41 @@ class MemoryGuard:
             pass
 
     def _detect_project_root(self, file_path: str | None = None) -> Path | None:
-        """Detect the project root directory from target file path or current directory."""
+        """Detect the project root directory using Claude-first weighted scoring."""
         try:
+            marker_weights = {
+                "CLAUDE.md": 100,      # Strongest: Claude project marker
+                ".claude": 90,         # Second: Claude config directory  
+                ".git": 80,            # Third: Git repository
+                "pyproject.toml": 70,  # Python project
+                "package.json": 60,    # Node.js project
+                "setup.py": 50,        # Legacy Python
+                "Cargo.toml": 40,      # Rust project
+                "go.mod": 30,          # Go project
+            }
+            
             # Start from target file's directory if provided, otherwise current working directory
             if file_path:
                 current = Path(file_path).resolve().parent
             else:
                 current = Path.cwd()
-
-            # Look for project markers in strict priority order
-            # .git is the strongest indicator of true project root
-            git_markers = [".git"]
-            package_markers = ["pyproject.toml", "setup.py", "package.json", "Cargo.toml", "go.mod"]
-            weak_markers = [".claude", "CLAUDE.md"]
             
-            # First pass: look for .git only (highest priority)
-            temp_current = current
-            while temp_current != temp_current.parent:
-                for marker in git_markers:
-                    if (temp_current / marker).exists():
-                        return temp_current
-                temp_current = temp_current.parent
+            best_score = 0
+            best_path = None
             
-            # Second pass: look for package markers
-            temp_current = current
-            while temp_current != temp_current.parent:
-                for marker in package_markers:
-                    if (temp_current / marker).exists():
-                        return temp_current
-                temp_current = temp_current.parent
-            
-            # Second pass: if no strong markers found, look for weak markers
+            # Traverse upward, score each directory
             while current != current.parent:
-                for marker in weak_markers:
-                    if (current / marker).exists():
-                        return current
+                score = sum(weight for marker, weight in marker_weights.items() 
+                           if (current / marker).exists())
+                
+                if score > best_score:
+                    best_score = score
+                    best_path = current
+                    
                 current = current.parent
-
-            return Path.cwd()  # Default to cwd if no markers found
+            
+            return best_path or Path.cwd()
+            
         except Exception:
             return None
 
@@ -268,7 +265,7 @@ class MemoryGuard:
 
             # Find the most recently updated log file to use
             base_dir = self.project_root if self.project_root else Path.cwd()
-            current_log = self._get_current_debug_log(base_dir, False)  # Always use newest file
+            current_log = self._get_current_debug_log(base_dir, False)  # Use same log file for entire hook execution
 
             with open(current_log, mode) as f:
                 f.write(content)
@@ -620,22 +617,52 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             )
 
             if result.returncode != 0:
-                return False, "Claude CLI failed", {}
+                error_msg = f"Claude CLI failed with return code {result.returncode}"
+                crash_info = f"\n{'=' * 60}\nCRASH DETECTED - CLAUDE CLI FAILED:\n"
+                crash_info += f"Return code: {result.returncode}\n"
+                crash_info += f"STDERR: {result.stderr}\n"
+                crash_info += f"STDOUT: {result.stdout}\n"
+                crash_info += f"Error: {error_msg}\n"
+                self.save_debug_info(crash_info)
+                return False, error_msg, {"error": "cli_failed", "returncode": result.returncode, "stderr": result.stderr}
 
-            # Append debug info
+            # Log debug info IMMEDIATELY after successful CLI execution (before parsing)
             debug_content = f"\n{'=' * 60}\nQUERY SENT TO CLAUDE:\n{prompt}\n\n"
             debug_content += (
                 f"RAW STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}\n"
             )
-            self.save_debug_info(debug_content)  # Default mode='a'
+            self.save_debug_info(debug_content)  # Log before parsing to prevent loss
 
-            # Parse response
-            return self.parse_claude_response(result.stdout)
+            # Parse response (may throw exception)
+            try:
+                return self.parse_claude_response(result.stdout)
+            except Exception as parse_error:
+                # Log parsing failure with details
+                parse_crash_info = f"\n{'=' * 60}\nCRASH DETECTED - PARSE FAILURE:\n"
+                parse_crash_info += f"Parse error: {type(parse_error).__name__}: {str(parse_error)}\n"
+                parse_crash_info += f"Raw stdout length: {len(result.stdout)} chars\n"
+                parse_crash_info += f"RESULT: Graceful degradation - approving operation\n"
+                self.save_debug_info(parse_crash_info)
+                raise  # Re-raise to be caught by outer exception handler
 
-        except subprocess.TimeoutExpired:
-            return False, "Claude CLI timeout", {}
+        except subprocess.TimeoutExpired as e:
+            error_msg = f"Claude CLI timeout after {e.timeout}s"
+            crash_info = f"\n{'=' * 60}\nCRASH DETECTED - TIMEOUT:\n"
+            crash_info += f"Timeout: {e.timeout}s\n"
+            crash_info += f"Command: {e.cmd}\n"
+            crash_info += f"Error: {error_msg}\n"
+            self.save_debug_info(crash_info)
+            return False, error_msg, {"error": "timeout", "timeout": e.timeout}
         except Exception as e:
-            return False, f"Claude CLI error: {str(e)}", {}
+            error_msg = f"Claude CLI error: {str(e)}"
+            crash_info = f"\n{'=' * 60}\nCRASH DETECTED - EXCEPTION:\n"
+            crash_info += f"Exception type: {type(e).__name__}\n"
+            crash_info += f"Exception message: {str(e)}\n"
+            crash_info += f"Error: {error_msg}\n"
+            import traceback
+            crash_info += f"Traceback:\n{traceback.format_exc()}\n"
+            self.save_debug_info(crash_info)
+            return False, error_msg, {"error": "exception", "exception_type": type(e).__name__, "message": str(e)}
 
     def parse_claude_response(self, stdout: str) -> tuple[bool, str, dict[str, Any]]:
         """Parse Claude's response to extract duplicate detection result."""
@@ -739,11 +766,9 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                     if not self.bypass_manager:
                         self.bypass_manager = BypassManager(self.project_root)
                     
-                    # Log the project detection
-                    self.save_debug_info(f"\n🎯 PROJECT DETECTED:\n")
-                    self.save_debug_info(f"- Project: {self.project_name}\n")
-                    self.save_debug_info(f"- Root: {self.project_root}\n")
-                    self.save_debug_info(f"- MCP Collection: {self.mcp_collection}\n")
+                    # Log the project detection (consolidated to prevent duplication)
+                    project_info = f"\n🎯 PROJECT DETECTED:\n- Project: {self.project_name}\n- Root: {self.project_root}\n- MCP Collection: {self.mcp_collection}\n"
+                    self.save_debug_info(project_info)
 
             # Check if we should process this hook
             should_process, skip_reason = self.should_process(hook_data)
@@ -810,9 +835,18 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             # Graceful degradation - always approve on errors
             result["reason"] = f"Error in memory guard: {str(e)}"
 
-            # Log error
-            error_info = f"\n{'=' * 60}\nERROR IN PROCESS:\n{str(e)}\n"
-            self.save_debug_info(error_info)
+            # Log comprehensive crash info
+            import traceback
+            crash_info = f"\n{'=' * 60}\nCRASH DETECTED - PROCESS_HOOK FAILURE:\n"
+            crash_info += f"Exception type: {type(e).__name__}\n"
+            crash_info += f"Exception message: {str(e)}\n"
+            crash_info += f"Project: {self.project_name}\n"
+            crash_info += f"Tool: {hook_data.get('tool_name', 'unknown')}\n"
+            crash_info += f"File: {hook_data.get('tool_input', {}).get('file_path', 'unknown')}\n"
+            crash_info += f"Traceback:\n{traceback.format_exc()}\n"
+            crash_info += f"Hook data: {json.dumps(hook_data, indent=2)}\n"
+            crash_info += "RESULT: Graceful degradation - approving operation\n"
+            self.save_debug_info(crash_info)
 
         return result
 

@@ -353,7 +353,7 @@ class RelationProcessor(ContentProcessor):
             self.logger.debug("🔍 === RELATION DEDUPLICATION ===")
             self.logger.debug(f"   Total relations to process: {len(relations)}")
 
-        for relation in relations:
+        for i, relation in enumerate(relations):
             # Generate the same key that will be used for storage
             from ..analysis.entities import RelationChunk
 
@@ -368,18 +368,18 @@ class RelationProcessor(ContentProcessor):
             if relation_key not in seen_relation_keys:
                 seen_relation_keys.add(relation_key)
                 unique_relations.append(relation)
-                if self.logger and len(unique_relations) <= 5:
+                if self.logger and len(unique_relations) <= 10:
                     self.logger.debug(
-                        f"   ✅ Unique: {relation_key} [import_type: {import_type}]"
+                        f"   Unique: {relation.from_entity} --{relation.relation_type}--> {relation.to_entity}"
                     )
             else:
                 duplicate_count += 1
                 if import_type not in duplicate_details:
                     duplicate_details[import_type] = 0
                 duplicate_details[import_type] += 1
-                if self.logger and duplicate_count <= 5:
+                if self.logger and duplicate_count <= 10:
                     self.logger.debug(
-                        f"   ❌ Duplicate: {relation_key} [import_type: {import_type}]"
+                        f"   Duplicate: {relation.from_entity} --{relation.relation_type}--> {relation.to_entity}"
                     )
 
         if self.logger:

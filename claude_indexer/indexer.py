@@ -427,15 +427,11 @@ class CoreIndexer:
                 result.processing_time = time.time() - start_time
                 return result
 
-            # DEBUG: Log all configuration before processing
             if self.logger:
-                self.logger.debug(f"🔍 INDEXER CONFIG DEBUG:")
-                self.logger.debug(f"🔍   collection_name: {collection_name}")
-                self.logger.debug(f"🔍   project_path: {self.project_path}")
-                self.logger.debug(f"🔍   verbose: {verbose}")
-                self.logger.debug(f"🔍   include_patterns: {self.config.include_patterns}")
-                self.logger.debug(f"🔍   exclude_patterns: {self.config.exclude_patterns}")
-                self.logger.debug(f"🔍   include_markdown: {self.config.include_markdown}")
+                self.logger.debug(f"Indexing configuration - collection: {collection_name}, path: {self.project_path}")
+                self.logger.debug(f"verbose: {verbose}")
+                self.logger.debug(f"Include patterns: {self.config.include_patterns}")
+                self.logger.debug(f"Exclude patterns: {self.config.exclude_patterns}")
                 self.logger.debug(f"🔍   include_tests: {self.config.include_tests}")
                 self.logger.debug(f"🔍   max_file_size: {self.config.max_file_size}")
                 self.logger.debug(f"🔍   batch_size: {self.config.batch_size}")

@@ -7,6 +7,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Structure
+
+The project has 3 git repositories: main project root, tests/ folder (independent git with test changes), and mcp-qdrant-memory/ subfolder (Node.js MCP server component). Tests folder tracks test modifications separately from main codebase.
+
 ## Testing and Debug Environment
 
 **⚠️ CRITICAL: Use `debug/` folder for ALL test scripts and test databases. NEVER INDEX MAIN PROJECT PATH.**

@@ -14,6 +14,7 @@ class EntityType(Enum):
     DIRECTORY = "directory"
     FILE = "file"
     CLASS = "class"
+    INTERFACE = "interface"
     FUNCTION = "function"
     METHOD = "method"
     VARIABLE = "variable"

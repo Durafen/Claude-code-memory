@@ -68,6 +68,36 @@ class VectorPoint:
             raise ValueError("Payload must be a dictionary")
 
 
+@dataclass
+class HybridVectorPoint:
+    """Represents a point with both dense and sparse vectors for hybrid search."""
+
+    id: str | int
+    dense_vector: list[float]
+    sparse_vector: list[float]
+    payload: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        # Validate dense vector
+        if hasattr(self.dense_vector, "__len__"):
+            if len(self.dense_vector) == 0:
+                raise ValueError("Dense vector cannot be empty")
+        else:
+            if not self.dense_vector:
+                raise ValueError("Dense vector cannot be empty")
+        
+        # Validate sparse vector
+        if hasattr(self.sparse_vector, "__len__"):
+            if len(self.sparse_vector) == 0:
+                raise ValueError("Sparse vector cannot be empty")
+        else:
+            if not self.sparse_vector:
+                raise ValueError("Sparse vector cannot be empty")
+                
+        if not isinstance(self.payload, dict):
+            raise ValueError("Payload must be a dictionary")
+
+
 class VectorStore(ABC):
     """Abstract base class for vector storage backends."""
 
@@ -186,20 +216,25 @@ class ManagedVectorStore(VectorStore):
         return result.success
 
     def upsert_points(
-        self, collection_name: str, points: list[VectorPoint]
+        self, collection_name: str, points: list[VectorPoint | HybridVectorPoint]
     ) -> StorageResult:
         """Upsert points with automatic collection creation."""
         # Ensure collection exists
-        if points and not self.ensure_collection(
-            collection_name, len(points[0].vector)
-        ):
-            return StorageResult(
-                success=False,
-                operation="upsert",
-                errors=[
-                    f"Collection {collection_name} does not exist and auto-creation is disabled"
-                ],
-            )
+        if points:
+            # Determine vector size from first point
+            if isinstance(points[0], HybridVectorPoint):
+                vector_size = len(points[0].dense_vector)
+            else:
+                vector_size = len(points[0].vector)
+                
+            if not self.ensure_collection(collection_name, vector_size):
+                return StorageResult(
+                    success=False,
+                    operation="upsert",
+                    errors=[
+                        f"Collection {collection_name} does not exist and auto-creation is disabled"
+                    ],
+                )
 
         return super().upsert_points(collection_name, points)
 
@@ -274,7 +309,7 @@ class CachingVectorStore(VectorStore):
         return self.backend.delete_collection(collection_name)
 
     def upsert_points(
-        self, collection_name: str, points: list[VectorPoint]
+        self, collection_name: str, points: list[VectorPoint | HybridVectorPoint]
     ) -> StorageResult:
         # Clear cache when data is modified
         self._search_cache.clear()

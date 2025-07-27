@@ -8,3 +8,4 @@ voyageai
 watchdog
 ijson
 tiktoken
+bm25s

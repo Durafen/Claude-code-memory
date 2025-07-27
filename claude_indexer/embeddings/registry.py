@@ -3,6 +3,7 @@
 from typing import Any
 
 from .base import CachingEmbedder, Embedder, RetryableEmbedder
+from .bm25 import BM25_AVAILABLE, BM25Embedder
 from .openai import OPENAI_AVAILABLE, OpenAIEmbedder
 from .voyage import VOYAGE_AVAILABLE, VoyageEmbedder
 
@@ -20,6 +21,8 @@ class EmbedderRegistry:
             self.register("openai", OpenAIEmbedder)
         if VOYAGE_AVAILABLE:
             self.register("voyage", VoyageEmbedder)
+        if BM25_AVAILABLE:
+            self.register("bm25", BM25Embedder)
 
     def register(self, name: str, embedder_class: type[Embedder]) -> None:
         """Register an embedder class."""
@@ -95,6 +98,13 @@ def create_embedder_from_config(config: Any) -> Embedder:
                 "api_key": config.voyage_api_key,
                 "model": config.voyage_model,
             }
+        elif provider == "bm25":
+            provider_config = {
+                "model_name": getattr(config, "bm25_model", "bm25"),
+                "method": getattr(config, "bm25_method", "robertson"),
+                "k1": getattr(config, "bm25_k1", 1.2),
+                "b": getattr(config, "bm25_b", 0.75),
+            }
         else:  # openai
             provider_config = {
                 "api_key": config.openai_api_key,
@@ -139,6 +149,27 @@ def create_voyage_embedder(
         "provider": "voyage",
         "api_key": api_key,
         "model": model,
+        "enable_caching": enable_caching,
+        **kwargs,
+    }
+    return create_embedder_from_config(config)
+
+
+def create_bm25_embedder(
+    model_name: str = "bm25",
+    method: str = "robertson",
+    k1: float = 1.2,
+    b: float = 0.75,
+    enable_caching: bool = False,  # BM25 has its own caching
+    **kwargs: Any,
+) -> Embedder:
+    """Create BM25 embedder with default configuration."""
+    config = {
+        "provider": "bm25",
+        "model_name": model_name,
+        "method": method,
+        "k1": k1,
+        "b": b,
         "enable_caching": enable_caching,
         **kwargs,
     }

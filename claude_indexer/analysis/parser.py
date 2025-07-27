@@ -318,9 +318,10 @@ class PythonParser(CodeParser):
                 if node.type == "assignment":
                     # Skip function-local and block-local variables
                     if current_context in ["function_definition", "block_context"]:
-                        logger.debug(
-                            f"Skipping {current_context} variable at line {node.start_point[0] + 1}"
-                        )
+                        # logger.debug(
+                        #     f"Skipping {current_context} variable at line {node.start_point[0] + 1}"
+                        # )
+                        pass
                     else:
                         # Use enhanced assignment extraction for complex patterns
                         assignment_variables = self._extract_variables_from_assignment(
@@ -956,7 +957,7 @@ class PythonParser(CodeParser):
                     )
                     if chunk:
                         chunks.append(chunk)
-                        logger.debug(f"🔧 ✅ Created chunk for {chunk.entity_name}")
+                        # logger.debug(f"🔧 ✅ Created chunk for {chunk.entity_name}")
                     else:
                         logger.debug(f"🔧 ❌ Failed to create chunk for {node.type}")
 
@@ -1432,9 +1433,9 @@ class PythonParser(CodeParser):
             imp_type = rel.metadata.get("import_type", "unknown")
             type_counts[imp_type] = type_counts.get(imp_type, 0) + 1
 
-        logger.debug(
-            f"🔍 _extract_file_operations found {len(relations)} file operations"
-        )
+        # logger.debug(
+        #     f"🔍 _extract_file_operations found {len(relations)} file operations"
+        # )
         if type_counts:
             logger.debug(f"   By type: {type_counts}")
         return relations

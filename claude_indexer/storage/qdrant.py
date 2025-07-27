@@ -705,9 +705,9 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             max_iterations = 1000  # Safety limit to prevent runaway loops
             iteration = 0
 
-            logger.debug(
-                f"Starting scroll operation for collection {collection_name}, limit={limit}, handle_pagination={handle_pagination}"
-            )
+            # logger.debug(
+            #     f"Starting scroll operation for collection {collection_name}, limit={limit}, handle_pagination={handle_pagination}"
+            # )
 
             while True:
                 iteration += 1
@@ -719,7 +719,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     )
                     break
 
-                logger.debug(f"Scroll iteration {iteration}, offset={offset}")
+                # logger.debug(f"Scroll iteration {iteration}, offset={offset}")
 
                 scroll_result = self.client.scroll(
                     collection_name=collection_name,
@@ -754,15 +754,15 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     offset = next_offset
                     logger.debug(f"Advancing to next page with offset {next_offset}")
                 else:
-                    logger.debug(
-                        f"Pagination complete: handle_pagination={handle_pagination}, next_offset={next_offset}"
-                    )
+                    # logger.debug(
+                    #     f"Pagination complete: handle_pagination={handle_pagination}, next_offset={next_offset}"
+                    # )
                     break
 
-            logger.debug(
-                f"Scroll operation completed for collection {collection_name}: "
-                f"{len(all_points)} total points retrieved in {iteration} iterations"
-            )
+            # logger.debug(
+            #     f"Scroll operation completed for collection {collection_name}: "
+            #     f"{len(all_points)} total points retrieved in {iteration} iterations"
+            # )
             return all_points
 
         except Exception as e:
@@ -1750,7 +1750,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
 
                         # Look for function call pattern: target_function(
                         if f"{to_entity}(" in code_part:
-                            logger.debug(f"   ✅ Found legitimate call: {from_entity} -> {to_entity}")
+                            # logger.debug(f"   ✅ Found legitimate call: {from_entity} -> {to_entity}")
                             return False
 
             # No legitimate call found in any implementation

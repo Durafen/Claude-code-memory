@@ -286,10 +286,13 @@ class CoreIndexer:
                     )
 
         # Changed entity IDs computation (unified from both patterns)
-        # FIX: Use entity-type-aware format to match EntityProcessor expectations
         changed_entity_ids = (
             {
-                f"{entity.name}::{entity.entity_type.value}"
+                (
+                    f"{entity.file_path}::{entity.name}"
+                    if entity.file_path
+                    else entity.name
+                )
                 for entity in entities
             }
             if entities

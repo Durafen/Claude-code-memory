@@ -105,17 +105,29 @@ class ContentProcessor(ContentHashMixin, ABC):
         # Generate dense embeddings (primary)
         embedding_results = self.embedder.embed_batch(texts)
 
-        # Generate BM25 sparse embeddings ONLY for entity metadata (90% of searches)
+        # Generate BM25 sparse embeddings for metadata chunks only
         if item_name == "entity":
+            # EntityProcessor: all items are metadata chunks, apply BM25 to all
+            should_apply_bm25 = [True] * len(items)
+        else:
+            # Other processors: apply BM25 only to metadata chunks
+            should_apply_bm25 = []
+            for item in items:
+                chunk_type = getattr(item, 'chunk_type', None)
+                # Apply BM25 to metadata chunks, exclude implementation chunks
+                is_metadata = chunk_type == 'metadata' or (chunk_type is None and item_name != 'implementation')
+                should_apply_bm25.append(is_metadata)
+        
+        if any(should_apply_bm25):
             bm25_embedder = self._get_bm25_embedder()
             if bm25_embedder:
                 try:
-                    # Let embed_batch handle fitting internally (single-pass architecture)
+                    # Generate BM25 for all items (will be filtered during application)
                     bm25_results = bm25_embedder.embed_batch(texts)
                     
-                    # Add sparse vectors to dense embedding results
-                    for dense_result, sparse_result in zip(embedding_results, bm25_results, strict=False):
-                        if dense_result.success and sparse_result.success:
+                    # Add sparse vectors only to items that should have BM25
+                    for dense_result, sparse_result, should_have_bm25 in zip(embedding_results, bm25_results, should_apply_bm25, strict=False):
+                        if should_have_bm25 and dense_result.success and sparse_result.success:
                             dense_result.sparse_embedding = sparse_result.embedding
                             
                     if self.logger:

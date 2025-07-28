@@ -187,7 +187,6 @@ class RelationChunk:
             "content_hash": ContentHashMixin.compute_content_hash(self.content),
             "created_at": datetime.now().isoformat(),
             "type": "chunk",
-            "entity_type": "relation",
         }
 
         if self.context:
@@ -195,9 +194,11 @@ class RelationChunk:
         if self.confidence != 1.0:
             payload["confidence"] = self.confidence
 
-        # Include metadata as nested object
+        # Include metadata as nested object with entity_type
+        metadata = {"entity_type": "relation"}
         if self.metadata:
-            payload["metadata"] = self.metadata
+            metadata.update(self.metadata)
+        payload["metadata"] = metadata
 
         return payload
 

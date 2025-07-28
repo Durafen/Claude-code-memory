@@ -188,6 +188,19 @@ search_similar("pattern")  # Returns all entity and chunk types
 - **Backward Compatible**: Existing calls work unchanged
 - **Performance**: Filter at database level for optimal speed
 
+## 🔍 BM25 Keyword & Hybrid Search
+
+**Search Modes:** `semantic` (default), `keyword`, `hybrid`
+
+```python
+search_similar("query", searchMode="hybrid")  # 70% semantic + 30% keyword
+search_similar("exact terms", searchMode="keyword")  # BM25 term matching
+```
+
+**Collection Requirements:**
+- **New collections**: Auto-create with BM25 support
+- **Existing collections**: Reindex with `claude-indexer index -p /path -c name --force`
+- **Check support**: Keyword search falls back to semantic if no sparse vectors
 
 ## Virtual Environment Usage
 

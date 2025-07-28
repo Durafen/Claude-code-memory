@@ -417,7 +417,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     colliding_points[:3]
                 ):  # Limit to first 3 examples
                     entity_name = point.payload.get("entity_name", "unknown")
-                    entity_type = point.payload.get("entity_type", "unknown")
+                    entity_type = point.payload.get("metadata", {}).get("entity_type", "unknown")
                     chunk_type = point.payload.get("chunk_type", "unknown")
                     file_path = point.payload.get("metadata", {}).get("file_path", "unknown")
                     logger.warning(
@@ -1661,7 +1661,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                         "name": point.payload.get(
                             "entity_name", point.payload.get("name", "Unknown")
                         ),
-                        "type": point.payload.get("entity_type", "unknown"),
+                        "type": point.payload.get("metadata", {}).get("entity_type", "unknown"),
                         "payload": point.payload,
                     }
                 )
@@ -1755,7 +1755,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     {
                         "id": point.id,
                         "entity_name": point.payload.get("entity_name", ""),
-                        "entity_type": point.payload.get("entity_type", "unknown"),
+                        "entity_type": point.payload.get("metadata", {}).get("entity_type", "unknown"),
                         "chunk_type": chunk_type,
                         "payload": point.payload
                     }

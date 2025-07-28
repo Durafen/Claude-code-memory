@@ -244,7 +244,7 @@ def backup_manual_entries(collection_name: str, output_file: str = None):
             # Everything else is auto-indexed
             else:
                 # v2.4 format only
-                entity_type = payload.get("entity_type", "unknown")
+                entity_type = payload.get("metadata", {}).get("entity_type") or payload.get("entity_type", "unknown")
                 entity_name = payload.get("entity_name", "unknown")
                 code_entries.append(
                     {
@@ -372,7 +372,7 @@ def restore_manual_entries(
             payload = entry.get("payload", {})
             # Handle v2.4 format
             name = payload.get("entity_name", "unknown")
-            entity_type = payload.get("entity_type", "unknown")
+            entity_type = payload.get("metadata", {}).get("entity_type") or payload.get("entity_type", "unknown")
             print(f"  {i + 1}. {name} ({entity_type})")
         if len(manual_entries) > 5:
             print(f"  ... and {len(manual_entries) - 5} more entries")
@@ -427,7 +427,7 @@ def restore_manual_entries(
 
                 # Extract from v2.4 format and preserve as v2.4 manual format
                 entity_name = payload.get("entity_name", f"restored_entry_{entry_id}")
-                entity_type = payload.get("entity_type", "documentation")
+                entity_type = payload.get("metadata", {}).get("entity_type") or payload.get("entity_type", "documentation")
                 content = payload.get("content", "")
 
                 # Use existing content for embedding

@@ -133,11 +133,8 @@ class QdrantStatsCollector:
                         and "relation_type" in point.payload
                     )
 
-                    # Check both locations for entity_type (old: top-level, new: metadata.entity_type)
-                    entity_type = point.payload.get("entity_type")
-                    if not entity_type and "metadata" in point.payload and isinstance(point.payload["metadata"], dict):
-                        entity_type = point.payload["metadata"].get("entity_type")
-                    entity_type = entity_type or "unknown"
+                    # Check both locations for entity_type (new: metadata.entity_type, fallback: top-level)
+                    entity_type = point.payload.get("metadata", {}).get("entity_type") or point.payload.get("entity_type", "unknown")
 
                     # Only count entity_type for non-relation entries
                     if not has_relation_structure:

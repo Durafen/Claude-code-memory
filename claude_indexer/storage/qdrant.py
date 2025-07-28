@@ -339,11 +339,14 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                         # Already a SparseVector object from BM25
                         sparse_vector = point.sparse_vector
                     else:
-                        # Convert list to SparseVector
-                        sparse_vector = SparseVector(
-                            indices=[i for i, val in enumerate(point.sparse_vector) if val > 0],
-                            values=[val for val in point.sparse_vector if val > 0]
-                        )
+                        # Convert list to SparseVector (optimized single-pass)
+                        indices = []
+                        values = []
+                        for i, val in enumerate(point.sparse_vector):
+                            if val > 0:
+                                indices.append(i)
+                                values.append(val)
+                        sparse_vector = SparseVector(indices=indices, values=values)
                     
                     # For collections with sparse vectors, use named vectors for both
                     vectors = {

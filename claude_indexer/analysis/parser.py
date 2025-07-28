@@ -1069,9 +1069,9 @@ class PythonParser(CodeParser):
             unique_hash = hashlib.md5(unique_content.encode()).hexdigest()[:8]
             collision_resistant_id = f"{base_id}::{unique_hash}"
 
-            logger.debug(
-                f"🔧   ✅ Creating EntityChunk for {entity_name} ({len(implementation)} chars)"
-            )
+            # logger.debug(
+            #     f"🔧   ✅ Creating EntityChunk for {entity_name} ({len(implementation)} chars)"
+            # )
 
             return EntityChunk(
                 id=collision_resistant_id,
@@ -1453,8 +1453,8 @@ class PythonParser(CodeParser):
         entity_names = {entity.name for entity in entities} if entities else set()
 
         # 🐛 DEBUG: Track chunks and their call metadata
-        logger.debug(f"🔍 PHANTOM DEBUG: Processing {len(chunks)} chunks for relations")
-        logger.debug(f"🔍 PHANTOM DEBUG: Current entity names: {sorted(entity_names)}")
+        # logger.debug(f"🔍 PHANTOM DEBUG: Processing {len(chunks)} chunks for relations")
+        # logger.debug(f"🔍 PHANTOM DEBUG: Current entity names: {sorted(entity_names)}")
 
         for chunk in chunks:
             if chunk.chunk_type == "implementation":
@@ -1463,7 +1463,8 @@ class PythonParser(CodeParser):
 
                 # 🐛 DEBUG: Log chunk details
                 if calls:
-                    logger.debug(f"🔍 PHANTOM DEBUG: Chunk {chunk.entity_name} has calls: {calls}")
+                    # logger.debug(f"🔍 PHANTOM DEBUG: Chunk {chunk.entity_name} has calls: {calls}")
+                    pass
 
                 for called_name in calls:
                     # Only create relations to entities we actually indexed
@@ -1476,14 +1477,16 @@ class PythonParser(CodeParser):
                             metadata={},
                         )
                         relations.append(relation)
-                        logger.debug(
-                            f"🔍 PHANTOM DEBUG: Created CALLS relation: {chunk.entity_name} -> {called_name} [CURRENT ENTITY]"
-                        )
+                        # logger.debug(
+                        #     f"🔍 PHANTOM DEBUG: Created CALLS relation: {chunk.entity_name} -> {called_name} [CURRENT ENTITY]"
+                        # )
+                        pass
                     else:
                         # 🐛 DEBUG: Log phantom call attempts
-                        logger.debug(f"🔍 PHANTOM DEBUG: Skipped call {chunk.entity_name} -> {called_name} [NOT IN CURRENT ENTITIES]")
+                        # logger.debug(f"🔍 PHANTOM DEBUG: Skipped call {chunk.entity_name} -> {called_name} [NOT IN CURRENT ENTITIES]")
+                        pass
 
-        logger.debug(f"🔍 PHANTOM DEBUG: Created {len(relations)} total relations from chunks")
+        # logger.debug(f"🔍 PHANTOM DEBUG: Created {len(relations)} total relations from chunks")
         return relations
 
 

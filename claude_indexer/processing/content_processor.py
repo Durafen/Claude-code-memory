@@ -21,7 +21,6 @@ class ContentProcessor(ContentHashMixin, ABC):
         self.logger = logger
         # Lazy-loaded BM25 embedder for sparse vectors
         self._bm25_embedder = None
-        self._bm25_corpus_fitted = False
 
     def _get_bm25_embedder(self):
         """Lazy initialize BM25 embedder for sparse vectors."""
@@ -111,14 +110,7 @@ class ContentProcessor(ContentHashMixin, ABC):
             bm25_embedder = self._get_bm25_embedder()
             if bm25_embedder:
                 try:
-                    # Fit corpus on first use for this batch
-                    if not self._bm25_corpus_fitted:
-                        bm25_embedder.fit_corpus(texts)
-                        self._bm25_corpus_fitted = True
-                        if self.logger:
-                            self.logger.debug(f"🔤 Fitted BM25 corpus on {len(texts)} entity texts")
-                    
-                    # Generate sparse embeddings
+                    # Let embed_batch handle fitting internally (single-pass architecture)
                     bm25_results = bm25_embedder.embed_batch(texts)
                     
                     # Add sparse vectors to dense embedding results

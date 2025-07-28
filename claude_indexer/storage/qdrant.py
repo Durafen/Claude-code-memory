@@ -331,7 +331,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         for point in points:
             # Handle hybrid vector points
             if isinstance(point, HybridVectorPoint):
-                logger.debug(f"🔍 SPARSE DEBUG: Processing HybridVectorPoint, has_sparse_vectors={has_sparse_vectors}")
+                # logger.debug(f"🔍 SPARSE DEBUG: Processing HybridVectorPoint, has_sparse_vectors={has_sparse_vectors}")
                 # This is a hybrid vector point
                 if has_sparse_vectors:
                     # Handle BM25 sparse vector - could be SparseVector object or list
@@ -2122,9 +2122,9 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     to_e = rel.payload.get("relation_target", "")
                     rel_type = rel.payload.get("relation_type", "")
                     imp_type = rel.payload.get("import_type", "none")
-                    logger.debug(
-                        f"Relation {i+1}: {from_e} --{rel_type}--> {to_e} [import_type: {imp_type}]"
-                    )
+                    # logger.debug(
+                    #     f"Relation {i+1}: {from_e} --{rel_type}--> {to_e} [import_type: {imp_type}]"
+                    # )
 
             logger.debug(
                 f"Checking {len(relations)} relations against {len(entity_names)} entities"

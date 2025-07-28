@@ -74,6 +74,8 @@ class BM25Embedder(Embedder):
         self.vocabulary: dict[str, int] = {}
         self.corpus: list[str] = []
         self.is_fitted = False
+        # Cache document frequencies globally to avoid O(n²) recalculation
+        self._doc_freq_cache: dict[str, int] = {}
         
         # Performance tracking
         self._fit_time = 0.0
@@ -88,8 +90,12 @@ class BM25Embedder(Embedder):
 
     def _get_corpus_hash(self, corpus: list[str]) -> str:
         """Generate hash of corpus for caching."""
+        start_time = time.time()
         corpus_str = "\n".join(sorted(corpus))
-        return hashlib.sha256(corpus_str.encode()).hexdigest()[:16]
+        hash_result = hashlib.sha256(corpus_str.encode()).hexdigest()[:16]
+        hash_time = time.time() - start_time
+        logger.debug(f"🐌 SHA256 corpus hashing took {hash_time:.3f}s for {len(corpus)} docs")
+        return hash_result
 
     def _save_model_cache(self, cache_key: str) -> None:
         """Save trained model to cache."""
@@ -99,6 +105,7 @@ class BM25Embedder(Embedder):
                 "model": self.model,
                 "vocabulary": self.vocabulary,
                 "corpus": self.corpus,
+                "doc_freq_cache": self._doc_freq_cache,
                 "config": {
                     "method": self.method,
                     "k1": self.k1,
@@ -141,6 +148,7 @@ class BM25Embedder(Embedder):
             self.model = cache_data["model"]
             self.vocabulary = cache_data["vocabulary"]
             self.corpus = cache_data["corpus"]
+            self._doc_freq_cache = cache_data.get("doc_freq_cache", {})
             self._fit_time = cache_data.get("fit_time", 0.0)
             self._total_texts_processed = cache_data.get("total_texts", 0)
             self.is_fitted = True
@@ -179,7 +187,10 @@ class BM25Embedder(Embedder):
             return
         
         # Preprocess corpus
+        tokenize_start = time.time()
         tokenized_corpus = [self._preprocess_text(text) for text in corpus]
+        tokenize_time = time.time() - tokenize_start
+        logger.debug(f"🐌 Corpus tokenization took {tokenize_time:.3f}s for {len(corpus)} docs")
         
         # Initialize BM25 model
         self.model = bm25s.BM25(
@@ -191,7 +202,10 @@ class BM25Embedder(Embedder):
         
         # Fit the model
         logger.debug(f"Fitting BM25 model on {len(corpus)} documents...")
+        fit_start = time.time()
         self.model.index(tokenized_corpus)
+        fit_time = time.time() - fit_start
+        logger.debug(f"🐌 BM25 model.index() took {fit_time:.3f}s")
         
         # Store corpus and extract vocabulary
         self.corpus = corpus.copy()
@@ -210,6 +224,9 @@ class BM25Embedder(Embedder):
         
         self.is_fitted = True
         
+        # Pre-calculate document frequencies ONCE during fitting
+        self._calculate_doc_frequencies()
+        
         self._fit_time = time.time() - start_time
         self._total_texts_processed = len(corpus)
         
@@ -220,6 +237,24 @@ class BM25Embedder(Embedder):
             f"BM25 model fitted in {self._fit_time:.2f}s, "
             f"vocabulary size: {len(self.vocabulary)}"
         )
+
+    def _calculate_doc_frequencies(self) -> None:
+        """Pre-calculate document frequencies for all vocabulary terms to avoid O(n²) recalculation."""
+        if not self.vocabulary or not self.corpus:
+            return
+            
+        calc_start = time.time()
+        self._doc_freq_cache.clear()
+        
+        # Tokenize corpus once
+        tokenized_corpus = [set(self._preprocess_text(doc)) for doc in self.corpus]
+        
+        # Calculate document frequency for each vocabulary term
+        for term in self.vocabulary:
+            self._doc_freq_cache[term] = sum(1 for doc_tokens in tokenized_corpus if term in doc_tokens)
+            
+        calc_time = time.time() - calc_start
+        logger.debug(f"🚀 Pre-calculated doc frequencies in {calc_time:.3f}s for {len(self.vocabulary)} terms")
 
     def _generate_sparse_vector(self, text: str) -> list[float]:
         """Generate sparse vector for a single text using proper IDF-based term weighting."""
@@ -243,11 +278,8 @@ class BM25Embedder(Embedder):
             vocab_size = max(len(self.vocabulary), 100)
             sparse_vector = np.zeros(vocab_size, dtype=np.float32)
             
-            # Calculate document frequencies for vocabulary terms
-            doc_freq = {}
-            for term in self.vocabulary:
-                doc_freq[term] = sum(1 for doc in self.corpus 
-                                   if term in self._preprocess_text(doc))
+            # Use pre-calculated document frequencies (O(1) lookup vs O(n²) calculation)
+            doc_freq = self._doc_freq_cache
             
             # Calculate IDF weights for query terms
             N = len(self.corpus)
@@ -327,16 +359,21 @@ class BM25Embedder(Embedder):
             return []
         
         start_time = time.time()
+        logger.debug(f"🐌 BM25 embed_batch starting with {len(texts)} texts")
         
         try:
             # Fit model on the entire corpus first
             if not self.is_fitted:
                 # Limit corpus size for memory management
                 corpus = texts[:self.corpus_size_limit]
+                fit_start = time.time()
                 self._fit_corpus(corpus)
+                fit_total = time.time() - fit_start
+                logger.debug(f"🐌 BM25 _fit_corpus took {fit_total:.3f}s")
             
             # Generate embeddings for all texts
             results = []
+            embedding_start = time.time()
             for text in texts:
                 embedding = self._generate_sparse_vector(text)
                 
@@ -351,6 +388,8 @@ class BM25Embedder(Embedder):
                     )
                 )
             
+            embedding_total = time.time() - embedding_start
+            logger.debug(f"🐌 BM25 embedding generation took {embedding_total:.3f}s for {len(texts)} texts")
             logger.debug(f"Generated {len(results)} BM25 embeddings")
             return results
             

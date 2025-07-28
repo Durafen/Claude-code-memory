@@ -396,7 +396,8 @@ def restore_manual_entries(
             print(f"📦 Creating collection: {target_collection}")
             # Get vector size from embedder
             vector_size = 512 if config.embedding_provider == "voyage" else 1536
-            store.create_collection(
+            # Create collection with named vectors for BM25/hybrid search compatibility
+            store.create_collection_with_named_vectors(
                 collection_name=target_collection,
                 vector_size=vector_size,
                 distance_metric="cosine",
@@ -491,7 +492,7 @@ def restore_manual_entries(
 
                 point = PointStruct(
                     id=deterministic_id,
-                    vector=embedding_result.embedding,
+                    vector={'dense': embedding_result.embedding},
                     payload=manual_payload,
                 )
                 vector_points.append(point)

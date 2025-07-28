@@ -195,6 +195,7 @@ search_similar("pattern")  # Returns all entity and chunk types
 ```python
 search_similar("query", searchMode="hybrid")  # 70% semantic + 30% keyword
 search_similar("exact terms", searchMode="keyword")  # BM25 term matching
+search_similar("concept query", searchMode="semantic")  # Default AI understanding
 ```
 
 **Collection Requirements:**
@@ -293,7 +294,7 @@ read_graph(entity="DatabaseManager", mode="raw")
 search_similar("error pattern", entityTypes=["metadata"])
 
 # 🔍 Find similar debugging patterns from past solutions
-search_similar("authentication error", entityTypes=["function", "debugging_pattern"])
+search_similar("authentication error", entityTypes=["function", "debugging_pattern"], searchMode="hybrid")
 
 # 🧩 Mixed search for comprehensive context
 search_similar("validation error", entityTypes=["function", "metadata", "implementation"])
@@ -393,6 +394,20 @@ claude-indexer search "query" -p /path -c test     # Test search functionality
 tail -f logs/collection-name.log                   # Real-time monitoring
 tail -f ~/.claude-indexer/logs/service.log        # Service logs
 ```
+
+**Claude Code MCP Logs:**
+```bash
+# MCP server logs for all servers
+~/Library/Caches/claude-cli-nodejs/
+
+# Project-specific MCP logs (replace PROJECT_PATH with actual path)
+~/Library/Caches/claude-cli-nodejs/-PROJECT_PATH--claude/mcp-logs-[server-name]/
+
+# Memory project MCP logs 
+tail -f ~/Library/Caches/claude-cli-nodejs/-Users-Duracula-1-Python-Projects-memory--claude/mcp-logs-claude-memory-memory/$(ls -t ~/Library/Caches/claude-cli-nodejs/-Users-Duracula-1-Python-Projects-memory--claude/mcp-logs-claude-memory-memory/ | head -1)
+```
+
+**After MCP changes:** Build with `cd mcp-qdrant-memory && npm run build`, then restart Claude Code.
 
 **Collection Health:**
 ```bash

@@ -304,10 +304,11 @@ Assistant: 🟢 Memory Guard enabled for this session
 ## 🚀 Advanced Features
 
 ### 🧠 Memory Graph Functions
-**search_similar(query, entityTypes, limit)**
+**search_similar(query, entityTypes, limit, searchMode)**
 - `query`: Search term or code pattern
 - `entityTypes`: Filter by ["metadata", "function", "class", "debugging_pattern", "implementation"]
 - `limit`: Max results (default: 50)
+- `searchMode`: "semantic" (default), "keyword" (BM25), "hybrid" (both)
 
 **read_graph(entity, mode, limit, entityTypes)**
 - `entity`: Specific component name for focused view

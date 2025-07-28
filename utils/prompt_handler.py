@@ -14,8 +14,9 @@ except ImportError:
 
 
 class PromptHandler:
-    def __init__(self):
-        project_root = self._detect_project_root() or Path.cwd()
+    def __init__(self, project_root: Path | None = None):
+        if project_root is None:
+            project_root = self._detect_project_root() or Path.cwd()
         self.bypass_manager = BypassManager(project_root)
     
     def _detect_project_root(self, file_path: str | None = None) -> Path | None:
@@ -102,8 +103,9 @@ if __name__ == "__main__":
         with open("/Users/Duracula 1/Python-Projects/memory/debug/hook_debug.log", "a") as f:
             f.write(f"HOOK RECEIVED: {json.dumps(hook_data)}\n")
 
-        # Initialize handler
-        handler = PromptHandler()
+        # Initialize handler with correct project root from hook data
+        project_cwd = Path(hook_data.get("cwd", Path.cwd()))
+        handler = PromptHandler(project_cwd)
 
         # Process hook
         result = handler.process_hook(hook_data)

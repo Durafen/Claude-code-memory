@@ -537,14 +537,15 @@ OPERATION CONTEXT:
 
 🔍 ANALYSIS PROTOCOL:
 1. EXTRACT function/class names from new code being written
-2. SEARCH memory for existing implementations of same functionality using {self.mcp_collection}search_similar
-3. IF similar functions exist: SUGGEST using existing code instead of creating duplicates
-4. Use MCP service: {self.mcp_collection}search_similar for related functionality analysis
-5. Analyze completeness: missing error cases, validations, edge cases
-6. Check integration: dependencies, API contracts, data flows
-7. Verify flow integrity: function usage, dependency impact, breaking changes
-8. Verify preservation: ensure existing features remain functional
-9. EXCLUDE ALL MANUAL ENTRIES AND DOCUMENTATION:
+2. SEARCH memory for exact duplicates of same functionality using {self.mcp_collection}search_similar
+3. SEARCH for related patterns, similar implementations, and existing functionality that could be reused
+4. IF similar functions exist: SUGGEST using existing code instead of creating duplicates
+5. Use MCP service: {self.mcp_collection}search_similar for related functionality analysis
+6. Analyze completeness: missing error cases, validations, edge cases
+7. Check integration: dependencies, API contracts, data flows
+8. Verify flow integrity: function usage, dependency impact, breaking changes
+9. Verify preservation: ensure existing features remain functional
+10. EXCLUDE ALL MANUAL ENTRIES AND DOCUMENTATION:
    - IGNORE: documentation files (.md, .txt, .markdown, .rst)
    - IGNORE: manual entries (debugging_pattern, implementation_pattern, integration_pattern, configuration_pattern, architecture_pattern, performance_pattern, knowledge_insight, active_issue, ideas)
    - IGNORE: any human-created analysis, notes, or patterns

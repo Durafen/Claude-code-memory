@@ -212,7 +212,11 @@ class ManagedVectorStore(VectorStore):
             return False
 
         vector_size = vector_size or self.default_vector_size
-        result = self.create_collection(collection_name, vector_size)
+        # Use sparse vector support for all new collections
+        if hasattr(self, 'create_collection_with_sparse_vectors'):
+            result = self.create_collection_with_sparse_vectors(collection_name, vector_size)
+        else:
+            result = self.create_collection(collection_name, vector_size)
         return result.success
 
     def upsert_points(

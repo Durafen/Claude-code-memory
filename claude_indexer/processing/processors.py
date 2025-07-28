@@ -350,6 +350,7 @@ class RelationProcessor(ContentProcessor):
         duplicate_details = {}
 
         if self.logger:
+            pass
             # self.logger.debug("🔍 === RELATION DEDUPLICATION ===")
             # self.logger.debug(f"   Total relations to process: {len(relations)}")
 
@@ -369,6 +370,7 @@ class RelationProcessor(ContentProcessor):
                 seen_relation_keys.add(relation_key)
                 unique_relations.append(relation)
                 if self.logger and len(unique_relations) <= 10:
+                    pass
                     # self.logger.debug(
                     #     f"   Unique: {relation.from_entity} --{relation.relation_type}--> {relation.to_entity}"
                     # )

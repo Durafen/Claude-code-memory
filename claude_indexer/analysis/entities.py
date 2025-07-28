@@ -83,16 +83,36 @@ class EntityChunk:
         cls, entity: "Entity", has_implementation: bool = False
     ) -> "EntityChunk":
         """Create metadata chunk from existing Entity for progressive disclosure."""
-        # Build content from entity observations
-        content_parts = []
+        # Build content with observation-based field weighting for BM25
+        # Since parsers don't populate signature/docstring, weight observations by content patterns
+        weighted_parts = []
+        
+        # Legacy signature/docstring handling (rarely populated by parsers)
         if entity.signature:
-            content_parts.append(f"Signature: {entity.signature}")
+            signature_text = f"Signature: {entity.signature}"
+            weighted_parts.extend([signature_text] * 3)
+        
         if entity.docstring:
-            content_parts.append(f"Description: {entity.docstring}")
-
-        # Add key observations
-        content_parts.extend(entity.observations)
-        content = " | ".join(content_parts)
+            description_text = f"Description: {entity.docstring}"
+            weighted_parts.extend([description_text] * 2)
+        
+        # Observation-based field weighting (main approach)
+        for observation in entity.observations:
+            observation_lower = observation.lower()
+            
+            # HIGH WEIGHT (3x): Direct entity type declarations
+            if any(keyword in observation_lower for keyword in ['class:', 'function:', 'method:', 'interface:', 'signature:']):
+                weighted_parts.extend([observation] * 3)
+            
+            # MEDIUM WEIGHT (2x): Purpose/responsibility descriptions  
+            elif any(keyword in observation_lower for keyword in ['purpose:', 'responsibility:', 'description:']):
+                weighted_parts.extend([observation] * 2)
+            
+            # BASE WEIGHT (1x): All other observations (details, attributes, locations)
+            else:
+                weighted_parts.append(observation)
+        
+        content = " | ".join(weighted_parts)
 
         # Create collision-resistant metadata chunk ID
         import hashlib

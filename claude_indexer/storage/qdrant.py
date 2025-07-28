@@ -1113,14 +1113,27 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         try:
             collection_info = self.client.get_collection(collection_name)
 
+            # Handle both legacy single vector config and new multi-vector config (BM25)
+            vectors_config = collection_info.config.params.vectors
+            if isinstance(vectors_config, dict):
+                # New multi-vector format (BM25) - get primary dense vector config
+                dense_config = vectors_config.get("dense") or next(iter(vectors_config.values()))
+                vector_size = dense_config.size if hasattr(dense_config, 'size') else 0
+                distance_metric = dense_config.distance.value if hasattr(dense_config, 'distance') else "unknown"
+            else:
+                # Legacy single vector format
+                vector_size = vectors_config.size
+                distance_metric = vectors_config.distance.value
+            
             return {
                 "name": collection_name,
                 "status": collection_info.status.value,
-                "vector_size": collection_info.config.params.vectors.size,
-                "distance_metric": collection_info.config.params.vectors.distance.value,
+                "vector_size": vector_size,
+                "distance_metric": distance_metric,
                 "points_count": collection_info.points_count,
                 "indexed_vectors_count": collection_info.indexed_vectors_count,
                 "segments_count": collection_info.segments_count,
+                "has_sparse_vectors": bool(getattr(collection_info.config.params, "sparse_vectors", None)),
             }
 
         except Exception as e:

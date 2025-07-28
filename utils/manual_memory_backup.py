@@ -391,17 +391,11 @@ def restore_manual_entries(
             embedder = OpenAIEmbedder(api_key=config.openai_api_key)
         store = QdrantStore(url=config.qdrant_url, api_key=config.qdrant_api_key)
 
-        # Ensure collection exists
+        # Check collection exists (don't create)
         if not store.collection_exists(target_collection):
-            print(f"📦 Creating collection: {target_collection}")
-            # Get vector size from embedder
-            vector_size = 512 if config.embedding_provider == "voyage" else 1536
-            # Create collection with named vectors for BM25/hybrid search compatibility
-            store.create_collection_with_named_vectors(
-                collection_name=target_collection,
-                vector_size=vector_size,
-                distance_metric="cosine",
-            )
+            print(f"❌ Collection '{target_collection}' doesn't exist!")
+            print("Create the collection first using indexer before restoring.")
+            return False
 
         # Process in batches
         total_restored = 0
@@ -490,9 +484,24 @@ def restore_manual_entries(
                         # Point doesn't exist, proceed with creation
                         pass
 
+                # Check collection vector format and adapt
+                collection_info = store.client.get_collection(target_collection)
+                vectors_config = collection_info.config.params.vectors
+                
+                # Handle both named vectors (BM25/hybrid) and default vector formats
+                if isinstance(vectors_config, dict) and 'dense' in vectors_config:
+                    # Named vectors format (BM25/hybrid collections) - use embedding as-is (already has 'dense' key)
+                    vector_data = embedding_result.embedding
+                else:
+                    # Default single vector format (legacy collections) - extract dense vector
+                    if isinstance(embedding_result.embedding, dict) and 'dense' in embedding_result.embedding:
+                        vector_data = embedding_result.embedding['dense']
+                    else:
+                        vector_data = embedding_result.embedding
+
                 point = PointStruct(
                     id=deterministic_id,
-                    vector={'dense': embedding_result.embedding},
+                    vector=vector_data,
                     payload=manual_payload,
                 )
                 vector_points.append(point)

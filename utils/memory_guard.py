@@ -606,7 +606,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                     "--output-format",
                     "json",
                     "--max-turns",
-                    "10",
+                    "20",
                     "--model",
                     "sonnet",
                     "--allowedTools",
@@ -616,7 +616,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                 capture_output=True,
                 text=True,
                 timeout=60,
-                cwd=str(self.project_root) if self.project_root else None,
+                cwd=str(claude_dir),
             )
 
             if result.returncode != 0:

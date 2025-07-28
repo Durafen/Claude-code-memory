@@ -224,8 +224,10 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
 
             distance = self.DISTANCE_METRICS[distance_metric]
 
-            # Create collection with dense and sparse vector support
-            vectors_config = VectorParams(size=dense_vector_size, distance=distance)
+            # Create collection with named dense and sparse vector support
+            vectors_config = {
+                "dense": VectorParams(size=dense_vector_size, distance=distance)
+            }
             sparse_vectors_config = {
                 "bm25": SparseVectorParams()  # Named sparse vector for BM25
             }
@@ -306,10 +308,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 processing_time=time.time() - start_time,
             )
 
-        # For hybrid vectors, we need to check if collection has sparse vector support
-        has_sparse_vectors = self._collection_has_sparse_vectors(collection_name)
-        
-        # Ensure collection exists - determine vector size from first point
+        # Ensure collection exists first - determine vector size from first point
         if isinstance(points[0], HybridVectorPoint):
             vector_size = len(points[0].dense_vector)
         else:
@@ -323,35 +322,61 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 errors=[f"Collection {collection_name} does not exist"],
             )
 
+        # AFTER collection creation, check if it has sparse vector support
+        has_sparse_vectors = self._collection_has_sparse_vectors(collection_name)
+        logger.debug(f"🔍 SPARSE DEBUG: Collection {collection_name} has_sparse_vectors = {has_sparse_vectors} (checked after creation)")
+
         # Convert to Qdrant points
         qdrant_points = []
         for point in points:
             # Handle hybrid vector points
             if isinstance(point, HybridVectorPoint):
+                logger.debug(f"🔍 SPARSE DEBUG: Processing HybridVectorPoint, has_sparse_vectors={has_sparse_vectors}")
                 # This is a hybrid vector point
                 if has_sparse_vectors:
-                    # Create named vectors for hybrid storage
-                    vectors = {
-                        "default": point.dense_vector,
-                        "sparse": SparseVector(
+                    # Handle BM25 sparse vector - could be SparseVector object or list
+                    if hasattr(point.sparse_vector, 'indices'):
+                        # Already a SparseVector object from BM25
+                        sparse_vector = point.sparse_vector
+                    else:
+                        # Convert list to SparseVector
+                        sparse_vector = SparseVector(
                             indices=[i for i, val in enumerate(point.sparse_vector) if val > 0],
                             values=[val for val in point.sparse_vector if val > 0]
                         )
+                    
+                    # For collections with sparse vectors, use named vectors for both
+                    vectors = {
+                        "dense": point.dense_vector,  # Named dense vector
+                        "bm25": sparse_vector         # Named sparse vector
                     }
+                    
+                    qdrant_point = PointStruct(
+                        id=point.id, 
+                        vector=vectors,  # Dictionary with both named vectors
+                        payload=point.payload
+                    )
+                else:
+                    # Fallback to dense only if sparse not supported  
+                    logger.warning(f"Collection {collection_name} doesn't support sparse vectors, using dense only")
+                    # Still use named vector format for consistency
+                    vectors = {"dense": point.dense_vector}
+                    qdrant_point = PointStruct(
+                        id=point.id, vector=vectors, payload=point.payload
+                    )
+            else:
+                # Regular vector point - use named vector format if collection has named vectors
+                if has_sparse_vectors:
+                    # Collection expects named vectors, so wrap the dense vector
+                    vectors = {"dense": point.vector}
                     qdrant_point = PointStruct(
                         id=point.id, vector=vectors, payload=point.payload
                     )
                 else:
-                    # Fallback to dense only if sparse not supported
-                    logger.warning(f"Collection {collection_name} doesn't support sparse vectors, using dense only")
+                    # Old-style collection with unnamed vectors
                     qdrant_point = PointStruct(
-                        id=point.id, vector=point.dense_vector, payload=point.payload
+                        id=point.id, vector=point.vector, payload=point.payload
                     )
-            else:
-                # Regular vector point
-                qdrant_point = PointStruct(
-                    id=point.id, vector=point.vector, payload=point.payload
-                )
             qdrant_points.append(qdrant_point)
 
         # Use improved batch upsert for reliability
@@ -1007,7 +1032,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         return filtered_results[:limit]
 
     def _collection_has_sparse_vectors(self, collection_name: str) -> bool:
-        """Check if a collection supports sparse vectors.
+        """Check if a collection supports sparse vectors with retry for timing issues.
         
         Args:
             collection_name: Name of the collection to check
@@ -1015,29 +1040,50 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         Returns:
             True if collection has sparse vector support, False otherwise
         """
-        try:
-            collection_info = self.client.get_collection(collection_name)
-            
-            # Check if the collection has named vectors configuration
-            if hasattr(collection_info.config.params, 'vectors'):
-                vectors_config = collection_info.config.params.vectors
+        import time
+        
+        max_retries = 3
+        retry_delay = 0.1  # 100ms between retries
+        
+        for attempt in range(max_retries):
+            try:
+                collection_info = self.client.get_collection(collection_name)
                 
-                # If vectors_config is a VectorsConfig with named vectors
-                if hasattr(vectors_config, '__dict__'):
-                    # Look for sparse vector configuration
-                    for attr_name, attr_value in vectors_config.__dict__.items():
-                        if attr_name == 'sparse' or 'sparse' in str(attr_name).lower():
+                # Check for sparse_vectors configuration (our BM25 uses named sparse vectors)
+                if hasattr(collection_info.config.params, 'sparse_vectors'):
+                    sparse_config = collection_info.config.params.sparse_vectors
+                    if sparse_config is not None:
+                        # Look for 'bm25' named sparse vector
+                        has_bm25 = False
+                        if hasattr(sparse_config, 'get'):
+                            has_bm25 = 'bm25' in sparse_config
+                        elif hasattr(sparse_config, '__dict__'):
+                            has_bm25 = 'bm25' in sparse_config.__dict__
+                        else:
+                            has_bm25 = True  # Any sparse vector config means support
+                        
+                        if has_bm25:
+                            logger.debug(f"🔍 SPARSE DEBUG: Collection {collection_name} confirmed BM25 support on attempt {attempt + 1}")
                             return True
-                
-                # Alternative check: look for multiple vector configurations
-                if hasattr(vectors_config, 'get'):
-                    return 'sparse' in vectors_config
+                        
+                # If no sparse vectors found and we have retries left, wait and try again
+                if attempt < max_retries - 1:
+                    logger.debug(f"🔍 SPARSE DEBUG: Collection {collection_name} no sparse vectors on attempt {attempt + 1}, retrying...")
+                    time.sleep(retry_delay)
+                    continue
                     
-            return False
-            
-        except Exception as e:
-            logger.debug(f"Error checking sparse vector support for {collection_name}: {e}")
-            return False
+                logger.debug(f"🔍 SPARSE DEBUG: Collection {collection_name} no sparse vectors after {max_retries} attempts")
+                return False
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.debug(f"Error checking sparse vector support for {collection_name} (attempt {attempt + 1}): {e}, retrying...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.debug(f"Error checking sparse vector support for {collection_name} after {max_retries} attempts: {e}")
+                    return False
+        
+        return False
 
     def _build_filter(self, filter_conditions: dict[str, Any]) -> Filter:
         """Build Qdrant filter from conditions."""

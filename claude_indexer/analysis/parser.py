@@ -1527,7 +1527,7 @@ class MarkdownParser(CodeParser, TiktokenMixin):
             headers = self._extract_headers(file_path)
             result.entities.extend(headers)
 
-            # Extract section content as implementation chunks (NEW)
+            # Extract section content as implementation chunks  
             implementation_chunks = self._extract_section_content(file_path)
             result.implementation_chunks = implementation_chunks
 
@@ -1617,7 +1617,7 @@ class MarkdownParser(CodeParser, TiktokenMixin):
             
             # Convert chunk groups to EntityChunks
             for chunk_group in chunk_groups:
-                impl_chunk, metadata_chunk = self._create_entity_chunks(chunk_group, file_path)
+                impl_chunk, metadata_chunk = self._create_entity_chunks(chunk_group, file_path, content)
                 chunks.extend([impl_chunk, metadata_chunk])
 
         except Exception as e:
@@ -1656,12 +1656,19 @@ class MarkdownParser(CodeParser, TiktokenMixin):
             start_line = header["line_num"] + 1
             end_line = len(lines)
             
-            # Find next header at same level or higher
+            # Find next header - stop at same level, higher level, or immediate child
             for j in range(i + 1, len(headers)):
                 next_header = headers[j]
-                if next_header["level"] <= level:
-                    end_line = next_header["line_num"]
-                    break
+                if level == 1:
+                    # H1 sections end at next H1 or H2
+                    if next_header["level"] <= 2:
+                        end_line = next_header["line_num"]
+                        break
+                else:
+                    # Other levels: end at same level, higher level, or immediate child (level+1)
+                    if next_header["level"] <= level or next_header["level"] == level + 1:
+                        end_line = next_header["line_num"]
+                        break
             
             # Extract section content
             section_lines = lines[start_line:end_line]  
@@ -1697,9 +1704,8 @@ class MarkdownParser(CodeParser, TiktokenMixin):
                 # Create combined content if we have merged headers
                 display_header = header["text"]
                 if merged_header_texts:
-                    # Prepend merged headers to content (not header name)
-                    merged_content = "\n\n".join([f"## {h}" for h in merged_header_texts])
-                    section_content = f"{merged_content}\n\n{section_content}"
+                    # Include merged header names in display header only (don't duplicate in content)
+                    display_header = f"{header['text']} (+{len(merged_header_texts)} more)"
                 
                 # Calculate tokens for this section (header + content)
                 full_section = f"{display_header}\n\n{section_content}"
@@ -1739,17 +1745,22 @@ class MarkdownParser(CodeParser, TiktokenMixin):
         current_tokens = 0
         current_parent = None
         
-        # Use 85% of max tokens for initial packing (more aggressive initial grouping)
+        # Smart grouping: prefer individual sections when they're substantial enough
+        MIN_SECTION_TOKENS = 100  # Increased from 20 to encourage more grouping
         AGGRESSIVE_TOKEN_BUDGET = int(self.MAX_CHUNK_TOKENS * 0.85)  # 850 tokens
         MAX_SECTIONS_PER_CHUNK = 10  # Increased from 8
         
         for section in processed_sections:
             parent_key = tuple(section["parent_path"][:-1]) if len(section["parent_path"]) > 1 else ()
             
-            # More aggressive grouping logic
+            # Smart grouping logic - respect section boundaries for substantial content
+            is_substantial = section["tokens"] >= MIN_SECTION_TOKENS
+            would_exceed_budget = current_tokens + section["tokens"] > AGGRESSIVE_TOKEN_BUDGET
+            
             can_group = (
-                current_tokens + section["tokens"] <= AGGRESSIVE_TOKEN_BUDGET and  # Aggressive budget
-                len(current_group) < MAX_SECTIONS_PER_CHUNK and  # Higher section limit
+                not would_exceed_budget and
+                len(current_group) < MAX_SECTIONS_PER_CHUNK and
+                not (is_substantial and current_group) and  # Don't group substantial sections with others
                 (
                     current_parent == parent_key or  # Same parent (preferred)
                     (len(section["parent_path"]) <= 3 and len(current_group) < 6) or  # Allow deeper nesting
@@ -1961,7 +1972,7 @@ class MarkdownParser(CodeParser, TiktokenMixin):
     
         return cleaned if cleaned else original_content
 
-    def _create_entity_chunks(self, section_group: list[dict], file_path: Path) -> tuple["EntityChunk", "EntityChunk"]:
+    def _create_entity_chunks(self, section_group: list[dict], file_path: Path, source_content: str) -> tuple["EntityChunk", "EntityChunk"]:
         """Create implementation and metadata chunks from section group."""
         import hashlib
         
@@ -1975,13 +1986,31 @@ class MarkdownParser(CodeParser, TiktokenMixin):
         
         for section in section_group:
             combined_headers.append(section["header"])
-            combined_content.append(f"# {section['header']}\n\n{section['content']}")
+            # For grouped entities, include headers to match source exactly
+            if len(section_group) > 1:
+                # Add header with appropriate level markers
+                header_level = section.get("level", 1)
+                header_prefix = "#" * header_level
+                combined_content.append(f"{header_prefix} {section['header']}\n\n{section['content']}")
+            else:
+                combined_content.append(section['content'])
             total_tokens += section["tokens"]
-            start_line = min(start_line, section["line_start"])
+            # For grouped entities that include headers, use header line for start_line
+            if len(section_group) > 1:
+                # Use header line for first section, content line for others
+                if first_header_line is None:
+                    header_line = section.get("original_header_line")
+                    if header_line is not None:  # Check for None specifically since 0 is valid
+                        # Convert 0-based to 1-based line number
+                        start_line = min(start_line, header_line + 1)
+                        first_header_line = header_line + 1
+                    else:
+                        start_line = min(start_line, section["line_start"])
+                else:
+                    start_line = min(start_line, section["line_start"])
+            else:
+                start_line = min(start_line, section["line_start"])
             end_line = max(end_line, section["line_end"])
-            # Get the actual header line number (not content start line)
-            if first_header_line is None:
-                first_header_line = section.get("original_header_line")
         
         # Create chunk name
         if len(section_group) == 1:
@@ -1990,6 +2019,12 @@ class MarkdownParser(CodeParser, TiktokenMixin):
             chunk_name = f"{section_group[0]['header']} (+{len(section_group)-1} more)"
         
         full_content = "\n\n".join(combined_content)
+        
+        # For grouped entities that span to the end of file, preserve trailing newline
+        if len(section_group) > 1 and end_line >= len(source_content.split('\n')):
+            # Check if source file ends with newline and preserve it
+            if source_content.endswith('\n') and not full_content.endswith('\n'):
+                full_content += '\n'
         
         # Create implementation chunk
         unique_content = f"{str(file_path)}::{chunk_name}::documentation::{start_line}::{end_line}"
@@ -2005,7 +2040,7 @@ class MarkdownParser(CodeParser, TiktokenMixin):
             metadata={
                 "entity_type": "documentation",
                 "file_path": str(file_path),
-                "start_line": int(start_line) + 1,
+                "start_line": int(start_line),
                 "end_line": int(end_line),
                 "section_type": "markdown_section",
                 "content_length": len(full_content),

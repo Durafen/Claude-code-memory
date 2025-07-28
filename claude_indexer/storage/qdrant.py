@@ -326,61 +326,70 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         has_sparse_vectors = self._collection_has_sparse_vectors(collection_name)
         logger.debug(f"🔍 SPARSE DEBUG: Collection {collection_name} has_sparse_vectors = {has_sparse_vectors} (checked after creation)")
 
+        # Pre-segregate points by type to avoid per-point isinstance calls
+        hybrid_points = []
+        regular_points = []
+        for point in points:
+            if isinstance(point, HybridVectorPoint):
+                hybrid_points.append(point)
+            else:
+                regular_points.append(point)
+        
         # Convert to Qdrant points
         qdrant_points = []
-        for point in points:
-            # Handle hybrid vector points
-            if isinstance(point, HybridVectorPoint):
-                # logger.debug(f"🔍 SPARSE DEBUG: Processing HybridVectorPoint, has_sparse_vectors={has_sparse_vectors}")
-                # This is a hybrid vector point
-                if has_sparse_vectors:
-                    # Handle BM25 sparse vector - could be SparseVector object or list
-                    if hasattr(point.sparse_vector, 'indices'):
-                        # Already a SparseVector object from BM25
-                        sparse_vector = point.sparse_vector
-                    else:
-                        # Convert list to SparseVector (optimized single-pass)
-                        indices = []
-                        values = []
-                        for i, val in enumerate(point.sparse_vector):
-                            if val > 0:
-                                indices.append(i)
-                                values.append(val)
-                        sparse_vector = SparseVector(indices=indices, values=values)
-                    
-                    # For collections with sparse vectors, use named vectors for both
-                    vectors = {
-                        "dense": point.dense_vector,  # Named dense vector
-                        "bm25": sparse_vector         # Named sparse vector
-                    }
-                    
-                    qdrant_point = PointStruct(
-                        id=point.id, 
-                        vector=vectors,  # Dictionary with both named vectors
-                        payload=point.payload
-                    )
+        
+        # Process hybrid points in batch (optimized - no per-point type checking)
+        if has_sparse_vectors:
+            # Collection supports sparse vectors - create named vector format
+            for point in hybrid_points:
+                # Handle BM25 sparse vector - could be SparseVector object or list
+                if hasattr(point.sparse_vector, 'indices'):
+                    # Already a SparseVector object from BM25
+                    sparse_vector = point.sparse_vector
                 else:
-                    # Fallback to dense only if sparse not supported  
-                    logger.warning(f"Collection {collection_name} doesn't support sparse vectors, using dense only")
-                    # Still use named vector format for consistency
-                    vectors = {"dense": point.dense_vector}
-                    qdrant_point = PointStruct(
-                        id=point.id, vector=vectors, payload=point.payload
-                    )
-            else:
-                # Regular vector point - use named vector format if collection has named vectors
-                if has_sparse_vectors:
-                    # Collection expects named vectors, so wrap the dense vector
-                    vectors = {"dense": point.vector}
-                    qdrant_point = PointStruct(
-                        id=point.id, vector=vectors, payload=point.payload
-                    )
-                else:
-                    # Old-style collection with unnamed vectors
-                    qdrant_point = PointStruct(
-                        id=point.id, vector=point.vector, payload=point.payload
-                    )
-            qdrant_points.append(qdrant_point)
+                    # Convert list to SparseVector (optimized single-pass)
+                    indices = []
+                    values = []
+                    for i, val in enumerate(point.sparse_vector):
+                        if val > 0:
+                            indices.append(i)
+                            values.append(val)
+                    sparse_vector = SparseVector(indices=indices, values=values)
+                
+                # Pre-create named vectors dictionary (avoid per-point dict creation)
+                qdrant_points.append(PointStruct(
+                    id=point.id, 
+                    vector={"dense": point.dense_vector, "bm25": sparse_vector},
+                    payload=point.payload
+                ))
+        else:
+            # Collection doesn't support sparse vectors - fallback to dense only
+            if hybrid_points:
+                logger.warning(f"Collection {collection_name} doesn't support sparse vectors, using dense only for {len(hybrid_points)} hybrid points")
+            for point in hybrid_points:
+                qdrant_points.append(PointStruct(
+                    id=point.id, 
+                    vector={"dense": point.dense_vector},
+                    payload=point.payload
+                ))
+        
+        # Process regular points in batch (optimized - no per-point branching)
+        if has_sparse_vectors:
+            # Collection expects named vectors, so wrap the dense vector
+            for point in regular_points:
+                qdrant_points.append(PointStruct(
+                    id=point.id, 
+                    vector={"dense": point.vector},
+                    payload=point.payload
+                ))
+        else:
+            # Old-style collection with unnamed vectors
+            for point in regular_points:
+                qdrant_points.append(PointStruct(
+                    id=point.id, 
+                    vector=point.vector,
+                    payload=point.payload
+                ))
 
         # Use improved batch upsert for reliability
         return self._reliable_batch_upsert(

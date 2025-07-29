@@ -2060,6 +2060,19 @@ class MarkdownParser(CodeParser, TiktokenMixin):
         
         metadata_content = f"Sections: {', '.join(combined_headers)} | Tokens: {total_tokens} | Preview: {preview} | Lines: {line_count} | Words: {word_count}"
         
+        # Generate BM25-optimized content for markdown entities
+        # Create a temporary entity for BM25 formatting
+        temp_entity = Entity(
+            name=chunk_name,
+            entity_type=EntityType.DOCUMENTATION,
+            observations=[f"Documentation section: {', '.join(combined_headers)}", f"File: {file_path.name}"],
+            file_path=file_path,
+            line_number=int(start_line)
+        )
+        
+        # Generate BM25 content using the same formatter as other entities
+        bm25_content = EntityChunk._format_bm25_content(temp_entity, [metadata_content])
+        
         metadata_unique_content = f"{str(file_path)}::{chunk_name}::documentation::metadata::{start_line}"
         metadata_hash = hashlib.md5(metadata_unique_content.encode()).hexdigest()[:8]
         metadata_base_id = self._create_chunk_id(file_path, chunk_name, "metadata", "documentation")
@@ -2081,7 +2094,8 @@ class MarkdownParser(CodeParser, TiktokenMixin):
                 "line_count": line_count,
                 "token_count": total_tokens,
                 "section_count": len(section_group),
-                "headers": combined_headers
+                "headers": combined_headers,
+                "content_bm25": bm25_content,  # Add BM25-optimized content
             },
         )
         

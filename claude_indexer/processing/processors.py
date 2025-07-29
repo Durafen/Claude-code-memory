@@ -29,7 +29,8 @@ class EntityProcessor(ContentProcessor):
         chunks_to_process = []
         for entity in entities:
             # Skip creating old-style metadata chunks for markdown documentation entities
-            # since markdown parser now creates better progressive disclosure metadata chunks
+            # since MarkdownParser in claude_indexer/analysis/parser.py creates specialized
+            # metadata chunks with BM25 optimization in _create_entity_chunks() method
             if (entity.file_path and str(entity.file_path).endswith('.md') and 
                 entity.entity_type.value == 'documentation'):
                 continue

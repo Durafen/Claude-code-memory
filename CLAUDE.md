@@ -407,7 +407,11 @@ tail -f ~/.claude-indexer/logs/service.log        # Service logs
 tail -f ~/Library/Caches/claude-cli-nodejs/-Users-Duracula-1-Python-Projects-memory--claude/mcp-logs-claude-memory-memory/$(ls -t ~/Library/Caches/claude-cli-nodejs/-Users-Duracula-1-Python-Projects-memory--claude/mcp-logs-claude-memory-memory/ | head -1)
 ```
 
-**After MCP changes:** Build with `cd mcp-qdrant-memory && npm run build`, then restart Claude Code.
+**After MCP changes:** Build and restart with:
+```bash
+cd mcp-qdrant-memory && npm run build && pkill -f node && rm -rf ~/Library/Caches/claude-cli-nodejs/
+```
+Then restart Claude Code.
 
 **Collection Health:**
 ```bash

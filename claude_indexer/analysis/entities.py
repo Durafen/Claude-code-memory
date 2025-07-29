@@ -112,8 +112,11 @@ class EntityChunk:
             else:
                 weighted_parts.append(observation)
         
-        # Enhanced BM25 content formatting for improved searchability
-        content = cls._format_bm25_content(entity, weighted_parts)
+        # Restore rich content for semantic embeddings
+        content = " | ".join(weighted_parts)
+        
+        # Generate optimized BM25 content separately
+        content_bm25 = cls._format_bm25_content(entity, weighted_parts)
 
         # Create collision-resistant metadata chunk ID
         import hashlib
@@ -135,6 +138,7 @@ class EntityChunk:
                 "end_line_number": entity.end_line_number,
                 "has_implementation": has_implementation,
                 "observations": entity.observations,  # Preserve observations array for MCP compatibility
+                "content_bm25": content_bm25,  # Add BM25-optimized content
             },
         )
 

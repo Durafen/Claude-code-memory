@@ -99,10 +99,10 @@ class ContentProcessor(ContentHashMixin, ABC):
         if not items:
             return [], {"tokens": 0, "cost": 0.0, "requests": 0}
 
-        # Extract content for embedding
+        # Extract content for embedding - use rich content for semantic search
         texts = [getattr(item, "content", str(item)) for item in items]
 
-        # Generate dense embeddings (primary)
+        # Generate dense embeddings (primary) using rich semantic content
         embedding_results = self.embedder.embed_batch(texts)
 
         # Generate BM25 sparse embeddings for metadata chunks only
@@ -122,8 +122,17 @@ class ContentProcessor(ContentHashMixin, ABC):
             bm25_embedder = self._get_bm25_embedder()
             if bm25_embedder:
                 try:
-                    # Generate BM25 for all items (will be filtered during application)
-                    bm25_results = bm25_embedder.embed_batch(texts)
+                    # Extract BM25-optimized content for sparse embeddings
+                    bm25_texts = []
+                    for item in items:
+                        # Try to get BM25 content from metadata, fallback to regular content
+                        if hasattr(item, 'metadata') and item.metadata and 'content_bm25' in item.metadata:
+                            bm25_texts.append(item.metadata['content_bm25'])
+                        else:
+                            bm25_texts.append(getattr(item, "content", str(item)))
+                    
+                    # Generate BM25 embeddings using optimized content
+                    bm25_results = bm25_embedder.embed_batch(bm25_texts)
                     
                     # Add sparse vectors only to items that should have BM25
                     for dense_result, sparse_result, should_have_bm25 in zip(embedding_results, bm25_results, should_apply_bm25, strict=False):

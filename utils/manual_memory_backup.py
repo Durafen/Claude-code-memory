@@ -424,6 +424,11 @@ def restore_manual_entries(
                 entity_name = payload.get("entity_name", f"restored_entry_{entry_id}")
                 entity_type = payload.get("metadata", {}).get("entity_type") or payload.get("entity_type", "documentation")
                 content = payload.get("content", "")
+                
+                # Extract observations from backup (handle both old and new formats)
+                observations = payload.get("observations", [])
+                if not observations and payload.get("metadata", {}).get("observations"):
+                    observations = payload.get("metadata", {}).get("observations", [])
 
                 # Use existing content for embedding
                 content_for_embedding = content or f"{entity_type}: {entity_name}"
@@ -441,12 +446,15 @@ def restore_manual_entries(
                     )
                     continue
 
-                # Create proper v2.4 manual format payload with required chunk fields
+                # Create proper v2.4 manual format payload with required chunk fields and nested metadata
                 manual_payload = {
                     "type": "chunk",
                     "chunk_type": "metadata",
                     "entity_name": entity_name,
-                    "entity_type": entity_type,
+                    "metadata": {
+                        "entity_type": entity_type,
+                        "observations": observations if observations else ([content] if content else [])
+                    },
                     "content": content,
                     "has_implementation": False,
                     # No file_path or automation fields - this preserves manual classification
@@ -566,7 +574,6 @@ def restore_manual_entries(
     except Exception as e:
         print(f"❌ Error during direct restoration: {e}")
         import traceback
-
         traceback.print_exc()
         return False
 

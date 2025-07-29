@@ -477,13 +477,13 @@ class MemoryGuard:
     ) -> str:
         """Build the prompt for comprehensive code quality analysis."""
         
-        # REMOVED ERROR REPORTING INSTRUCTIONS:
-        # 🚨 ERROR REPORTING: If you cannot access MCP memory tools ({self.mcp_collection}*), report in detail:
-        # - Which exact MCP tool you tried to call (e.g., "{self.mcp_collection}search_similar")
-        # - What parameters you used (query, entityTypes, limit) 
-        # - What error message you received (timeout, not found, access denied, etc.)
-        # - Include this in your debug field with prefix "MCP_ERROR:"
         return f"""You are a comprehensive code quality gate with access to MCP memory tools.
+
+🚨 ERROR REPORTING: If you cannot access MCP memory tools ({self.mcp_collection}*), report in detail:
+- Which exact MCP tool you tried to call (e.g., "{self.mcp_collection}search_similar")
+- What parameters you used (query, entityTypes, limit) 
+- What error message you received (timeout, not found, access denied, etc.)
+- Include this in your debug field with prefix "MCP_ERROR:"
 
 OPERATION CONTEXT:
 - Project: {self.project_name}
@@ -597,7 +597,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             )
 
             # Allow specific MCP memory tools plus read-only analysis tools
-            allowed_tools = f"Read,LS,Bash(ls:*),Glob,Grep,WebFetch,WebSearch,{self.mcp_collection}*,mcp__github__*"
+            allowed_tools = f"Read,LS,Bash(ls:*),Glob,Grep,WebFetch,WebSearch,{self.mcp_collection}search_similar,{self.mcp_collection}read_graph,{self.mcp_collection}get_implementation,mcp__github__*"
 
             result = subprocess.run(
                 [

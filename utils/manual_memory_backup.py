@@ -112,7 +112,7 @@ def is_truly_manual_entry(payload: dict[str, Any]) -> bool:
     Uses the same detection logic as qdrant_stats.py for consistency.
     """
     # Pattern 1: Auto entities have file_path field
-    if "file_path" in payload:
+    if "file_path" in payload or "file_path" in payload.get("metadata", {}):
         return False
 
     # Pattern 2: Auto relations have entity_name/relation_target/relation_type structure
@@ -137,7 +137,8 @@ def is_truly_manual_entry(payload: dict[str, Any]) -> bool:
         # Removed 'has_implementation' - manual entries can have this in v2.4 format
         # Removed 'collection' - manual docs can have collection field
     }
-    if any(field in payload for field in automation_fields):
+    metadata = payload.get("metadata", {})
+    if any(field in payload for field in automation_fields) or any(field in metadata for field in automation_fields):
         return False
 
     # v2.4 specific: Don't reject based on chunk_type alone
@@ -145,16 +146,16 @@ def is_truly_manual_entry(payload: dict[str, Any]) -> bool:
     # Manual entries from MCP also get type='chunk' + chunk_type='metadata'
 
     # True manual entries have minimal fields: entity_name, entity_type, observations
-    # v2.4 format only
+    # v2.4 format: check both top-level and nested metadata
     has_name = "entity_name" in payload
-    has_type = "entity_type" in payload
+    has_type = "entity_type" in payload or "entity_type" in payload.get("metadata", {})
 
     if not (has_name and has_type):
         return False
 
     # Additional check: Manual entries typically have meaningful content
-    # Check for observations or content (v2.4 MCP format)
-    observations = payload.get("observations", [])
+    # Check for observations or content (v2.4 MCP format with nested observations)
+    observations = payload.get("metadata", {}).get("observations", [])
     content = payload.get("content", "")
 
     has_meaningful_content = (
@@ -425,10 +426,8 @@ def restore_manual_entries(
                 entity_type = payload.get("metadata", {}).get("entity_type") or payload.get("entity_type", "documentation")
                 content = payload.get("content", "")
                 
-                # Extract observations from backup (handle both old and new formats)
-                observations = payload.get("observations", [])
-                if not observations and payload.get("metadata", {}).get("observations"):
-                    observations = payload.get("metadata", {}).get("observations", [])
+                # Extract observations from backup (v2.4 nested format)
+                observations = payload.get("metadata", {}).get("observations", [])
 
                 # Use existing content for embedding
                 content_for_embedding = content or f"{entity_type}: {entity_name}"

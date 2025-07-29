@@ -402,10 +402,10 @@ class JavaScriptParser(TreeSitterParser):
 
         name = self.extract_node_text(name_node, content)
 
-        # Interfaces are like classes but for TypeScript
+        # TypeScript interfaces should use interface entity type
         entity = Entity(
             name=name,
-            entity_type=EntityType.CLASS,  # Reuse class type for interfaces
+            entity_type=EntityType.INTERFACE,  # Use proper interface type
             observations=[f"TypeScript interface: {name}"],
             file_path=file_path,
             line_number=node.start_point[0] + 1,
@@ -577,7 +577,8 @@ class JavaScriptParser(TreeSitterParser):
 
                 for called_function in calls:
                     # Only create relations to entities we actually indexed
-                    if called_function in entity_names:
+                    # Skip self-referential relations (function calling itself)
+                    if called_function in entity_names and called_function != chunk.entity_name:
                         relation = RelationFactory.create_calls_relation(
                             caller=chunk.entity_name,
                             callee=called_function,

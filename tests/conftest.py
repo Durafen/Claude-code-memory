@@ -129,6 +129,7 @@ def is_production_collection(collection_name: str) -> bool:
         "memory-project",
         "general",
         "watcher-test",  # Add watcher-test as it's used for debugging
+        "parser-test",   # Used by integration tests - don't cleanup
     }
     return collection_name in PRODUCTION_COLLECTIONS
 

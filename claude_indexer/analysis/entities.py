@@ -14,6 +14,7 @@ class EntityType(Enum):
     DIRECTORY = "directory"
     FILE = "file"
     CLASS = "class"
+    INTERFACE = "interface"
     FUNCTION = "function"
     METHOD = "method"
     VARIABLE = "variable"
@@ -82,16 +83,40 @@ class EntityChunk:
         cls, entity: "Entity", has_implementation: bool = False
     ) -> "EntityChunk":
         """Create metadata chunk from existing Entity for progressive disclosure."""
-        # Build content from entity observations
-        content_parts = []
+        # Build content with observation-based field weighting for BM25
+        # Since parsers don't populate signature/docstring, weight observations by content patterns
+        weighted_parts = []
+        
+        # Legacy signature/docstring handling (rarely populated by parsers)
         if entity.signature:
-            content_parts.append(f"Signature: {entity.signature}")
+            signature_text = f"Signature: {entity.signature}"
+            weighted_parts.extend([signature_text] * 3)
+        
         if entity.docstring:
-            content_parts.append(f"Description: {entity.docstring}")
-
-        # Add key observations
-        content_parts.extend(entity.observations)
-        content = " | ".join(content_parts)
+            description_text = f"Description: {entity.docstring}"
+            weighted_parts.extend([description_text] * 2)
+        
+        # Observation-based field weighting (main approach)
+        for observation in entity.observations:
+            observation_lower = observation.lower()
+            
+            # HIGH WEIGHT (3x): Direct entity type declarations
+            if any(keyword in observation_lower for keyword in ['class:', 'function:', 'method:', 'interface:', 'signature:']):
+                weighted_parts.extend([observation] * 3)
+            
+            # MEDIUM WEIGHT (2x): Purpose/responsibility descriptions  
+            elif any(keyword in observation_lower for keyword in ['purpose:', 'responsibility:', 'description:']):
+                weighted_parts.extend([observation] * 2)
+            
+            # BASE WEIGHT (1x): All other observations (details, attributes, locations)
+            else:
+                weighted_parts.append(observation)
+        
+        # Restore rich content for semantic embeddings
+        content = " | ".join(weighted_parts)
+        
+        # Generate optimized BM25 content separately
+        content_bm25 = cls._format_bm25_content(entity, weighted_parts)
 
         # Create collision-resistant metadata chunk ID
         import hashlib
@@ -113,8 +138,87 @@ class EntityChunk:
                 "end_line_number": entity.end_line_number,
                 "has_implementation": has_implementation,
                 "observations": entity.observations,  # Preserve observations array for MCP compatibility
+                "content_bm25": content_bm25,  # Add BM25-optimized content
             },
         )
+
+    @classmethod
+    def _format_bm25_content(cls, entity: "Entity", weighted_parts: list[str]) -> str:
+        """Format entity for enhanced BM25 searchability with 6-component structure."""
+        import re
+        
+        # 1. Entity name 2x frequency boost
+        # For file entities, use just filename instead of full path for cleaner BM25 content
+        if entity.entity_type.value == "file":
+            entity_name = Path(entity.file_path).name
+        else:
+            entity_name = entity.name
+        
+        # 2. CamelCase spaced version for natural language search
+        spaced_name = re.sub(r'([a-z])([A-Z])', r'\1 \2', entity_name)
+        spaced_name = re.sub(r'[_-]', ' ', spaced_name)
+        
+        # 3. Primary content - extract first clean description only
+        primary_content = ""
+        for observation in entity.observations:
+            obs_lower = observation.lower()
+            if any(prefix in obs_lower for prefix in ['purpose:', 'responsibility:', 'description:']):
+                # Extract the description part after the colon
+                if ':' in observation:
+                    primary_content = observation.split(':', 1)[1].strip()
+                    break
+            elif observation and not any(skip in obs_lower for skip in ['class:', 'function:', 'method:', 'signature:', 'calls:', 'parameters:', 'returns:', 'behaviors:', 'attributes:', 'complexity:', 'async:', 'line:', 'key methods:']):
+                # Use first non-technical observation as description
+                primary_content = observation.strip()
+                break
+        
+        # Fallback to entity docstring if available
+        if not primary_content and entity.docstring:
+            primary_content = entity.docstring
+        
+        # 4. Entity type for filtering and context
+        entity_type = entity.entity_type.value
+        
+        # 5. File name extraction for location-based search
+        file_name = ""
+        if entity.file_path:
+            file_name = Path(entity.file_path).name
+        
+        # 6. Key methods extraction from observations (first 3-4 methods)
+        key_methods = []
+        for observation in entity.observations:
+            observation_lower = observation.lower()
+            if "key methods:" in observation_lower:
+                # Extract method names after "Key methods:"
+                parts = observation.split("Key methods:")
+                if len(parts) > 1:
+                    methods_part = parts[1]
+                    # Extract method names (comma-separated, take first 4)
+                    methods = [m.strip() for m in methods_part.split(",")[:4]]
+                    key_methods.extend([m for m in methods if m and not m.startswith("(")])
+                    break
+            elif "methods:" in observation_lower and "key methods:" not in observation_lower:
+                # Extract method names after "methods:"
+                parts = observation.split("methods:")
+                if len(parts) > 1:
+                    methods_part = parts[1]
+                    # Extract method names (comma-separated, take first 4)
+                    methods = [m.strip() for m in methods_part.split(",")[:4]]
+                    key_methods.extend([m for m in methods if m and not m.startswith("(")])
+                    break
+        
+        # Combine all 6 components for enhanced searchability
+        components = [
+            f"{entity_name} {entity_name}",  # 2x frequency boost
+            spaced_name if spaced_name != entity_name else "",  # Avoid duplication
+            primary_content,
+            entity_type,
+            file_name,
+            " ".join(key_methods)
+        ]
+        
+        # Filter empty components and join
+        return " ".join(filter(None, components))
 
 
 @dataclass(frozen=True)
@@ -186,7 +290,6 @@ class RelationChunk:
             "content_hash": ContentHashMixin.compute_content_hash(self.content),
             "created_at": datetime.now().isoformat(),
             "type": "chunk",
-            "entity_type": "relation",
         }
 
         if self.context:
@@ -194,9 +297,11 @@ class RelationChunk:
         if self.confidence != 1.0:
             payload["confidence"] = self.confidence
 
-        # Include metadata as nested object
+        # Include metadata as nested object with entity_type
+        metadata = {"entity_type": "relation"}
         if self.metadata:
-            payload["metadata"] = self.metadata
+            metadata.update(self.metadata)
+        payload["metadata"] = metadata
 
         return payload
 

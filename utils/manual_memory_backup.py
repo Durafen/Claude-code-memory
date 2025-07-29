@@ -112,7 +112,7 @@ def is_truly_manual_entry(payload: dict[str, Any]) -> bool:
     Uses the same detection logic as qdrant_stats.py for consistency.
     """
     # Pattern 1: Auto entities have file_path field
-    if "file_path" in payload:
+    if "file_path" in payload or "file_path" in payload.get("metadata", {}):
         return False
 
     # Pattern 2: Auto relations have entity_name/relation_target/relation_type structure
@@ -137,7 +137,8 @@ def is_truly_manual_entry(payload: dict[str, Any]) -> bool:
         # Removed 'has_implementation' - manual entries can have this in v2.4 format
         # Removed 'collection' - manual docs can have collection field
     }
-    if any(field in payload for field in automation_fields):
+    metadata = payload.get("metadata", {})
+    if any(field in payload for field in automation_fields) or any(field in metadata for field in automation_fields):
         return False
 
     # v2.4 specific: Don't reject based on chunk_type alone
@@ -145,16 +146,16 @@ def is_truly_manual_entry(payload: dict[str, Any]) -> bool:
     # Manual entries from MCP also get type='chunk' + chunk_type='metadata'
 
     # True manual entries have minimal fields: entity_name, entity_type, observations
-    # v2.4 format only
+    # v2.4 format: check both top-level and nested metadata
     has_name = "entity_name" in payload
-    has_type = "entity_type" in payload
+    has_type = "entity_type" in payload or "entity_type" in payload.get("metadata", {})
 
     if not (has_name and has_type):
         return False
 
     # Additional check: Manual entries typically have meaningful content
-    # Check for observations or content (v2.4 MCP format)
-    observations = payload.get("observations", [])
+    # Check for observations or content (v2.4 MCP format with nested observations)
+    observations = payload.get("metadata", {}).get("observations", [])
     content = payload.get("content", "")
 
     has_meaningful_content = (
@@ -244,7 +245,7 @@ def backup_manual_entries(collection_name: str, output_file: str = None):
             # Everything else is auto-indexed
             else:
                 # v2.4 format only
-                entity_type = payload.get("entity_type", "unknown")
+                entity_type = payload.get("metadata", {}).get("entity_type") or payload.get("entity_type", "unknown")
                 entity_name = payload.get("entity_name", "unknown")
                 code_entries.append(
                     {
@@ -372,7 +373,7 @@ def restore_manual_entries(
             payload = entry.get("payload", {})
             # Handle v2.4 format
             name = payload.get("entity_name", "unknown")
-            entity_type = payload.get("entity_type", "unknown")
+            entity_type = payload.get("metadata", {}).get("entity_type") or payload.get("entity_type", "unknown")
             print(f"  {i + 1}. {name} ({entity_type})")
         if len(manual_entries) > 5:
             print(f"  ... and {len(manual_entries) - 5} more entries")
@@ -391,16 +392,11 @@ def restore_manual_entries(
             embedder = OpenAIEmbedder(api_key=config.openai_api_key)
         store = QdrantStore(url=config.qdrant_url, api_key=config.qdrant_api_key)
 
-        # Ensure collection exists
+        # Check collection exists (don't create)
         if not store.collection_exists(target_collection):
-            print(f"📦 Creating collection: {target_collection}")
-            # Get vector size from embedder
-            vector_size = 512 if config.embedding_provider == "voyage" else 1536
-            store.create_collection(
-                collection_name=target_collection,
-                vector_size=vector_size,
-                distance_metric="cosine",
-            )
+            print(f"❌ Collection '{target_collection}' doesn't exist!")
+            print("Create the collection first using indexer before restoring.")
+            return False
 
         # Process in batches
         total_restored = 0
@@ -427,8 +423,11 @@ def restore_manual_entries(
 
                 # Extract from v2.4 format and preserve as v2.4 manual format
                 entity_name = payload.get("entity_name", f"restored_entry_{entry_id}")
-                entity_type = payload.get("entity_type", "documentation")
+                entity_type = payload.get("metadata", {}).get("entity_type") or payload.get("entity_type", "documentation")
                 content = payload.get("content", "")
+                
+                # Extract observations from backup (v2.4 nested format)
+                observations = payload.get("metadata", {}).get("observations", [])
 
                 # Use existing content for embedding
                 content_for_embedding = content or f"{entity_type}: {entity_name}"
@@ -446,12 +445,15 @@ def restore_manual_entries(
                     )
                     continue
 
-                # Create proper v2.4 manual format payload with required chunk fields
+                # Create proper v2.4 manual format payload with required chunk fields and nested metadata
                 manual_payload = {
                     "type": "chunk",
                     "chunk_type": "metadata",
                     "entity_name": entity_name,
-                    "entity_type": entity_type,
+                    "metadata": {
+                        "entity_type": entity_type,
+                        "observations": observations if observations else ([content] if content else [])
+                    },
                     "content": content,
                     "has_implementation": False,
                     # No file_path or automation fields - this preserves manual classification
@@ -489,9 +491,24 @@ def restore_manual_entries(
                         # Point doesn't exist, proceed with creation
                         pass
 
+                # Check collection vector format and adapt
+                collection_info = store.client.get_collection(target_collection)
+                vectors_config = collection_info.config.params.vectors
+                
+                # Handle both named vectors (BM25/hybrid) and default vector formats
+                if isinstance(vectors_config, dict) and 'dense' in vectors_config:
+                    # Named vectors format (BM25/hybrid collections) - use embedding as-is (already has 'dense' key)
+                    vector_data = embedding_result.embedding
+                else:
+                    # Default single vector format (legacy collections) - extract dense vector
+                    if isinstance(embedding_result.embedding, dict) and 'dense' in embedding_result.embedding:
+                        vector_data = embedding_result.embedding['dense']
+                    else:
+                        vector_data = embedding_result.embedding
+
                 point = PointStruct(
                     id=deterministic_id,
-                    vector=embedding_result.embedding,
+                    vector=vector_data,
                     payload=manual_payload,
                 )
                 vector_points.append(point)
@@ -556,7 +573,6 @@ def restore_manual_entries(
     except Exception as e:
         print(f"❌ Error during direct restoration: {e}")
         import traceback
-
         traceback.print_exc()
         return False
 

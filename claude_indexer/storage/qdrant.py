@@ -6,7 +6,7 @@ import warnings
 from typing import TYPE_CHECKING, Any
 
 from ..indexer_logging import get_logger
-from .base import ManagedVectorStore, StorageResult, VectorPoint
+from .base import ManagedVectorStore, StorageResult, VectorPoint, HybridVectorPoint
 
 if TYPE_CHECKING:
     from ..analysis.entities import EntityChunk, Relation, RelationChunk
@@ -24,7 +24,10 @@ try:
         MatchValue,
         PayloadField,
         PointStruct,
+        SparseVector,
+        SparseVectorParams,
         VectorParams,
+        VectorsConfig,
     )
 
     QDRANT_AVAILABLE = True
@@ -35,12 +38,15 @@ except ImportError:
     Distance = Any
     QdrantClient = Any
     VectorParams = Any
+    SparseVectorParams = Any
     PointStruct = Any
     Filter = Any
     FieldCondition = Any
     MatchValue = Any
     IsNullCondition = Any
     PayloadField = Any
+    SparseVector = Any
+    VectorsConfig = Any
 
 
 class ContentHashMixin:
@@ -82,11 +88,27 @@ class ContentHashMixin:
 class QdrantStore(ManagedVectorStore, ContentHashMixin):
     """Qdrant vector database implementation."""
 
-    DISTANCE_METRICS = {
-        "cosine": Distance.COSINE,
-        "euclidean": Distance.EUCLID,
-        "dot": Distance.DOT,
-    }
+    def __init__(
+        self,
+        url: str = "http://localhost:6333",
+        api_key: str = None,
+        timeout: float = 60.0,
+        auto_create_collections: bool = True,
+        **kwargs,  # noqa: ARG002
+    ):
+        if not QDRANT_AVAILABLE:
+            raise ImportError(
+                "Qdrant client not available. Install with: pip install qdrant-client"
+            )
+
+        # Define distance metrics after import validation
+        self.DISTANCE_METRICS = {
+            "cosine": Distance.COSINE,
+            "euclidean": Distance.EUCLID,
+            "dot": Distance.DOT,
+        }
+
+        super().__init__(auto_create_collections=auto_create_collections)
 
     def __init__(
         self,
@@ -102,6 +124,13 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             )
 
         super().__init__(auto_create_collections=auto_create_collections)
+
+        # Define distance metrics after import validation
+        self.DISTANCE_METRICS = {
+            "cosine": Distance.COSINE,
+            "euclidean": Distance.EUCLID,
+            "dot": Distance.DOT,
+        }
 
         self.url = url
         self.api_key = api_key
@@ -161,6 +190,75 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 errors=[f"Failed to create collection {collection_name}: {e}"],
             )
 
+    def create_collection_with_sparse_vectors(
+        self,
+        collection_name: str,
+        dense_vector_size: int,
+        sparse_vector_size: int = 10000,
+        distance_metric: str = "cosine",
+    ) -> StorageResult:
+        """Create a new Qdrant collection with both dense and sparse vector support.
+        
+        Args:
+            collection_name: Name of the collection to create
+            dense_vector_size: Size of dense vectors (e.g., 1536 for OpenAI embeddings)
+            sparse_vector_size: Maximum size for sparse vectors (default: 10000)
+            distance_metric: Distance metric for dense vectors
+            
+        Returns:
+            StorageResult indicating success or failure
+        """
+        start_time = time.time()
+
+        try:
+            if distance_metric not in self.DISTANCE_METRICS:
+                available = list(self.DISTANCE_METRICS.keys())
+                return StorageResult(
+                    success=False,
+                    operation="create_collection_with_sparse",
+                    processing_time=time.time() - start_time,
+                    errors=[
+                        f"Invalid distance metric: {distance_metric}. Available: {available}"
+                    ],
+                )
+
+            distance = self.DISTANCE_METRICS[distance_metric]
+
+            # Create collection with named dense and sparse vector support
+            vectors_config = {
+                "dense": VectorParams(size=dense_vector_size, distance=distance)
+            }
+            sparse_vectors_config = {
+                "bm25": SparseVectorParams()  # Named sparse vector for BM25
+            }
+
+            self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config=vectors_config,
+                sparse_vectors_config=sparse_vectors_config,
+                optimizers_config={"indexing_threshold": 100},
+            )
+
+            logger.debug(
+                f"Created collection {collection_name} with dense ({dense_vector_size}D) "
+                f"and sparse ({sparse_vector_size}D) vectors"
+            )
+
+            return StorageResult(
+                success=True,
+                operation="create_collection_with_sparse",
+                items_processed=1,
+                processing_time=time.time() - start_time,
+            )
+
+        except Exception as e:
+            return StorageResult(
+                success=False,
+                operation="create_collection_with_sparse",
+                processing_time=time.time() - start_time,
+                errors=[f"Failed to create sparse vector collection {collection_name}: {e}"],
+            )
+
     def collection_exists(self, collection_name: str) -> bool:
         """Check if collection exists."""
         try:
@@ -197,7 +295,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             )
 
     def upsert_points(
-        self, collection_name: str, points: list[VectorPoint]
+        self, collection_name: str, points: list[VectorPoint | HybridVectorPoint]
     ) -> StorageResult:
         """Insert or update points in the collection with improved reliability."""
         start_time = time.time()
@@ -210,8 +308,13 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 processing_time=time.time() - start_time,
             )
 
-        # Ensure collection exists
-        if not self.ensure_collection(collection_name, len(points[0].vector)):
+        # Ensure collection exists first - determine vector size from first point
+        if isinstance(points[0], HybridVectorPoint):
+            vector_size = len(points[0].dense_vector)
+        else:
+            vector_size = len(points[0].vector)
+            
+        if not self.ensure_collection(collection_name, vector_size):
             return StorageResult(
                 success=False,
                 operation="upsert",
@@ -219,13 +322,74 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 errors=[f"Collection {collection_name} does not exist"],
             )
 
+        # AFTER collection creation, check if it has sparse vector support
+        has_sparse_vectors = self._collection_has_sparse_vectors(collection_name)
+        logger.debug(f"🔍 SPARSE DEBUG: Collection {collection_name} has_sparse_vectors = {has_sparse_vectors} (checked after creation)")
+
+        # Pre-segregate points by type to avoid per-point isinstance calls
+        hybrid_points = []
+        regular_points = []
+        for point in points:
+            if isinstance(point, HybridVectorPoint):
+                hybrid_points.append(point)
+            else:
+                regular_points.append(point)
+        
         # Convert to Qdrant points
         qdrant_points = []
-        for point in points:
-            qdrant_point = PointStruct(
-                id=point.id, vector=point.vector, payload=point.payload
-            )
-            qdrant_points.append(qdrant_point)
+        
+        # Process hybrid points in batch (optimized - no per-point type checking)
+        if has_sparse_vectors:
+            # Collection supports sparse vectors - create named vector format
+            for point in hybrid_points:
+                # Handle BM25 sparse vector - could be SparseVector object or list
+                if hasattr(point.sparse_vector, 'indices'):
+                    # Already a SparseVector object from BM25
+                    sparse_vector = point.sparse_vector
+                else:
+                    # Convert list to SparseVector (optimized single-pass)
+                    indices = []
+                    values = []
+                    for i, val in enumerate(point.sparse_vector):
+                        if val > 0:
+                            indices.append(i)
+                            values.append(val)
+                    sparse_vector = SparseVector(indices=indices, values=values)
+                
+                # Pre-create named vectors dictionary (avoid per-point dict creation)
+                qdrant_points.append(PointStruct(
+                    id=point.id, 
+                    vector={"dense": point.dense_vector, "bm25": sparse_vector},
+                    payload=point.payload
+                ))
+        else:
+            # Collection doesn't support sparse vectors - fallback to dense only
+            if hybrid_points:
+                logger.warning(f"Collection {collection_name} doesn't support sparse vectors, using dense only for {len(hybrid_points)} hybrid points")
+            for point in hybrid_points:
+                qdrant_points.append(PointStruct(
+                    id=point.id, 
+                    vector={"dense": point.dense_vector},
+                    payload=point.payload
+                ))
+        
+        # Process regular points in batch (optimized - no per-point branching)
+        if has_sparse_vectors:
+            # Collection expects named vectors, so wrap the dense vector
+            for point in regular_points:
+                qdrant_points.append(PointStruct(
+                    id=point.id, 
+                    vector={"dense": point.vector},
+                    payload=point.payload
+                ))
+        else:
+            # Old-style collection with unnamed vectors
+            for point in regular_points:
+                qdrant_points.append(PointStruct(
+                    id=point.id, 
+                    vector=point.vector,
+                    payload=point.payload
+                ))
 
         # Use improved batch upsert for reliability
         return self._reliable_batch_upsert(
@@ -290,7 +454,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     colliding_points[:3]
                 ):  # Limit to first 3 examples
                     entity_name = point.payload.get("entity_name", "unknown")
-                    entity_type = point.payload.get("entity_type", "unknown")
+                    entity_type = point.payload.get("metadata", {}).get("entity_type", "unknown")
                     chunk_type = point.payload.get("chunk_type", "unknown")
                     file_path = point.payload.get("metadata", {}).get("file_path", "unknown")
                     logger.warning(
@@ -525,6 +689,141 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 errors=[f"Failed to delete points: {e}"],
             )
 
+    def search_similar_with_mode(
+        self,
+        collection_name: str,
+        query_vector: list[float] = None,
+        dense_vector: list[float] = None,
+        sparse_vector: list[float] = None,
+        search_mode: str = "semantic",
+        limit: int = 10,
+        score_threshold: float = 0.0,
+        filter_conditions: dict[str, Any] = None,
+        alpha: float = 0.5,
+    ) -> StorageResult:
+        """Search with support for semantic, keyword, and hybrid modes.
+        
+        Args:
+            collection_name: Name of the collection to search
+            query_vector: Vector for backward compatibility (alias for dense_vector)
+            dense_vector: Dense vector for semantic search
+            sparse_vector: Sparse vector for keyword search
+            search_mode: "semantic", "keyword", or "hybrid"
+            limit: Maximum number of results
+            score_threshold: Minimum score threshold
+            filter_conditions: Additional filters to apply
+            alpha: Weight for hybrid search (0.0 = full sparse, 1.0 = full dense)
+            
+        Returns:
+            StorageResult with search results
+        """
+        start_time = time.time()
+        
+        try:
+            # Handle backward compatibility
+            if query_vector is not None and dense_vector is None:
+                dense_vector = query_vector
+            
+            # Validate inputs based on search mode
+            if search_mode == "semantic" and dense_vector is None:
+                return StorageResult(
+                    success=False,
+                    operation="search_hybrid",
+                    processing_time=time.time() - start_time,
+                    errors=["Dense vector required for semantic search"],
+                )
+            
+            if search_mode == "keyword" and sparse_vector is None:
+                return StorageResult(
+                    success=False,
+                    operation="search_hybrid",
+                    processing_time=time.time() - start_time,
+                    errors=["Sparse vector required for keyword search"],
+                )
+            
+            if search_mode == "hybrid" and (dense_vector is None or sparse_vector is None):
+                return StorageResult(
+                    success=False,
+                    operation="search_hybrid",
+                    processing_time=time.time() - start_time,
+                    errors=["Both dense and sparse vectors required for hybrid search"],
+                )
+            
+            # Build filter if provided
+            query_filter = None
+            if filter_conditions:
+                query_filter = self._build_filter(filter_conditions)
+            
+            if search_mode == "semantic":
+                # Dense vector search only
+                search_results = self.client.search(
+                    collection_name=collection_name,
+                    query_vector=dense_vector,
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    query_filter=query_filter,
+                )
+                
+            elif search_mode == "keyword":
+                # Sparse vector search only
+                sparse_query = SparseVector(
+                    indices=[i for i, val in enumerate(sparse_vector) if val > 0],
+                    values=[val for val in sparse_vector if val > 0]
+                )
+                
+                search_results = self.client.search(
+                    collection_name=collection_name,
+                    query_vector=("sparse", sparse_query),
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    query_filter=query_filter,
+                )
+                
+            elif search_mode == "hybrid":
+                # Hybrid search using RRF (Reciprocal Rank Fusion)
+                return self._hybrid_search_rrf(
+                    collection_name=collection_name,
+                    dense_vector=dense_vector,
+                    sparse_vector=sparse_vector,
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    query_filter=query_filter,
+                    alpha=alpha,
+                    start_time=start_time,
+                )
+            
+            else:
+                return StorageResult(
+                    success=False,
+                    operation="search_hybrid",
+                    processing_time=time.time() - start_time,
+                    errors=[f"Invalid search mode: {search_mode}. Use 'semantic', 'keyword', or 'hybrid'"],
+                )
+            
+            # Convert results
+            results = []
+            for result in search_results:
+                results.append(
+                    {"id": result.id, "score": result.score, "payload": result.payload}
+                )
+            
+            return StorageResult(
+                success=True,
+                operation=f"search_{search_mode}",
+                processing_time=time.time() - start_time,
+                results=results,
+                total_found=len(results),
+            )
+            
+        except Exception as e:
+            logger.debug(f"❌ search_similar_with_mode exception: {e}")
+            return StorageResult(
+                success=False,
+                operation="search_hybrid",
+                processing_time=time.time() - start_time,
+                errors=[f"Search failed: {e}"],
+            )
+
     def search_similar(
         self,
         collection_name: str,
@@ -586,6 +885,218 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                 errors=[f"Search failed: {e}"],
             )
 
+    def _hybrid_search_rrf(
+        self,
+        collection_name: str,
+        dense_vector: list[float],
+        sparse_vector: list[float],
+        limit: int,
+        score_threshold: float,
+        query_filter: Filter = None,
+        alpha: float = 0.5,
+        start_time: float = None,
+        k: int = 60,
+    ) -> StorageResult:
+        """Hybrid search using Reciprocal Rank Fusion (RRF).
+        
+        Args:
+            collection_name: Name of the collection
+            dense_vector: Dense vector for semantic search
+            sparse_vector: Sparse vector for keyword search
+            limit: Number of results to return
+            score_threshold: Minimum score threshold
+            query_filter: Optional filter conditions
+            alpha: Weight for combining scores (0.0 = full sparse, 1.0 = full dense)
+            start_time: Start time for timing calculations
+            k: RRF parameter (typically 60)
+            
+        Returns:
+            StorageResult with hybrid search results
+        """
+        if start_time is None:
+            start_time = time.time()
+        
+        try:
+            # Get more results from each search to improve fusion quality
+            search_limit = max(limit * 3, 50)  # Get 3x more results for better fusion
+            
+            # Perform dense vector search
+            dense_results = self.client.search(
+                collection_name=collection_name,
+                query_vector=dense_vector,
+                limit=search_limit,
+                score_threshold=0.0,  # Lower threshold for RRF
+                query_filter=query_filter,
+            )
+            
+            # Perform sparse vector search
+            sparse_query = SparseVector(
+                indices=[i for i, val in enumerate(sparse_vector) if val > 0],
+                values=[val for val in sparse_vector if val > 0]
+            )
+            
+            sparse_results = self.client.search(
+                collection_name=collection_name,
+                query_vector=("sparse", sparse_query),
+                limit=search_limit,
+                score_threshold=0.0,  # Lower threshold for RRF
+                query_filter=query_filter,
+            )
+            
+            # Apply RRF fusion
+            fused_results = self._apply_rrf_fusion(
+                dense_results=dense_results,
+                sparse_results=sparse_results,
+                alpha=alpha,
+                k=k,
+                limit=limit,
+                score_threshold=score_threshold,
+            )
+            
+            return StorageResult(
+                success=True,
+                operation="search_hybrid",
+                processing_time=time.time() - start_time,
+                results=fused_results,
+                total_found=len(fused_results),
+            )
+            
+        except Exception as e:
+            logger.debug(f"❌ _hybrid_search_rrf exception: {e}")
+            return StorageResult(
+                success=False,
+                operation="search_hybrid",
+                processing_time=time.time() - start_time,
+                errors=[f"Hybrid search failed: {e}"],
+            )
+
+    def _apply_rrf_fusion(
+        self,
+        dense_results: list,
+        sparse_results: list,
+        alpha: float = 0.5,
+        k: int = 60,
+        limit: int = 10,
+        score_threshold: float = 0.0,
+    ) -> list[dict[str, Any]]:
+        """Apply Reciprocal Rank Fusion to combine dense and sparse search results.
+        
+        Args:
+            dense_results: Results from dense vector search
+            sparse_results: Results from sparse vector search
+            alpha: Weight for combining scores (0.0 = full sparse, 1.0 = full dense)
+            k: RRF parameter for rank normalization
+            limit: Maximum number of results to return
+            score_threshold: Minimum score threshold for final results
+            
+        Returns:
+            List of fused results with combined scores
+        """
+        # Create dictionaries for quick lookup by document ID
+        dense_dict = {result.id: {"rank": i + 1, "score": result.score, "payload": result.payload}
+                     for i, result in enumerate(dense_results)}
+        sparse_dict = {result.id: {"rank": i + 1, "score": result.score, "payload": result.payload}
+                      for i, result in enumerate(sparse_results)}
+        
+        # Get all unique document IDs
+        all_ids = set(dense_dict.keys()) | set(sparse_dict.keys())
+        
+        fused_scores = {}
+        
+        for doc_id in all_ids:
+            # Calculate RRF score for this document
+            dense_rrf = 1.0 / (k + dense_dict[doc_id]["rank"]) if doc_id in dense_dict else 0.0
+            sparse_rrf = 1.0 / (k + sparse_dict[doc_id]["rank"]) if doc_id in sparse_dict else 0.0
+            
+            # Combine using alpha weighting
+            combined_score = alpha * dense_rrf + (1.0 - alpha) * sparse_rrf
+            
+            # Get payload from available result (prefer dense, then sparse)
+            payload = None
+            if doc_id in dense_dict:
+                payload = dense_dict[doc_id]["payload"]
+            elif doc_id in sparse_dict:
+                payload = sparse_dict[doc_id]["payload"]
+            
+            fused_scores[doc_id] = {
+                "id": doc_id,
+                "score": combined_score,
+                "payload": payload,
+                "dense_score": dense_dict.get(doc_id, {}).get("score", 0.0),
+                "sparse_score": sparse_dict.get(doc_id, {}).get("score", 0.0),
+                "dense_rank": dense_dict.get(doc_id, {}).get("rank", None),
+                "sparse_rank": sparse_dict.get(doc_id, {}).get("rank", None),
+            }
+        
+        # Sort by combined score (descending)
+        sorted_results = sorted(
+            fused_scores.values(),
+            key=lambda x: x["score"],
+            reverse=True
+        )
+        
+        # Apply score threshold and limit
+        filtered_results = [
+            result for result in sorted_results
+            if result["score"] >= score_threshold
+        ]
+        
+        return filtered_results[:limit]
+
+    def _collection_has_sparse_vectors(self, collection_name: str) -> bool:
+        """Check if a collection supports sparse vectors with retry for timing issues.
+        
+        Args:
+            collection_name: Name of the collection to check
+            
+        Returns:
+            True if collection has sparse vector support, False otherwise
+        """
+        import time
+        
+        max_retries = 3
+        retry_delay = 0.1  # 100ms between retries
+        
+        for attempt in range(max_retries):
+            try:
+                collection_info = self.client.get_collection(collection_name)
+                
+                # Check for sparse_vectors configuration (our BM25 uses named sparse vectors)
+                if hasattr(collection_info.config.params, 'sparse_vectors'):
+                    sparse_config = collection_info.config.params.sparse_vectors
+                    if sparse_config is not None:
+                        # Look for 'bm25' named sparse vector
+                        has_bm25 = False
+                        if hasattr(sparse_config, 'get'):
+                            has_bm25 = 'bm25' in sparse_config
+                        elif hasattr(sparse_config, '__dict__'):
+                            has_bm25 = 'bm25' in sparse_config.__dict__
+                        else:
+                            has_bm25 = True  # Any sparse vector config means support
+                        
+                        if has_bm25:
+                            logger.debug(f"🔍 SPARSE DEBUG: Collection {collection_name} confirmed BM25 support on attempt {attempt + 1}")
+                            return True
+                        
+                # If no sparse vectors found and we have retries left, wait and try again
+                if attempt < max_retries - 1:
+                    logger.debug(f"🔍 SPARSE DEBUG: Collection {collection_name} no sparse vectors on attempt {attempt + 1}, retrying...")
+                    time.sleep(retry_delay)
+                    continue
+                    
+                logger.debug(f"🔍 SPARSE DEBUG: Collection {collection_name} no sparse vectors after {max_retries} attempts")
+                return False
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.debug(f"Error checking sparse vector support for {collection_name} (attempt {attempt + 1}): {e}, retrying...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.debug(f"Error checking sparse vector support for {collection_name} after {max_retries} attempts: {e}")
+                    return False
+        
+        return False
+
     def _build_filter(self, filter_conditions: dict[str, Any]) -> Filter:
         """Build Qdrant filter from conditions."""
         conditions = []
@@ -602,14 +1113,27 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         try:
             collection_info = self.client.get_collection(collection_name)
 
+            # Handle both legacy single vector config and new multi-vector config (BM25)
+            vectors_config = collection_info.config.params.vectors
+            if isinstance(vectors_config, dict):
+                # New multi-vector format (BM25) - get primary dense vector config
+                dense_config = vectors_config.get("dense") or next(iter(vectors_config.values()))
+                vector_size = dense_config.size if hasattr(dense_config, 'size') else 0
+                distance_metric = dense_config.distance.value if hasattr(dense_config, 'distance') else "unknown"
+            else:
+                # Legacy single vector format
+                vector_size = vectors_config.size
+                distance_metric = vectors_config.distance.value
+            
             return {
                 "name": collection_name,
                 "status": collection_info.status.value,
-                "vector_size": collection_info.config.params.vectors.size,
-                "distance_metric": collection_info.config.params.vectors.distance.value,
+                "vector_size": vector_size,
+                "distance_metric": distance_metric,
                 "points_count": collection_info.points_count,
                 "indexed_vectors_count": collection_info.indexed_vectors_count,
                 "segments_count": collection_info.segments_count,
+                "has_sparse_vectors": bool(getattr(collection_info.config.params, "sparse_vectors", None)),
             }
 
         except Exception as e:
@@ -705,9 +1229,9 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
             max_iterations = 1000  # Safety limit to prevent runaway loops
             iteration = 0
 
-            logger.debug(
-                f"Starting scroll operation for collection {collection_name}, limit={limit}, handle_pagination={handle_pagination}"
-            )
+            # logger.debug(
+            #     f"Starting scroll operation for collection {collection_name}, limit={limit}, handle_pagination={handle_pagination}"
+            # )
 
             while True:
                 iteration += 1
@@ -719,7 +1243,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     )
                     break
 
-                logger.debug(f"Scroll iteration {iteration}, offset={offset}")
+                # logger.debug(f"Scroll iteration {iteration}, offset={offset}")
 
                 scroll_result = self.client.scroll(
                     collection_name=collection_name,
@@ -754,15 +1278,15 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     offset = next_offset
                     logger.debug(f"Advancing to next page with offset {next_offset}")
                 else:
-                    logger.debug(
-                        f"Pagination complete: handle_pagination={handle_pagination}, next_offset={next_offset}"
-                    )
+                    # logger.debug(
+                    #     f"Pagination complete: handle_pagination={handle_pagination}, next_offset={next_offset}"
+                    # )
                     break
 
-            logger.debug(
-                f"Scroll operation completed for collection {collection_name}: "
-                f"{len(all_points)} total points retrieved in {iteration} iterations"
-            )
+            # logger.debug(
+            #     f"Scroll operation completed for collection {collection_name}: "
+            #     f"{len(all_points)} total points retrieved in {iteration} iterations"
+            # )
             return all_points
 
         except Exception as e:
@@ -919,6 +1443,97 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         payload["type"] = "chunk"  # Pure v2.4 format
 
         return VectorPoint(id=point_id, vector=embedding, payload=payload)
+
+    def create_hybrid_chunk_point(
+        self, 
+        chunk: "EntityChunk", 
+        dense_embedding: list[float], 
+        sparse_embedding: list[float], 
+        collection_name: str
+    ) -> HybridVectorPoint:
+        """Create a hybrid vector point from an EntityChunk with both dense and sparse embeddings.
+        
+        Args:
+            chunk: EntityChunk to create point from
+            dense_embedding: Dense vector embedding (e.g., from OpenAI/Voyage)
+            sparse_embedding: Sparse vector embedding (e.g., from BM25)
+            collection_name: Name of the collection
+            
+        Returns:
+            HybridVectorPoint with both vector types
+        """
+        # Use the chunk's pre-defined ID format: "{file_id}::{entity_name}::{chunk_type}"
+        point_id = self.generate_deterministic_id(chunk.id)
+
+        # Create payload using the chunk's to_vector_payload method
+        payload = chunk.to_vector_payload()
+        payload["collection"] = collection_name
+        payload["type"] = "chunk"  # Pure v2.4 format
+        payload["vector_type"] = "hybrid"  # Mark as hybrid for identification
+
+        return HybridVectorPoint(
+            id=point_id, 
+            dense_vector=dense_embedding, 
+            sparse_vector=sparse_embedding, 
+            payload=payload
+        )
+
+    def create_hybrid_relation_point(
+        self, 
+        relation: "Relation", 
+        dense_embedding: list[float], 
+        sparse_embedding: list[float], 
+        collection_name: str
+    ) -> HybridVectorPoint:
+        """Create a hybrid vector point from a Relation with both dense and sparse embeddings.
+        
+        Args:
+            relation: Relation to create point from
+            dense_embedding: Dense vector embedding (e.g., from OpenAI/Voyage)
+            sparse_embedding: Sparse vector embedding (e.g., from BM25)
+            collection_name: Name of the collection
+            
+        Returns:
+            HybridVectorPoint with both vector types
+        """
+        # Generate deterministic ID - include import_type to prevent deduplication
+        import_type = (
+            relation.metadata.get("import_type", "") if relation.metadata else ""
+        )
+        
+        if import_type:
+            relation_key = f"{relation.from_entity}-{relation.relation_type.value}-{relation.to_entity}-{import_type}"
+        else:
+            relation_key = f"{relation.from_entity}-{relation.relation_type.value}-{relation.to_entity}"
+        
+        point_id = self.generate_deterministic_id(relation_key)
+
+        # Create payload - v2.4 format matching RelationChunk
+        payload = {
+            "entity_name": relation.from_entity,
+            "relation_target": relation.to_entity,
+            "relation_type": relation.relation_type.value,
+            "collection": collection_name,
+            "type": "chunk",
+            "chunk_type": "relation",
+            "entity_type": "relation",
+            "vector_type": "hybrid",  # Mark as hybrid for identification
+        }
+
+        # Add optional metadata
+        if relation.context:
+            payload["context"] = relation.context
+        if relation.confidence != 1.0:
+            payload["confidence"] = relation.confidence
+        if import_type:
+            payload["import_type"] = import_type
+
+        return HybridVectorPoint(
+            id=point_id, 
+            dense_vector=dense_embedding, 
+            sparse_vector=sparse_embedding, 
+            payload=payload
+        )
 
     def create_relation_chunk_point(
         self, chunk: "RelationChunk", embedding: list[float], collection_name: str
@@ -1117,7 +1732,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                         "name": point.payload.get(
                             "entity_name", point.payload.get("name", "Unknown")
                         ),
-                        "type": point.payload.get("entity_type", "unknown"),
+                        "type": point.payload.get("metadata", {}).get("entity_type", "unknown"),
                         "payload": point.payload,
                     }
                 )
@@ -1211,7 +1826,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     {
                         "id": point.id,
                         "entity_name": point.payload.get("entity_name", ""),
-                        "entity_type": point.payload.get("entity_type", "unknown"),
+                        "entity_type": point.payload.get("metadata", {}).get("entity_type", "unknown"),
                         "chunk_type": chunk_type,
                         "payload": point.payload
                     }
@@ -1532,9 +2147,9 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
                     to_e = rel.payload.get("relation_target", "")
                     rel_type = rel.payload.get("relation_type", "")
                     imp_type = rel.payload.get("import_type", "none")
-                    logger.debug(
-                        f"Relation {i+1}: {from_e} --{rel_type}--> {to_e} [import_type: {imp_type}]"
-                    )
+                    # logger.debug(
+                    #     f"Relation {i+1}: {from_e} --{rel_type}--> {to_e} [import_type: {imp_type}]"
+                    # )
 
             logger.debug(
                 f"Checking {len(relations)} relations against {len(entity_names)} entities"
@@ -1750,7 +2365,7 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
 
                         # Look for function call pattern: target_function(
                         if f"{to_entity}(" in code_part:
-                            logger.debug(f"   ✅ Found legitimate call: {from_entity} -> {to_entity}")
+                            # logger.debug(f"   ✅ Found legitimate call: {from_entity} -> {to_entity}")
                             return False
 
             # No legitimate call found in any implementation

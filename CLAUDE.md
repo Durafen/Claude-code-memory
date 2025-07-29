@@ -7,6 +7,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Structure
+
+The project has 3 git repositories: main project root, tests/ folder (independent git with test changes), and mcp-qdrant-memory/ subfolder (Node.js MCP server component). Tests folder tracks test modifications separately from main codebase.
+
 ## Testing and Debug Environment
 
 **⚠️ CRITICAL: Use `debug/` folder for ALL test scripts and test databases. NEVER INDEX MAIN PROJECT PATH.**
@@ -184,6 +188,15 @@ search_similar("pattern")  # Returns all entity and chunk types
 - **Backward Compatible**: Existing calls work unchanged
 - **Performance**: Filter at database level for optimal speed
 
+## 🔍 BM25 Keyword & Hybrid Search (NEW v2.8)
+
+**Search Modes:** `hybrid` (default), `semantic`, `keyword`
+
+```python
+search_similar("function name", searchMode="hybrid")    # Best of both worlds
+search_similar("exact terms", searchMode="keyword")     # BM25 term matching  
+search_similar("concept query", searchMode="semantic")  # AI understanding only
+```
 
 ## Virtual Environment Usage
 
@@ -275,8 +288,8 @@ read_graph(entity="DatabaseManager", mode="raw")
 # 🎯 Fast metadata scan for initial triage (90% speed boost)
 search_similar("error pattern", entityTypes=["metadata"])
 
-# 🔍 Find similar debugging patterns from past solutions
-search_similar("authentication error", entityTypes=["function", "debugging_pattern"])
+# 🔍 Find similar debugging patterns from past solutions  
+search_similar("authentication error", entityTypes=["function", "debugging_pattern"], searchMode="hybrid")
 
 # 🧩 Mixed search for comprehensive context
 search_similar("validation error", entityTypes=["function", "metadata", "implementation"])
@@ -376,6 +389,24 @@ claude-indexer search "query" -p /path -c test     # Test search functionality
 tail -f logs/collection-name.log                   # Real-time monitoring
 tail -f ~/.claude-indexer/logs/service.log        # Service logs
 ```
+
+**Claude Code MCP Logs:**
+```bash
+# MCP server logs for all servers
+~/Library/Caches/claude-cli-nodejs/
+
+# Project-specific MCP logs (replace PROJECT_PATH with actual path)
+~/Library/Caches/claude-cli-nodejs/-PROJECT_PATH--claude/mcp-logs-[server-name]/
+
+# Memory project MCP logs 
+tail -f ~/Library/Caches/claude-cli-nodejs/-Users-Duracula-1-Python-Projects-memory--claude/mcp-logs-claude-memory-memory/$(ls -t ~/Library/Caches/claude-cli-nodejs/-Users-Duracula-1-Python-Projects-memory--claude/mcp-logs-claude-memory-memory/ | head -1)
+```
+
+**After MCP changes:** Build and restart with:
+```bash
+cd mcp-qdrant-memory && npm run build && pkill -f node && rm -rf ~/Library/Caches/claude-cli-nodejs/
+```
+Then restart Claude Code.
 
 **Collection Health:**
 ```bash

@@ -133,11 +133,8 @@ class QdrantStatsCollector:
                         and "relation_type" in point.payload
                     )
 
-                    # Check both locations for entity_type (old: top-level, new: metadata.entity_type)
-                    entity_type = point.payload.get("entity_type")
-                    if not entity_type and "metadata" in point.payload and isinstance(point.payload["metadata"], dict):
-                        entity_type = point.payload["metadata"].get("entity_type")
-                    entity_type = entity_type or "unknown"
+                    # Check both locations for entity_type (new: metadata.entity_type, fallback: top-level)
+                    entity_type = point.payload.get("metadata", {}).get("entity_type") or point.payload.get("entity_type", "unknown")
 
                     # Only count entity_type for non-relation entries
                     if not has_relation_structure:
@@ -154,6 +151,11 @@ class QdrantStatsCollector:
                     # Detect if auto-generated vs manual using exact clear_collection logic
                     has_file_path = (
                         "file_path" in point.payload and point.payload["file_path"]
+                    ) or (
+                        "metadata" in point.payload 
+                        and isinstance(point.payload["metadata"], dict)
+                        and "file_path" in point.payload["metadata"] 
+                        and point.payload["metadata"]["file_path"]
                     )
 
                     if has_file_path or has_relation_structure:
@@ -268,7 +270,7 @@ class QdrantStatsCollector:
     def _is_truly_manual_entry(self, payload: dict[str, Any]) -> bool:
         """Enhanced logic for v2.4 chunk format."""
         # Pattern 1: Auto entities have file_path field
-        if "file_path" in payload:
+        if "file_path" in payload or "file_path" in payload.get("metadata", {}):
             return False
 
         # Pattern 2: Auto relations have entity_name/relation_target/relation_type structure
@@ -278,7 +280,7 @@ class QdrantStatsCollector:
         ):
             return False
 
-        # Pattern 3: Auto entities have extended metadata fields
+        # Pattern 3: Auto entities have extended metadata fields (check both locations)
         automation_fields = {
             "line_number",
             "ast_data",
@@ -293,7 +295,8 @@ class QdrantStatsCollector:
             # Removed 'has_implementation' - manual entries can have this field in v2.4 format
             # Removed 'collection' - manual docs can have collection field
         }
-        if any(field in payload for field in automation_fields):
+        metadata = payload.get("metadata", {})
+        if any(field in payload for field in automation_fields) or any(field in metadata for field in automation_fields):
             return False
 
         # v2.4 specific: Don't reject based on chunk_type alone
@@ -301,16 +304,16 @@ class QdrantStatsCollector:
         # Manual entries from MCP also get type='chunk' + chunk_type='metadata'
 
         # True manual entries have minimal fields: entity_name, entity_type, observations
-        # v2.4 format only
+        # v2.4 format: check both top-level and nested metadata
         has_name = "entity_name" in payload
-        has_type = "entity_type" in payload
+        has_type = "entity_type" in payload or "entity_type" in payload.get("metadata", {})
 
         if not (has_name and has_type):
             return False
 
         # Additional check: Manual entries typically have meaningful content
-        # Check for observations or content (v2.4 MCP format)
-        observations = payload.get("observations", [])
+        # Check for observations or content (v2.4 MCP format with nested observations)
+        observations = payload.get("metadata", {}).get("observations", [])
         content = payload.get("content", "")
 
         has_meaningful_content = (
@@ -973,7 +976,7 @@ class QdrantStatsCollector:
 
                     # Show manual entries first
                     if manual_count > 0:
-                        print(f"    ✍️  Manual:           {manual_count:>6,}")
+                        print(f"    ✍️  Manual:          {manual_count:>6,}")
 
                     # Show auto-generated chunk types
                     for chunk_type, count in sorted(
@@ -989,22 +992,21 @@ class QdrantStatsCollector:
                             print(f"    📄 {chunk_type:<15} {count:>6,}")
                     print()
 
-                # Manual entity types section (top 10 manual entries only)
-                manual_entity_breakdown = file_analysis.get(
-                    "manual_entity_breakdown", {}
-                )
+                # Entity types section showing total counts
+                entity_breakdown = file_analysis.get("entity_breakdown", {})
 
-                if manual_entity_breakdown:
+                if entity_breakdown:
                     print("  🏷️  ENTITY TYPES (TOP 10)")
                     print("  " + "-" * 30)
-                    # Show top 10 manual entity types only
-                    sorted_manual = sorted(
-                        manual_entity_breakdown.items(),
+                    
+                    # Get top 10 by total count
+                    sorted_entities = sorted(
+                        entity_breakdown.items(),
                         key=lambda x: x[1],
                         reverse=True,
                     )[:10]
 
-                    for entity_type, count in sorted_manual:
+                    for entity_type, count in sorted_entities:
                         print(f"    {entity_type:<25} {count:>6,}")
                     print()
 

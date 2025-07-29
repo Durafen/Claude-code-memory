@@ -1322,16 +1322,16 @@ class CoreIndexer:
                 )
 
                 # DEBUG: Show parse result details
-                self.logger.debug(f"🔍 PARSE RESULT DEBUG for {file_path.name}:")
-                self.logger.debug(f"🔍   result.success: {result.success}")
-                self.logger.debug(f"🔍   result.errors: {getattr(result, 'errors', 'No errors attribute')}")
-                if hasattr(result, 'error_message'):
-                    self.logger.debug(f"🔍   result.error_message: {result.error_message}")
+                # self.logger.debug(f"🔍 PARSE RESULT DEBUG for {file_path.name}:")
+                # self.logger.debug(f"🔍   result.success: {result.success}")
+                # self.logger.debug(f"🔍   result.errors: {getattr(result, 'errors', 'No errors attribute')}")
+                # if hasattr(result, 'error_message'):
+                #     self.logger.debug(f"🔍   result.error_message: {result.error_message}")
                 
                 # DEBUG: Track execution flow - where do entities go next?
-                self.logger.debug(f"🔍 FLOW DEBUG: {file_path.name} parse successful, entities will go to:")
-                self.logger.debug(f"🔍   - all_entities.extend() - no processing")
-                self.logger.debug(f"🔍   - Direct storage without unified processor")
+                # self.logger.debug(f"🔍 FLOW DEBUG: {file_path.name} parse successful, entities will go to:")
+                # self.logger.debug(f"🔍   - all_entities.extend() - no processing")
+                # self.logger.debug(f"🔍   - Direct storage without unified processor")
 
                 if result.success:
                     all_entities.extend(result.entities)

@@ -82,6 +82,15 @@ class ModernDocsScraper:
             r'On this page\s*\n',
             r'Copy page\s*\n',
             r'^Copy\s*$',
+            # Additional patterns based on analysis
+            r'\* \[.*?\]\(https://docs\.anthropic\.com.*?\)\n',  # Table of contents lists
+            r'\[.*?\]\(https://docs\.anthropic\.com.*?\)\[.*?\]\(https://docs\.anthropic\.com.*?\)',  # Adjacent page navigation
+            r'## \s*\n\[​\]\(https://docs\.anthropic\.com.*?\)\n',  # Anchor markers with empty headers
+            r'\[​\]\(https://docs\.anthropic\.com.*?\)\n',  # Empty anchor markers
+            r'\* \* \*\s*\n',  # Section separators
+            r'Check the\s*\n',  # Incomplete references
+            r'see the\s*\n(?!\w)',  # "see the" followed by newline but not word
+            r'##\s*\n(?=\[)',  # Empty section headers
         ]
         
         cleaned = markdown
@@ -204,8 +213,8 @@ class ModernDocsScraper:
             logger.info(f"Processing: {url}")
             
             # Clean the markdown content
-            # clean_content = self.remove_navigation_noise(result.markdown)
-            clean_content = result.markdown
+            clean_content = self.remove_navigation_noise(result.markdown)
+            # clean_content = result.markdown
             
             # Extract title from first heading
             title_match = re.search(r'^#\s+(.+)', clean_content, re.MULTILINE)

@@ -29,7 +29,8 @@ class EntityProcessor(ContentProcessor):
         chunks_to_process = []
         for entity in entities:
             # Skip creating old-style metadata chunks for markdown documentation entities
-            # since markdown parser now creates better progressive disclosure metadata chunks
+            # since MarkdownParser in claude_indexer/analysis/parser.py creates specialized
+            # metadata chunks with BM25 optimization in _create_entity_chunks() method
             if (entity.file_path and str(entity.file_path).endswith('.md') and 
                 entity.entity_type.value == 'documentation'):
                 continue
@@ -350,8 +351,9 @@ class RelationProcessor(ContentProcessor):
         duplicate_details = {}
 
         if self.logger:
-            self.logger.debug("🔍 === RELATION DEDUPLICATION ===")
-            self.logger.debug(f"   Total relations to process: {len(relations)}")
+            pass
+            # self.logger.debug("🔍 === RELATION DEDUPLICATION ===")
+            # self.logger.debug(f"   Total relations to process: {len(relations)}")
 
         for i, relation in enumerate(relations):
             # Generate the same key that will be used for storage
@@ -369,9 +371,10 @@ class RelationProcessor(ContentProcessor):
                 seen_relation_keys.add(relation_key)
                 unique_relations.append(relation)
                 if self.logger and len(unique_relations) <= 10:
-                    self.logger.debug(
-                        f"   Unique: {relation.from_entity} --{relation.relation_type}--> {relation.to_entity}"
-                    )
+                    pass
+                    # self.logger.debug(
+                    #     f"   Unique: {relation.from_entity} --{relation.relation_type}--> {relation.to_entity}"
+                    # )
             else:
                 duplicate_count += 1
                 if import_type not in duplicate_details:

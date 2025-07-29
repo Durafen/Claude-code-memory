@@ -73,14 +73,13 @@ def get_qdrant_files(
         for point in all_points:
             if hasattr(point, "payload") and point.payload:
                 # Handle both old and new chunk formats
-                entity_type = point.payload.get("entity_type", "unknown")
+                entity_type = point.payload.get("entity_type") or point.payload.get("metadata", {}).get("entity_type", "unknown")
                 entity_stats[entity_type] += 1
 
                 if entity_type == "file":
-                    # Get file path from either 'name' or 'file_path' field
-                    file_path = point.payload.get("name", "") or point.payload.get(
-                        "file_path", ""
-                    )
+                    # Get file path from metadata.file_path field
+                    metadata = point.payload.get("metadata", {})
+                    file_path = metadata.get("file_path", "")
                     if file_path:
                         # Normalize to relative path from project root
                         relative_path = normalize_path_to_relative(

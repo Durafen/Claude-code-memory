@@ -477,13 +477,13 @@ class MemoryGuard:
     ) -> str:
         """Build the prompt for comprehensive code quality analysis."""
         
-        # REMOVED ERROR REPORTING INSTRUCTIONS:
-        # 🚨 ERROR REPORTING: If you cannot access MCP memory tools ({self.mcp_collection}*), report in detail:
-        # - Which exact MCP tool you tried to call (e.g., "{self.mcp_collection}search_similar")
-        # - What parameters you used (query, entityTypes, limit) 
-        # - What error message you received (timeout, not found, access denied, etc.)
-        # - Include this in your debug field with prefix "MCP_ERROR:"
         return f"""You are a comprehensive code quality gate with access to MCP memory tools.
+
+🚨 ERROR REPORTING: If you cannot access MCP memory tools ({self.mcp_collection}*), report in detail:
+- Which exact MCP tool you tried to call (e.g., "{self.mcp_collection}search_similar")
+- What parameters you used (query, entityTypes, limit) 
+- What error message you received (timeout, not found, access denied, etc.)
+- Include this in your debug field with prefix "MCP_ERROR:"
 
 OPERATION CONTEXT:
 - Project: {self.project_name}
@@ -536,13 +536,16 @@ OPERATION CONTEXT:
 - If search returns commit references, feature descriptions, or fix notes → CONTAMINATED, ignore
 
 🔍 ANALYSIS PROTOCOL:
-1. Use MCP service: {self.mcp_collection}search_similar
-2. Search for existing implementations, patterns, and related functionality
-3. Analyze completeness: missing error cases, validations, edge cases
-4. Check integration: dependencies, API contracts, data flows
-5. Verify flow integrity: function usage, dependency impact, breaking changes
-6. Verify preservation: ensure existing features remain functional
-7. EXCLUDE ALL MANUAL ENTRIES AND DOCUMENTATION:
+1. EXTRACT function/class names from new code being written
+2. SEARCH memory for exact duplicates of same functionality using {self.mcp_collection}search_similar
+3. SEARCH for related patterns, similar implementations, and existing functionality that could be reused
+4. IF similar functions exist: SUGGEST using existing code instead of creating duplicates
+5. Use MCP service: {self.mcp_collection}search_similar for related functionality analysis
+6. Analyze completeness: missing error cases, validations, edge cases
+7. Check integration: dependencies, API contracts, data flows
+8. Verify flow integrity: function usage, dependency impact, breaking changes
+9. Verify preservation: ensure existing features remain functional
+10. EXCLUDE ALL MANUAL ENTRIES AND DOCUMENTATION:
    - IGNORE: documentation files (.md, .txt, .markdown, .rst)
    - IGNORE: manual entries (debugging_pattern, implementation_pattern, integration_pattern, configuration_pattern, architecture_pattern, performance_pattern, knowledge_insight, active_issue, ideas)
    - IGNORE: any human-created analysis, notes, or patterns
@@ -594,7 +597,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
             )
 
             # Allow specific MCP memory tools plus read-only analysis tools
-            allowed_tools = f"Read,LS,Bash(ls:*),Glob,Grep,WebFetch,WebSearch,{self.mcp_collection}*,mcp__github__*"
+            allowed_tools = f"Read,LS,Bash(ls:*),Glob,Grep,WebFetch,WebSearch,{self.mcp_collection}search_similar,{self.mcp_collection}read_graph,{self.mcp_collection}get_implementation,mcp__github__*"
 
             result = subprocess.run(
                 [
@@ -603,7 +606,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                     "--output-format",
                     "json",
                     "--max-turns",
-                    "10",
+                    "20",
                     "--model",
                     "sonnet",
                     "--allowedTools",
@@ -613,7 +616,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text."""
                 capture_output=True,
                 text=True,
                 timeout=60,
-                cwd=str(self.project_root) if self.project_root else None,
+                cwd=str(claude_dir),
             )
 
             if result.returncode != 0:

@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from ..storage.qdrant import ContentHashMixin
+from ..embeddings.registry import create_bm25_embedder
 from .context import ProcessingContext
 from .results import ProcessingResult
 
@@ -18,6 +19,21 @@ class ContentProcessor(ContentHashMixin, ABC):
         self.vector_store = vector_store
         self.embedder = embedder
         self.logger = logger
+        # Lazy-loaded BM25 embedder for sparse vectors
+        self._bm25_embedder = None
+
+    def _get_bm25_embedder(self):
+        """Lazy initialize BM25 embedder for sparse vectors."""
+        if self._bm25_embedder is None:
+            try:
+                self._bm25_embedder = create_bm25_embedder()
+                if self.logger:
+                    self.logger.debug("🔤 Initialized BM25 embedder for sparse vectors")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Failed to create BM25 embedder: {e}")
+                self._bm25_embedder = False  # Mark as failed to avoid retrying
+        return self._bm25_embedder if self._bm25_embedder is not False else None
 
     @abstractmethod
     def process_batch(
@@ -83,20 +99,55 @@ class ContentProcessor(ContentHashMixin, ABC):
         if not items:
             return [], {"tokens": 0, "cost": 0.0, "requests": 0}
 
-        # Extract content for embedding
+        # Extract content for embedding - use rich content for semantic search
         texts = [getattr(item, "content", str(item)) for item in items]
 
-        # if self.logger:
-        # self.logger.debug(f"🔤 Generating embeddings for {len(texts)} {item_name} texts")
-
-        # Generate embeddings
+        # Generate dense embeddings (primary) using rich semantic content
         embedding_results = self.embedder.embed_batch(texts)
 
-        # if self.logger:
-        # successful = sum(1 for r in embedding_results if r.success)
-        # self.logger.debug(f"✅ {item_name.title()} embeddings completed: {successful}/{len(embedding_results)} successful")
+        # Generate BM25 sparse embeddings for metadata chunks only
+        if item_name == "entity":
+            # EntityProcessor: all items are metadata chunks, apply BM25 to all
+            should_apply_bm25 = [True] * len(items)
+        else:
+            # Other processors: apply BM25 only to metadata chunks
+            should_apply_bm25 = []
+            for item in items:
+                chunk_type = getattr(item, 'chunk_type', None)
+                # Apply BM25 to metadata chunks, exclude implementation chunks
+                is_metadata = chunk_type == 'metadata' or (chunk_type is None and item_name != 'implementation')
+                should_apply_bm25.append(is_metadata)
+        
+        if any(should_apply_bm25):
+            bm25_embedder = self._get_bm25_embedder()
+            if bm25_embedder:
+                try:
+                    # Extract BM25-optimized content for sparse embeddings
+                    bm25_texts = []
+                    for item in items:
+                        # Try to get BM25 content from metadata, fallback to regular content
+                        if hasattr(item, 'metadata') and item.metadata and 'content_bm25' in item.metadata:
+                            bm25_texts.append(item.metadata['content_bm25'])
+                        else:
+                            bm25_texts.append(getattr(item, "content", str(item)))
+                    
+                    # Generate BM25 embeddings using optimized content
+                    bm25_results = bm25_embedder.embed_batch(bm25_texts)
+                    
+                    # Add sparse vectors only to items that should have BM25
+                    for dense_result, sparse_result, should_have_bm25 in zip(embedding_results, bm25_results, should_apply_bm25, strict=False):
+                        if should_have_bm25 and dense_result.success and sparse_result.success:
+                            dense_result.sparse_embedding = sparse_result.embedding
+                            
+                    if self.logger:
+                        successful_sparse = sum(1 for r in bm25_results if r.success)
+                        self.logger.debug(f"🔤 Generated {successful_sparse}/{len(bm25_results)} BM25 entity sparse vectors")
+                        
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"BM25 entity embedding failed: {e}")
 
-        # Collect cost data
+        # Collect cost data (from dense embeddings)
         cost_data = self._collect_embedding_cost_data(embedding_results)
 
         return embedding_results, cost_data
@@ -114,19 +165,52 @@ class ContentProcessor(ContentHashMixin, ABC):
 
         for item, embedding_result in zip(items, embedding_results, strict=False):
             if embedding_result.success:
-                # Get the appropriate point creation method
-                if hasattr(self.vector_store, point_creation_method):
-                    point_creator = getattr(self.vector_store, point_creation_method)
-                    point = point_creator(
-                        item, embedding_result.embedding, collection_name
-                    )
-                    points.append(point)
+                # Check if sparse embedding is available for hybrid point creation
+                if hasattr(embedding_result, 'sparse_embedding') and embedding_result.sparse_embedding is not None:
+                    # Get the backend vector store (handles CachingVectorStore wrapper)
+                    backend_store = getattr(self.vector_store, 'backend', self.vector_store)
+                    
+                    # Use hybrid point creation method
+                    hybrid_method = f"create_hybrid_{point_creation_method.replace('create_', '')}"
+                    if hasattr(backend_store, hybrid_method):
+                        point_creator = getattr(backend_store, hybrid_method)
+                        point = point_creator(
+                            item, embedding_result.embedding, embedding_result.sparse_embedding, collection_name
+                        )
+                        points.append(point)
+                    elif hasattr(backend_store, 'create_hybrid_chunk_point'):
+                        # Fallback to hybrid chunk point
+                        point = backend_store.create_hybrid_chunk_point(
+                            item, embedding_result.embedding, embedding_result.sparse_embedding, collection_name
+                        )
+                        points.append(point)
+                    else:
+                        # No hybrid support, use dense-only
+                        if hasattr(self.vector_store, point_creation_method):
+                            point_creator = getattr(self.vector_store, point_creation_method)
+                            point = point_creator(
+                                item, embedding_result.embedding, collection_name
+                            )
+                            points.append(point)
+                        else:
+                            point = self.vector_store.create_chunk_point(
+                                item, embedding_result.embedding, collection_name
+                            )
+                            points.append(point)
                 else:
-                    # Fallback to default chunk point creation
-                    point = self.vector_store.create_chunk_point(
-                        item, embedding_result.embedding, collection_name
-                    )
-                    points.append(point)
+                    # Standard dense-only point creation
+                    if hasattr(self.vector_store, point_creation_method):
+                        point_creator = getattr(self.vector_store, point_creation_method)
+                        point = point_creator(
+                            item, embedding_result.embedding, collection_name
+                        )
+                        points.append(point)
+                    else:
+                        # Fallback to default chunk point creation
+                        point = self.vector_store.create_chunk_point(
+                            item, embedding_result.embedding, collection_name
+                        )
+                        points.append(point)
             else:
                 failed_count += 1
                 if self.logger:

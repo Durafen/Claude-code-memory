@@ -112,7 +112,8 @@ class EntityChunk:
             else:
                 weighted_parts.append(observation)
         
-        content = " | ".join(weighted_parts)
+        # Enhanced BM25 content formatting for improved searchability
+        content = cls._format_bm25_content(entity, weighted_parts)
 
         # Create collision-resistant metadata chunk ID
         import hashlib
@@ -136,6 +137,84 @@ class EntityChunk:
                 "observations": entity.observations,  # Preserve observations array for MCP compatibility
             },
         )
+
+    @classmethod
+    def _format_bm25_content(cls, entity: "Entity", weighted_parts: list[str]) -> str:
+        """Format entity for enhanced BM25 searchability with 6-component structure."""
+        import re
+        
+        # 1. Entity name 2x frequency boost
+        # For file entities, use just filename instead of full path for cleaner BM25 content
+        if entity.entity_type.value == "file":
+            entity_name = Path(entity.file_path).name
+        else:
+            entity_name = entity.name
+        
+        # 2. CamelCase spaced version for natural language search
+        spaced_name = re.sub(r'([a-z])([A-Z])', r'\1 \2', entity_name)
+        spaced_name = re.sub(r'[_-]', ' ', spaced_name)
+        
+        # 3. Primary content - extract first clean description only
+        primary_content = ""
+        for observation in entity.observations:
+            obs_lower = observation.lower()
+            if any(prefix in obs_lower for prefix in ['purpose:', 'responsibility:', 'description:']):
+                # Extract the description part after the colon
+                if ':' in observation:
+                    primary_content = observation.split(':', 1)[1].strip()
+                    break
+            elif observation and not any(skip in obs_lower for skip in ['class:', 'function:', 'method:', 'signature:', 'calls:', 'parameters:', 'returns:', 'behaviors:', 'attributes:', 'complexity:', 'async:', 'line:', 'key methods:']):
+                # Use first non-technical observation as description
+                primary_content = observation.strip()
+                break
+        
+        # Fallback to entity docstring if available
+        if not primary_content and entity.docstring:
+            primary_content = entity.docstring
+        
+        # 4. Entity type for filtering and context
+        entity_type = entity.entity_type.value
+        
+        # 5. File name extraction for location-based search
+        file_name = ""
+        if entity.file_path:
+            file_name = Path(entity.file_path).name
+        
+        # 6. Key methods extraction from observations (first 3-4 methods)
+        key_methods = []
+        for observation in entity.observations:
+            observation_lower = observation.lower()
+            if "key methods:" in observation_lower:
+                # Extract method names after "Key methods:"
+                parts = observation.split("Key methods:")
+                if len(parts) > 1:
+                    methods_part = parts[1]
+                    # Extract method names (comma-separated, take first 4)
+                    methods = [m.strip() for m in methods_part.split(",")[:4]]
+                    key_methods.extend([m for m in methods if m and not m.startswith("(")])
+                    break
+            elif "methods:" in observation_lower and "key methods:" not in observation_lower:
+                # Extract method names after "methods:"
+                parts = observation.split("methods:")
+                if len(parts) > 1:
+                    methods_part = parts[1]
+                    # Extract method names (comma-separated, take first 4)
+                    methods = [m.strip() for m in methods_part.split(",")[:4]]
+                    key_methods.extend([m for m in methods if m and not m.startswith("(")])
+                    break
+        
+        # Combine all 6 components for enhanced searchability
+        components = [
+            f"{entity_name} {entity_name}",  # 2x frequency boost
+            spaced_name if spaced_name != entity_name else "",  # Avoid duplication
+            primary_content,
+            entity_type,
+            file_name,
+            " ".join(key_methods)
+        ]
+        
+        # Filter empty components and join
+        return " ".join(filter(None, components))
 
 
 @dataclass(frozen=True)

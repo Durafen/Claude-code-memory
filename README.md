@@ -161,11 +161,12 @@ claude-indexer add-mcp -c my-project
 
 ## 🎯 Proven Results
 
-- **3.99ms** search across millions of lines of code
+- **3.99ms** semantic search across millions of lines of code
+- **BM25 keyword search** for exact term matching (new in v2.8)
+- **Hybrid search** combines semantic understanding + keyword precision
 - **90% faster** debugging with pattern memory
 - **85% cost reduction** with Voyage AI embeddings
 - **95.3%** variable extraction coverage
-- **158/158** tests passing in production
 
 ## 🏗️ The Technology That Powers God Mode
 
@@ -308,7 +309,7 @@ Assistant: 🟢 Memory Guard enabled for this session
 - `query`: Search term or code pattern
 - `entityTypes`: Filter by ["metadata", "function", "class", "debugging_pattern", "implementation"]
 - `limit`: Max results (default: 50)
-- `searchMode`: "semantic" (default), "keyword" (BM25), "hybrid" (both)
+- `searchMode`: "hybrid" (semantic+keyword), "semantic", "keyword" (BM25)
 
 **read_graph(entity, mode, limit, entityTypes)**
 - `entity`: Specific component name for focused view
@@ -365,6 +366,8 @@ claude-indexer add-mcp -c my-project                   # Configure Claude MCP co
 ```bash
 claude-indexer watch start -p . -c my-project          # File watching current directory
 claude-indexer search "authentication" -p . -c my-project --type entity  # Search with filters
+claude-indexer search "login function" -p . -c my-project --mode keyword  # BM25 keyword search
+claude-indexer search "auth pattern" -p . -c my-project --mode hybrid     # Combined search
 claude-indexer file ./src/auth.py -p . -c my-project   # Index single file
 ```
 

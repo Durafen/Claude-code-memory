@@ -89,7 +89,7 @@ class UnifiedContentProcessor:
             implementation_entity_names=implementation_entity_names,
             files_being_processed=files_being_processed,
             entities_to_delete=[],
-            replacement_mode=True
+            replacement_mode=True,
         )
 
         # Debug logging for context

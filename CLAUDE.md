@@ -188,20 +188,15 @@ search_similar("pattern")  # Returns all entity and chunk types
 - **Backward Compatible**: Existing calls work unchanged
 - **Performance**: Filter at database level for optimal speed
 
-## 🔍 BM25 Keyword & Hybrid Search
+## 🔍 BM25 Keyword & Hybrid Search (NEW v2.8)
 
-**Search Modes:** `semantic` (default), `keyword`, `hybrid`
+**Search Modes:** `hybrid` (default), `semantic`, `keyword`
 
 ```python
-search_similar("query", searchMode="hybrid")  # 70% semantic + 30% keyword
-search_similar("exact terms", searchMode="keyword")  # BM25 term matching
-search_similar("concept query", searchMode="semantic")  # Default AI understanding
+search_similar("function name", searchMode="hybrid")    # Best of both worlds
+search_similar("exact terms", searchMode="keyword")     # BM25 term matching  
+search_similar("concept query", searchMode="semantic")  # AI understanding only
 ```
-
-**Collection Requirements:**
-- **New collections**: Auto-create with BM25 support
-- **Existing collections**: Reindex with `claude-indexer index -p /path -c name --force`
-- **Check support**: Keyword search falls back to semantic if no sparse vectors
 
 ## Virtual Environment Usage
 
@@ -293,7 +288,7 @@ read_graph(entity="DatabaseManager", mode="raw")
 # 🎯 Fast metadata scan for initial triage (90% speed boost)
 search_similar("error pattern", entityTypes=["metadata"])
 
-# 🔍 Find similar debugging patterns from past solutions
+# 🔍 Find similar debugging patterns from past solutions  
 search_similar("authentication error", entityTypes=["function", "debugging_pattern"], searchMode="hybrid")
 
 # 🧩 Mixed search for comprehensive context

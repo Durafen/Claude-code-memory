@@ -1520,19 +1520,23 @@ class MarkdownParser(CodeParser, TiktokenMixin):
         try:
             result.file_hash = self._get_file_hash(file_path)
 
-            # Create file entity
+            # Extract section content as implementation chunks first
+            implementation_chunks = self._extract_section_content(file_path)
+            
+            
+            result.implementation_chunks = implementation_chunks
+
+            # Create file entity with has_implementation flag based on content chunks
+            has_implementation = len(implementation_chunks) > 0
             file_entity = EntityFactory.create_file_entity(
-                file_path, content_type="documentation", parsing_method="markdown"
+                file_path, content_type="documentation", parsing_method="markdown", 
+                has_implementation=has_implementation
             )
             result.entities.append(file_entity)
 
             # Extract headers and structure
             headers = self._extract_headers(file_path)
             result.entities.extend(headers)
-
-            # Extract section content as implementation chunks  
-            implementation_chunks = self._extract_section_content(file_path)
-            result.implementation_chunks = implementation_chunks
 
             # Create containment relations
             file_name = str(file_path)

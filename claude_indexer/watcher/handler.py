@@ -441,6 +441,7 @@ class Watcher:
                     "*.log",
                     ".DS_Store",
                     "qdrant_storage/",
+                    ".claude/",
                     "package-lock.json",
                 ],
             )

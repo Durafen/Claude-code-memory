@@ -49,6 +49,7 @@ class IndexerConfig(BaseModel):
             "*.log",
             ".DS_Store",
             "qdrant_storage/",
+            ".claude/",
             "package-lock.json",
             ".claude-indexer/",
         ]

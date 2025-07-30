@@ -114,6 +114,7 @@ class ProjectConfigManager:
             "*.egg-info",
             "settings.txt",
             ".claude-indexer",
+            ".claude",
             "package-lock.json",
             "memory_guard_debug.txt",
         ]

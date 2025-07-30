@@ -196,7 +196,7 @@ class ManagedVectorStore(VectorStore):
     """Vector store with automatic collection management."""
 
     def __init__(
-        self, auto_create_collections: bool = True, default_vector_size: int = 1536
+        self, auto_create_collections: bool = True, default_vector_size: int = 512
     ):
         self.auto_create_collections = auto_create_collections
         self.default_vector_size = default_vector_size

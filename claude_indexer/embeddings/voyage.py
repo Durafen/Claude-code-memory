@@ -28,6 +28,11 @@ class VoyageEmbedder(TiktokenMixin, RetryableEmbedder):
             "max_tokens": 32000,
             "cost_per_1k_tokens": 0.00002,  # $0.02/1M tokens = $0.00002/1K tokens
         },
+        "voyage-3.5-lite": {
+            "dimensions": 512,  # Using 512d for smart upgrade (same storage as 3-lite)
+            "max_tokens": 32000,
+            "cost_per_1k_tokens": 0.00002,  # Same pricing as voyage-3-lite
+        },
         "voyage-code-3": {
             "dimensions": 1024,
             "max_tokens": 32000,
@@ -135,7 +140,8 @@ class VoyageEmbedder(TiktokenMixin, RetryableEmbedder):
             self._check_rate_limits(estimated_tokens)
 
             response = self.client.embed(
-                texts=[text], model=self.model, input_type="document"
+                texts=[text], model=self.model, input_type="document",
+                output_dimension=self.model_config["dimensions"]
             )
 
             # Record request for rate limiting
@@ -175,6 +181,7 @@ class VoyageEmbedder(TiktokenMixin, RetryableEmbedder):
         # Voyage token limits per API testing
         model_limits = {
             "voyage-3-lite": 30_000,  # Safe limit below 32K context (tested up to 32K)
+            "voyage-3.5-lite": 30_000,  # Same as voyage-3-lite
             "voyage-3": 120_000,
             "voyage-code-3": 120_000,
         }
@@ -221,7 +228,8 @@ class VoyageEmbedder(TiktokenMixin, RetryableEmbedder):
             self._check_rate_limits(estimated_tokens)
 
             response = self.client.embed(
-                texts=truncated_texts, model=self.model, input_type="document"
+                texts=truncated_texts, model=self.model, input_type="document",
+                output_dimension=self.model_config["dimensions"]
             )
 
             # Record request for rate limiting

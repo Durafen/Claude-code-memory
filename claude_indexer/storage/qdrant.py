@@ -1747,7 +1747,10 @@ class QdrantStore(ManagedVectorStore, ContentHashMixin):
         self, collection_name: str, file_path: str
     ) -> list[dict[str, Any]]:
         """Fallback implementation using search_similar."""
-        dummy_vector = [0.1] * 1536
+        # Get actual vector size from collection info
+        collection_info = self.get_collection_info(collection_name)
+        vector_size = collection_info.get("vector_size", 1536)  # Default to 1536 if not found
+        dummy_vector = [0.1] * vector_size
         results = []
 
         # Search for entities with file_path matching

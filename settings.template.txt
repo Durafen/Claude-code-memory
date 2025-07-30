@@ -1,15 +1,15 @@
 # Claude Code Memory Solution - Configuration Settings Template
 # Copy this file to settings.txt and fill in your actual values
 
-# === Embedding Provider Configuration (v2.3 Dual Architecture) ===
+# === Embedding Provider Configuration (v2.8 Unified Architecture) ===
 # Choose ONE embedding provider by uncommenting the appropriate section
 
 # Option 1: Voyage AI (Recommended - 85% cost reduction vs OpenAI)
 # - 512-dim vectors vs 1536-dim = 3x storage efficiency
-# - Similar semantic search quality at fraction of the cost
+# - voyage-3.5-lite offers 4.28% better retrieval than voyage-3-lite
 VOYAGE_API_KEY=your_voyage_api_key_here
 EMBEDDING_PROVIDER=voyage
-EMBEDDING_MODEL=voyage-3-lite
+EMBEDDING_MODEL=voyage-3.5-lite
 
 # Option 2: OpenAI (comment out Voyage settings above to use this)
 OPENAI_API_KEY=your_openai_api_key_here

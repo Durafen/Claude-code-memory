@@ -141,6 +141,7 @@ class MemoryGuard:
         self.project_name = "unknown"
         self.mcp_collection = "mcp__project-memory__"
         self.bypass_manager = None
+        self.current_debug_log = None  # Selected once per hook execution for proper rotation
         
         # Attempt early project detection
         self._early_project_detection(hook_data)
@@ -263,9 +264,12 @@ class MemoryGuard:
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 content = f"[{ts}] {content}"
 
-            # Find the most recently updated log file to use
+            # Select log file once per hook execution for proper rotation
             base_dir = self.project_root if self.project_root else Path.cwd()
-            current_log = self._get_current_debug_log(base_dir, False)  # Use same log file for entire hook execution
+            if self.current_debug_log is None:
+                # First call in this hook execution - select oldest file for rotation
+                self.current_debug_log = self._get_current_debug_log(base_dir, True)
+            current_log = self.current_debug_log
 
             with open(current_log, mode) as f:
                 f.write(content)

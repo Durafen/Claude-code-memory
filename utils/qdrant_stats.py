@@ -669,6 +669,7 @@ class QdrantStatsCollector:
 
             # Fallback: search for state files - prioritize subdirectories for test collections
             search_paths = [
+                *list(Path.cwd().parent.glob(f"*/.claude-indexer/{collection_name}.json")),  # Parent directory siblings
                 *list(Path.cwd().glob(f"*/*/.claude-indexer/{collection_name}.json")),
                 *list(Path.cwd().glob(f"*/.claude-indexer/{collection_name}.json")),
                 Path.cwd() / ".claude-indexer" / f"{collection_name}.json",

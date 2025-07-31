@@ -91,3 +91,5 @@ utils/scraper_configs.json
 utils/scraper_configs_backup.json
 utils/scraper_configs_manual_work.json
 utils/scraper_configs.json
+isolated_test
+.claude-indexer

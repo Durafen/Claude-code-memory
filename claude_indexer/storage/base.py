@@ -212,11 +212,14 @@ class ManagedVectorStore(VectorStore):
             return False
 
         vector_size = vector_size or self.default_vector_size
-        # Use sparse vector support for all new collections
-        if hasattr(self, 'create_collection_with_sparse_vectors'):
+        # ALWAYS use sparse vector support for all new collections (fallback removed after TSX bug)
+        try:
             result = self.create_collection_with_sparse_vectors(collection_name, vector_size)
-        else:
-            result = self.create_collection(collection_name, vector_size)
+        except AttributeError:
+            # Emergency fallback - should never happen in production
+            import logging
+            logging.error(f"CRITICAL: create_collection_with_sparse_vectors method missing on {type(self).__name__}")
+            raise RuntimeError(f"Collection creation failed: {type(self).__name__} missing sparse vector support")
         return result.success
 
     def upsert_points(
